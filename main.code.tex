@@ -1,0 +1,707 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath}      % FIX: required for \text{} inside \[ ... \] — was missing,
+                          % causing "Undefined control sequence" errors and broken
+                          % spacing/alignment in every arrow/neq display in the document.
+\usepackage{microtype} % FIX: eliminates remaining overfull-hbox (text running past
+                       % the right margin) warnings caused by long compound words
+                       % like "administrative"/"check-in" not breaking ideally under
+                       % plain justification.
+\usepackage{hyperref}
+\usepackage{enumitem}
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage{array} % needed for \arraybackslash in the author grid
+
+% FIX: set list indentation once, globally, instead of repeating
+% [leftmargin=0.7cm] on every single itemize/enumerate in the body.
+% This guarantees every list in the document lines up identically.
+\setlist[itemize]{leftmargin=0.7cm}
+\setlist[enumerate]{leftmargin=0.7cm}
+
+% FIX: allow a small amount of emergency stretch so the very last stubborn
+% overfull line (a slash-joined term that TeX won't hyphenate) can still
+% justify cleanly instead of poking past the right margin.
+\setlength{\emergencystretch}{3em}
+
+% -----------------------------------------------------
+% bvraghav-tiet-ucs503p-article.sty
+% -----------------------------------------------------
+
+% Variable: Lab Instructor
+\makeatletter \newcommand{\BvrSetLabInstructor}[1]{%
+  \gdef\Bvr@LabInstructor{#1}}
+% default
+\newcommand{\Bvr@LabInstructor}{
+  }
+% public accessor
+\newcommand{\BvrLabInstructorValue}{\Bvr@LabInstructor}
+\makeatother
+
+% Add subtitle
+\usepackage{titling}
+% -- Set title bold
+% FIX: 18bp is not one of Computer Modern's declared design sizes, so LaTeX
+% was silently substituting 17.28pt and throwing a font-size warning. Using
+% 17.28pt directly (a real cmr design size) removes the warning with no
+% visible size change.
+\pretitle{\begin{center}\bfseries\fontsize{17.28pt}{21pt}\selectfont}
+\makeatletter
+\newcommand{\BvrSubtitle}[1]{%
+  \posttitle{%
+    \par\end{center}
+    \begin{center}\large#1\end{center}
+    \vskip 0.5em}%
+}
+\makeatother
+
+% FIX: \BvrHint now silently does nothing when given an empty argument,
+% instead of always inserting a bare \hfill into the section title.
+% That bare \hfill was (a) landing inside the PDF bookmark string, which
+% hyperref rejected with "Token not allowed in a PDF string" warnings, and
+% (b) adding pointless trailing whitespace to every section heading.
+\newcommand{\BvrHint}[1]{%
+  \ifx&#1&%
+  \else
+    {\normalfont\normalsize\itshape\hfill #1}%
+  \fi}
+
+% -----------------------------------------------------
+
+\title{CampusCare: Digital Campus Healthcare Management System}
+
+\BvrSetLabInstructor{}
+
+% FIX: bold is now applied per line with \textbf instead of switching on
+% \bfseries mid-block. The old version bled bold state onto the line break
+% and left the two lines above it inconsistently weighted next to the
+% institute name below — the three lines now form a clean, deliberate
+% typographic hierarchy (regular / regular / bold) instead of an accident.
+\BvrSubtitle{%
+  Project Proposal for UCS503P \\
+  Submitted to: Ms. Anushka\BvrLabInstructorValue \\
+  \textbf{Thapar Institute of Engineering and Technology}%
+}
+
+% FIX: \author with \and only centers each name as a flowing block, so the
+% two "columns" of names/roll-numbers don't actually line up underneath one
+% another. Using a fixed-width two-column tabular instead guarantees the
+% names align in a clean grid regardless of how long each entry is.
+\author{%
+  \begin{tabular}{@{}p{6.5cm}@{\hspace{1cm}}p{6.5cm}@{}}
+    \centering Lavdeep Singh, 1024030107 & \centering\arraybackslash Harshveer Singh, 1024030109 \\[4pt]
+    \centering Damanbir Singh, 1024030110 & \centering\arraybackslash Kriti, 1024030111 \\
+  \end{tabular}%
+}
+
+\date{August 19, 2026}
+
+\begin{document}
+\maketitle
+
+% =====================================================
+% 1. HIGHER-ORDER GOAL
+% =====================================================
+
+\section{Higher-order goal%
+  \BvrHint{}}
+
+This project aims to improve the efficiency, transparency, and continuity of healthcare services within a college campus by reducing unnecessary waiting, improving access to student medical history, and digitizing the consultation-to-dispensation workflow.
+
+While the broader objective is to improve the campus healthcare experience, the immediate engineering goal is to translate the existing manual health-center workflow into a measurable and deployable software system.
+
+The proposed system will connect student identity, health records, doctor-specific queues, consultation records, structured prescriptions, medicine dispensing, and administrative management within a single role-based platform.
+
+The project focuses on workflow engineering rather than clinical decision-making. Doctor selection will remain under the control of the student and healthcare staff, while emergency cases will be handled separately from the routine consultation queue.
+
+% =====================================================
+% 2. TIME-TO-VALUE
+% =====================================================
+
+\section{Time-to-value %
+\BvrHint{}}
+
+\begin{itemize}
+
+    \item We will deliver meaningful increments quickly by implementing the smallest complete healthcare workflow first: student check-in $\rightarrow$ doctor queue $\rightarrow$ consultation $\rightarrow$ prescription $\rightarrow$ medicine dispensing $\rightarrow$ completed visit.
+
+    \item We will prioritize a working end-to-end workflow over implementing every planned feature simultaneously.
+
+    \item We will initially implement staff-assisted manual check-in so that the core healthcare workflow can be validated independently of NFC/RFID integration.
+
+    \item NFC/RFID integration will be introduced after experimentally validating the compatibility of the actual college ID card, target Android device, browser environment, and deployment configuration.
+
+    \item We will use short development iterations and continuous testing so that problems in the core workflow are identified before additional features are built on top of it.
+
+    \item CI/CD will be introduced early to automatically build, test, and deploy changes to a staging environment.
+
+    \item Success in the first iteration will be defined by whether a complete healthcare visit can be processed correctly rather than by the number of features implemented.
+
+\end{itemize}
+
+% =====================================================
+% 3. PROBLEM STATEMENT
+% =====================================================
+
+\section{Problem Statement}
+
+The campus health center currently relies substantially on manual processes for student check-in, queue management, consultation records, prescriptions, and medicine dispensing. These processes create several operational problems:
+
+\begin{itemize}
+
+    \item \textbf{Unclear queue status:} Students may have to wait without knowing their position in the queue or how many students are ahead of them.
+
+    \item \textbf{Limited access to medical history:} Doctors may not have convenient access to a student's previous visits, prescriptions, or relevant medical conditions, resulting in consultations that may begin without sufficient historical context.
+
+    \item \textbf{Paper-based prescriptions:} Handwritten prescriptions can be difficult to interpret, can be misplaced, and do not provide a structured digital record that can be conveniently accessed during future visits.
+
+    \item \textbf{Limited dispensing records:} The relationship between what a doctor prescribed and what was actually handed to the student may not be captured in a centralized digital workflow.
+
+    \item \textbf{Manual identity verification:} Students who do not have their college ID card require staff-assisted identification and check-in.
+
+    \item \textbf{Fragmented information:} Student identity, health profile, consultation history, prescriptions, queue state, and dispensing information can exist across disconnected manual processes.
+
+    \item \textbf{Limited administrative visibility:} Doctor availability, staff accounts, RFID/card enrollment, and other operational information require centralized management.
+
+    \item \textbf{Different routine and emergency workflows:} Routine consultations and emergency/trauma cases require different handling and should not necessarily be forced through the same queue.
+
+\end{itemize}
+
+\textbf{Why this matters now (contextual relevance):} A campus health center handles a recurring flow of students with limited medical and administrative staff. Improvements in queue transparency, record accessibility, and workflow coordination can reduce avoidable waiting and repeated administrative work while improving continuity of student care.
+
+% =====================================================
+% 4. PROPOSED SOLUTION
+% =====================================================
+
+\section{Proposed Solution %
+\BvrHint{}}
+
+\subsection{Overview}
+
+Build a \textbf{web-based Progressive Web Application (PWA)} that digitizes the routine campus healthcare workflow while maintaining separate roles and responsibilities for students, doctors, pharmacists/receptionists, and administrators.
+
+The proposed system will include:
+
+\begin{itemize}
+
+    \item \textbf{Student portal:} students create and maintain their profile, provide relevant medical information, view their medical history and prescriptions, check in, select an available doctor, and monitor their queue status.
+
+    \item \textbf{Identity-assisted check-in:} the existing college ID card will be investigated as an NFC/RFID-based check-in mechanism. Its identifier will be associated with the corresponding student account. Staff-assisted manual check-in will remain available when the card is unavailable.
+
+    \item \textbf{Doctor-specific queues:} students join the queue of their selected doctor and can view their current queue status.
+
+    \item \textbf{Doctor consultation workflow:} doctors call students, access relevant medical history, record consultation information, create structured prescriptions, and redirect students to another doctor's queue when necessary.
+
+    \item \textbf{Structured prescription system:} prescriptions will use structured medication and dosage fields together with a general-instructions section rather than relying entirely on free-form handwritten-style text.
+
+    \item \textbf{Pharmacist/receptionist workflow:} the authorized pharmacist/receptionist handles manual check-ins, verifies and records medicine dispensing, and closes completed visits.
+
+    \item \textbf{Emergency recording:} emergency and trauma cases will be recorded through a separate workflow by the designated emergency staff member rather than being placed into the routine consultation queue.
+
+    \item \textbf{Administrative dashboard:} administrators manage doctor and pharmacist/receptionist accounts, doctor availability, student-related administrative information, and RFID/card enrollment.
+
+    \item \textbf{Role-based access control:} system functionality and medical information will be controlled according to the user's assigned role.
+
+    \item \textbf{Audit logging:} important changes and actions can be recorded with the responsible user and timestamp for accountability.
+
+\end{itemize}
+
+\subsection{Core workflow}
+
+\begin{enumerate}
+
+    \item A student authenticates into CampusCare and has an associated student profile.
+
+    \item At the health center, the student checks in using the college ID card if the NFC/RFID integration is available and has been validated. If the card is unavailable, the pharmacist/receptionist performs a staff-assisted manual check-in.
+
+    \item The student selects an available doctor based on the information provided by the system and joins that doctor's queue.
+
+    \item The student can view their current queue status through their CampusCare account.
+
+    \item The doctor calls the next student when ready.
+
+    \item The doctor views the student's relevant health profile and previous clinical records.
+
+    \item The doctor records the consultation and creates a structured prescription.
+
+    \item If the student has been directed to the wrong doctor, the doctor can redirect the existing visit to the appropriate doctor's queue without creating a duplicate visit.
+
+    \item After consultation, the visit enters a medicine-dispensing state.
+
+    \item The authorized pharmacist/receptionist verifies and records the medicines dispensed.
+
+    \item The original prescription remains the doctor's clinical record. Any difference between the prescribed and dispensed medicines is recorded separately rather than silently modifying the doctor's prescription.
+
+    \item Once dispensing is completed, the visit is closed and becomes part of the student's medical history.
+
+    \item Emergency and trauma cases bypass the routine queue and are recorded through the separate emergency workflow.
+
+\end{enumerate}
+
+\subsection{Operational constraints for an educational campus setting}
+
+\begin{itemize}
+
+    \item Keep the application usable on commonly available student and staff devices through responsive web design and PWA capabilities.
+
+    \item Avoid dependence on advanced clinical decision-making or automated diagnosis; focus on workflow, access control, data integrity, and system correctness.
+
+    \item Use common cloud-hosting and managed-database services so that the system can be deployed without requiring dedicated infrastructure.
+
+    \item Keep NFC/RFID integration as a replaceable entry mechanism so that manual staff-assisted check-in remains available if hardware or browser limitations prevent NFC integration.
+
+\end{itemize}
+
+% =====================================================
+% 5. SOLUTION APPROACH
+% =====================================================
+
+\section{Solution Approach %
+\BvrHint{}}
+
+This is an engineering course project, so the focus is on healthcare workflow, system correctness, database design, security, authorization, queue management, and deployability rather than novel clinical algorithm research.
+
+\subsection{Structured prescription and dispensing %
+\BvrHint{}}
+
+The prescription system will use structured fields instead of storing the entire prescription as unrestricted free text.
+
+Depending on the finalized prescription model, medication entries may contain:
+
+\begin{itemize}
+
+    \item Medication name
+    \item Strength
+    \item Dosage amount
+    \item Dosage unit
+    \item Form
+    \item Route
+    \item Frequency or schedule
+    \item Duration
+    \item Before/after-food instructions where applicable
+    \item As-needed instructions where applicable
+    \item Additional instructions
+
+\end{itemize}
+
+The exact prescription structure will be finalized after reviewing established healthcare data models and determining which fields are appropriate for the campus health-center workflow.
+
+The system will maintain a distinction between:
+
+\[
+\text{Doctor's Prescription}
+\;\neq\;
+\text{Pharmacist's Dispensing Record}
+\]
+
+The pharmacist/receptionist can therefore record what was actually dispensed without silently modifying the doctor's original clinical prescription.
+
+The prescription structure may be informed by established healthcare interoperability concepts such as HL7 FHIR, without attempting to implement the complete FHIR standard.
+
+\subsection{Web architecture %
+\BvrHint{}}
+
+A typical 3-tier web architecture will be used:
+
+\begin{itemize}
+
+    \item \textbf{Frontend:} React + Vite + Tailwind CSS providing role-specific interfaces for students, doctors, pharmacists/receptionists, and administrators.
+
+    \item \textbf{Backend API:} Python + FastAPI handling authentication, authorization, student profiles, health records, check-in, queue management, consultations, prescriptions, dispensing, emergency records, RFID enrollment, and administrative operations.
+
+    \item \textbf{Database:} PostgreSQL storing users, student profiles, health information, RFID credentials, visits, queue entries, consultations, prescriptions, dispensing records, emergency cases, and audit information.
+
+\end{itemize}
+
+The database will use hand-written SQL and version-controlled migration files rather than relying on an ORM as the primary database abstraction.
+
+Business rules and authorization will be enforced on the backend rather than relying only on frontend restrictions.
+
+\subsection{Authentication and authorization}
+
+CampusCare will use persistent accounts for students and authenticated accounts for staff.
+
+The system will support four primary roles:
+
+\begin{itemize}
+
+    \item \textbf{Student}
+    \item \textbf{Doctor}
+    \item \textbf{Pharmacist/Receptionist}
+    \item \textbf{Administrator}
+
+\end{itemize}
+
+Students will be able to access their own medical information and visit history. Doctors, pharmacists/receptionists, and administrators will have access according to their assigned responsibilities and the finalized permission matrix.
+
+The exact student authentication mechanism, including potential integration with the college's Google identity system, will be finalized after technical and institutional validation.
+
+\subsection{NFC/RFID identity integration}
+
+The existing college ID card will be investigated as the physical identity mechanism for student check-in.
+
+The intended flow is:
+
+\[
+\text{College ID Card}
+\;\rightarrow\;
+\text{Card Identifier}
+\;\rightarrow\;
+\text{Student Account}
+\;\rightarrow\;
+\text{CampusCare Visit}
+\]
+
+The card's identifier will not itself be treated as the student's medical identity. Instead, it will act as an identifier mapped to the student's account.
+
+The actual compatibility of the college card with the browser-based Web NFC approach will be experimentally verified before this mechanism is treated as a confirmed system dependency.
+
+\subsection{Queue management}
+
+Each doctor will maintain a separate queue.
+
+The queue system will support:
+
+\begin{itemize}
+
+    \item Student joining a doctor's queue
+    \item Viewing queue status
+    \item Doctor calling the next student
+    \item No-show handling
+    \item Doctor redirection
+    \item Queue completion
+    \item Doctor availability
+
+\end{itemize}
+
+If a student does not appear after being called, the system will use a defined buffer period. After the buffer expires, the student can be moved to the end of the relevant queue and the doctor can proceed with the next student.
+
+The exact no-show duration will be finalized after observing the actual health-center workflow.
+
+\subsection{CI/CD and fast delivery enabler}
+
+CI/CD will be used to:
+
+\begin{itemize}
+
+    \item Automatically build the frontend and validate the backend on every change.
+
+    \item Run unit and integration tests.
+
+    \item Perform linting and other automated checks.
+
+    \item Produce repeatable deployment artifacts.
+
+    \item Deploy successful builds to a staging environment.
+
+    \item Reduce integration problems between the four team members by continuously validating changes.
+
+\end{itemize}
+
+% =====================================================
+% 6. EVALUATION CRITERION
+% =====================================================
+
+\section{Evaluation Criterion %
+\BvrHint{}}
+
+We define success using measurable metrics tied to the core healthcare workflow.
+
+\subsection{Primary evaluation metric}
+
+\textbf{Check-in-to-queue-entry time:} time between the beginning of a student's check-in process and successful creation of the student's queue entry.
+
+The system will record timestamps for:
+
+\[
+\text{Check-in Initiated}
+\;\rightarrow\;
+\text{Identity Verified}
+\;\rightarrow\;
+\text{Doctor Selected}
+\;\rightarrow\;
+\text{Queue Entry Created}
+\]
+
+The exact target value will not be assumed in advance. An initial baseline will be measured from the existing manual workflow before defining a target improvement.
+
+\begin{itemize}
+
+    \item \textbf{Measurement:} database timestamps generated by the system.
+
+    \item \textbf{Baseline:} observations or measurements from the existing manual workflow.
+
+    \item \textbf{Attribution:} timestamps recorded by the CampusCare system rather than subjective estimates.
+
+\end{itemize}
+
+\subsection{Secondary evaluation metrics}
+
+\begin{itemize}
+
+    \item \textbf{Queue transparency:} whether students can successfully determine their selected doctor, current queue status, and whether they have been called.
+
+    \item \textbf{Waiting time:} time from successful queue entry to being called by the doctor.
+
+    \item \textbf{Visit completion time:} time from check-in through consultation, dispensing, and final visit closure.
+
+    \item \textbf{Record accessibility:} time or number of steps required for a doctor to retrieve a student's relevant previous medical records.
+
+    \item \textbf{Prescription completeness:} percentage of prescriptions containing all required structured fields.
+
+    \item \textbf{Dispensing accuracy:} percentage of visits where prescribed and dispensed medicines are correctly recorded, including explicit documentation of differences.
+
+    \item \textbf{Reliability:} availability and successful operation of the deployed system during the defined pilot period.
+
+    \item \textbf{Authorization correctness:} successful prevention of actions outside a user's assigned role.
+
+\end{itemize}
+
+\subsection{Pilot validation plan %
+\BvrHint{}}
+
+\begin{itemize}
+
+    \item Initially use synthetic student and medical data for development, testing, and demonstration.
+
+    \item Use real student medical information only if the institution explicitly authorizes its use and the deployment environment satisfies the required privacy and security requirements.
+
+    \item Recruit representative student, doctor, pharmacist/receptionist, and administrator test users for workflow evaluation.
+
+    \item Execute representative workflows including check-in, doctor selection, queue monitoring, consultation, prescription creation, dispensing, visit completion, doctor redirection, no-show handling, emergency recording, and administrative operations.
+
+    \item Compare system-generated metrics with observations of the existing manual workflow.
+
+\end{itemize}
+
+% =====================================================
+% 7. SCALABILITY
+% =====================================================
+
+\section{Scalability %
+\BvrHint{}}
+
+The proposition should scale in both theoretical and practical senses.
+
+\begin{enumerate}
+
+    \item \textbf{Scalable (theoretically):} The system should support growth in the number of students, visits, doctors, medical records, and concurrent sessions by:
+
+    \begin{itemize}
+
+        \item separating frontend and backend components,
+
+        \item using pagination for large result sets,
+
+        \item using indexes for common database queries,
+
+        \item maintaining normalized relational data,
+
+        \item using transactions for queue and visit state changes,
+
+        \item using stateless API design where practical.
+
+    \end{itemize}
+
+    \item \textbf{Operationally deployable (practically):} The system should run using common web hosting and managed database infrastructure:
+
+    \begin{itemize}
+
+        \item managed PostgreSQL database,
+
+        \item platform-hosted frontend and backend,
+
+        \item environment-based configuration,
+
+        \item CI/CD pipeline for staging and production deployment.
+
+    \end{itemize}
+
+\end{enumerate}
+
+% =====================================================
+% 8. ENGINE AVAILABILITY
+% =====================================================
+
+\section{Engine availability heuristic}
+
+A mature set of software technologies and services is available to implement CampusCare as a web-based project:
+
+\begin{itemize}
+
+    \item \textbf{React + Vite:} frontend application development.
+
+    \item \textbf{Tailwind CSS:} responsive interface development.
+
+    \item \textbf{FastAPI:} REST API and backend development.
+
+    \item \textbf{PostgreSQL:} relational database management.
+
+    \item \textbf{Raw SQL and migration tooling:} explicit database design and version-controlled schema evolution.
+
+    \item \textbf{Web NFC:} proposed browser-based NFC integration, subject to validation using the actual college ID card and target Android device.
+
+    \item \textbf{Authentication infrastructure:} persistent student and staff authentication.
+
+    \item \textbf{Testing frameworks:} unit and integration testing.
+
+    \item \textbf{CI/CD tooling:} automated validation and deployment.
+
+    \item \textbf{Managed cloud hosting:} deployment of frontend and backend services.
+
+    \item \textbf{Managed PostgreSQL:} cloud-hosted relational database for staging or production deployment.
+
+\end{itemize}
+
+We will use these mature components to focus on workflow design, correctness, security, database engineering, and measurement rather than building infrastructure from scratch.
+
+% =====================================================
+% 9. PROJECT SCOPE AND DELIVERABLES
+% =====================================================
+
+\section{Project scope and deliverables %
+\BvrHint{}}
+
+\subsection{Initial deliverable %
+\BvrHint{}}
+
+The first iteration will implement the smallest complete healthcare workflow:
+
+\begin{itemize}
+
+    \item Student account and authentication
+    \item Student profile
+    \item Staff-assisted manual check-in
+    \item Doctor selection
+    \item One doctor's queue
+    \item Queue position/status
+    \item Doctor authentication
+    \item Doctor calls next student
+    \item Doctor views relevant student medical history
+    \item Doctor records consultation
+    \item Doctor creates a structured prescription
+    \item Pharmacist/receptionist views the prescription
+    \item Pharmacist/receptionist records medicine dispensing
+    \item Visit completion
+    \item Completed visit appearing in student history
+    \item PostgreSQL persistence
+    \item Backend REST API
+    \item Basic role-based authorization
+    \item CI build and backend tests
+    \item Deployment to a staging environment
+
+\end{itemize}
+
+The objective is to prove that a complete healthcare visit can move successfully through the system rather than maximizing the number of screens or optional features.
+
+\subsection{Subsequent deliverables}
+
+\begin{itemize}
+
+    \item Second doctor and independent doctor-specific queue.
+
+    \item Doctor availability management.
+
+    \item Doctor redirection between queues.
+
+    \item No-show handling and queue reordering.
+
+    \item Complete student medical history and prescription history.
+
+    \item Improved clinical-history interface for doctors.
+
+    \item More complete role-based permission rules.
+
+    \item NFC/RFID check-in.
+
+    \item RFID enrollment and revocation.
+
+    \item Card-to-student identifier mapping.
+
+    \item Emergency/trauma recording.
+
+    \item Administrative dashboard.
+
+    \item Pharmacist dispensing workflow improvements.
+
+    \item Audit logging.
+
+    \item Polling-based live queue updates.
+
+    \item WebSocket-based queue updates if time permits.
+
+    \item Additional testing and security hardening.
+
+\end{itemize}
+
+\subsection{Stretch deliverables}
+
+Only after the complete core system is stable, the following features may be attempted:
+
+\begin{itemize}
+
+    \item \textbf{Medication reminders:} reminders generated from structured prescription schedules.
+
+    \item \textbf{Disease-surge indicator:} aggregated and anonymized visit-category information used to flag unusual increases in particular categories of illness for administrative decision support.
+
+\end{itemize}
+
+\subsection{Explicitly out of scope}
+
+\textbf{Medicine inventory management} will not be implemented during the current semester.
+
+Inventory management is considered a natural future extension because it can connect dispensing records with medicine stock, but it is intentionally excluded from the current scope to keep the core system achievable within the semester.
+
+% =====================================================
+% 10. RISKS AND MITIGATIONS
+% =====================================================
+
+\section{Risks and mitigations}
+
+\begin{itemize}
+
+    \item \textbf{NFC/Web NFC compatibility:} The actual college card may not expose the required identifier through the browser environment. We will perform an early feasibility test using the actual card, target Android device, browser, and HTTPS deployment before making NFC a hard dependency.
+
+    \item \textbf{Medical data privacy:} Medical records are sensitive information. Development and demonstration will use synthetic data unless the institution explicitly authorizes real data use and the required privacy and security controls are in place.
+
+    \item \textbf{Unauthorized medical-record access:} Different roles require different levels of access. Backend-enforced role-based authorization and a clearly defined permission matrix will be implemented before exposing medical records.
+
+    \item \textbf{Prescription modification:} The pharmacist/receptionist must not silently alter the doctor's clinical prescription. Doctor prescriptions and dispensing records will therefore be stored separately.
+
+    \item \textbf{Queue inconsistency:} Concurrent requests may create race conditions in queue operations. PostgreSQL transactions and appropriate concurrency controls will be used for queue state changes.
+
+    \item \textbf{Scope creep:} NFC, WebSockets, reminders, analytics, emergency management, administration, and structured prescriptions could collectively exceed the semester timeline. Core functionality will therefore be completed before stretch features are attempted.
+
+    \item \textbf{Student identity mismatch:} Student identity information should not rely entirely on unrestricted manual input. Institutional authentication or verified student information will be preferred where available.
+
+    \item \textbf{No-show handling:} A student who does not appear after being called can block the doctor queue. A defined buffer period will be used, after which the student can be moved to the end of the relevant queue.
+
+    \item \textbf{Doctor availability changes:} Changing doctor availability while students are already queued can create inconsistent states. Explicit rules for existing queues will be defined before availability management is implemented.
+
+    \item \textbf{Deployment issues:} Cloud deployment or database configuration problems can disrupt demonstrations. Staging deployment will be introduced early and deployment configuration will be maintained through version-controlled project configuration and CI/CD.
+
+\end{itemize}
+
+% =====================================================
+% 11. SUMMARY
+% =====================================================
+
+\section{Summary}
+
+This project proposes a deployable web platform to improve the organization and transparency of routine healthcare services within a college campus.
+
+CampusCare connects student identity, optional NFC/RFID-assisted check-in, doctor-specific queues, digital medical history, structured prescriptions, pharmacist dispensing, and administrative management within a role-based architecture.
+
+The project emphasizes \textbf{engineering workflow and system correctness rather than clinical automation}. Routine consultations follow a controlled workflow from check-in to queue, consultation, prescription, dispensing, and completion, while emergency and trauma cases are deliberately handled through a separate workflow.
+
+The initial implementation will use a walking-skeleton strategy, beginning with manual check-in and one complete doctor workflow before progressively introducing the second doctor, queue management features, NFC/RFID integration, emergency recording, administrative functionality, and improved real-time updates.
+
+The technical architecture uses React/Vite/Tailwind on the frontend, FastAPI for the backend, and PostgreSQL with raw SQL and version-controlled migrations. CI/CD, automated testing, role-based authorization, transaction-safe queue management, and audit logging will support incremental development.
+
+The project will evaluate measurable aspects of the workflow, including check-in-to-queue-entry time, waiting time, queue transparency, visit completion, prescription completeness, dispensing accuracy, system reliability, and authorization correctness.
+
+Medicine inventory management is intentionally excluded from the current semester, while medication reminders and anonymized disease-surge indicators remain optional stretch goals.
+
+The project therefore prioritizes delivering a \textbf{complete, secure, measurable healthcare workflow first}, with additional functionality introduced only after the core system is stable.
+
+\end{document}
