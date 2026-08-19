@@ -1,770 +1,427 @@
-🏥 CampusCare
+<div align="center">
+
+# CampusCare
+
+**A tap-and-go digital health-center workflow, built around the NFC chip already inside your college ID card.**
+
+[![Status](https://img.shields.io/badge/status-in%20development-yellow)](#project-status)
+[![License](https://img.shields.io/badge/license-TBD-lightgrey)](#license)
+[![Frontend](https://img.shields.io/badge/Frontend-React%20%2B%20Vite-149ECA?logo=react&logoColor=white)](#technology-stack)
+[![Backend](https://img.shields.io/badge/Backend-FastAPI-009688?logo=fastapi&logoColor=white)](#technology-stack)
+[![Database](https://img.shields.io/badge/Database-PostgreSQL-4169E1?logo=postgresql&logoColor=white)](#technology-stack)
+[![PWA](https://img.shields.io/badge/App%20Model-PWA-5A0FC8?logo=pwa&logoColor=white)](#technology-stack)
+[![NFC](https://img.shields.io/badge/Identity-Web%20NFC-black?logo=nfc&logoColor=white)](#nfc-architecture)
+
+</div>
+
+---
+
+## Overview
+
+CampusCare replaces the campus health center's paper-and-token workflow with one connected, role-based system — from NFC check-in through doctor-specific queues, structured consultation, prescriptions, and dispensing, to a permanent visit history.
+
+It's a Software Engineering course project (UCS503P, 5th semester), built by a four-person team. Most of the system is a conventional health-center management application. The part worth pointing at is the entry point:
+
+```mermaid
+flowchart LR
+    A[College ID Card] -->|Web NFC| B[Card UID]
+    B -->|hashed, mapped| C[Student Identity]
+    C --> D[CampusCare]
+    D --> E[Doctor Selection]
+    D --> F[Live Queue]
+    D --> G[Consultation]
+    D --> H[Prescription]
+    D --> I[Visit History]
+```
+
+No new card is issued. No dedicated reader is bought. The existing college ID — already used for gate and library access — becomes the physical key into the digital workflow. The team's own ID card has already been tested against Android Chrome via Web NFC over HTTPS, and its UID reads successfully — a confirmed capability, not an assumption.
+
+---
+
+## Table of Contents
+
+- [Project Status](#project-status)
+- [Problem](#problem)
+- [Solution](#solution)
+- [Core Workflow](#core-workflow)
+- [User Roles](#user-roles)
+- [Architecture](#architecture)
+- [NFC Architecture](#nfc-architecture)
+- [Authentication & Authorization](#authentication--authorization)
+- [Medical Record Model](#medical-record-model)
+- [Prescription Model](#prescription-model)
+- [Queue Model](#queue-model)
+- [Emergency Workflow](#emergency-workflow)
+- [Database](#database)
+- [Testing Philosophy](#testing-philosophy)
+- [Security Principles](#security-principles)
+- [Project Scope](#project-scope)
+- [Repository Structure](#repository-structure)
+- [Development Workflow](#development-workflow)
+- [Technology Stack](#technology-stack)
+- [Getting Started](#getting-started)
+- [Environment Variables](#environment-variables)
+- [Deployment](#deployment)
+- [Development Roadmap](#development-roadmap)
+- [Definition of Done](#definition-of-done)
+- [Engineering Principles](#engineering-principles)
+- [Team](#team)
+- [License](#license)
+
+---
+
+## Project Status
+
+| Component | Progress | Notes |
+|---|:---:|---|
+| Requirements | ![0%](https://img.shields.io/badge/-0%25-lightgrey) | |
+| Architecture & ERD | ![0%](https://img.shields.io/badge/-0%25-lightgrey) | |
+| Database | ![0%](https://img.shields.io/badge/-0%25-lightgrey) | |
+| Backend | ![0%](https://img.shields.io/badge/-0%25-lightgrey) | |
+| Frontend | ![0%](https://img.shields.io/badge/-0%25-lightgrey) | |
+| Authentication | ![0%](https://img.shields.io/badge/-0%25-lightgrey) | |
+| Queue System | ![0%](https://img.shields.io/badge/-0%25-lightgrey) | |
+| Prescription | ![0%](https://img.shields.io/badge/-0%25-lightgrey) | |
+| RFID / NFC | ![40%](https://img.shields.io/badge/-40%25-yellow) | Feasibility test complete — real card, real UID read |
+| Testing | ![0%](https://img.shields.io/badge/-0%25-lightgrey) | |
+| Deployment | ![0%](https://img.shields.io/badge/-0%25-lightgrey) | |
+
+Percentages are approximate and updated as implementation progresses.
+
+---
+
+## Problem
+
+A workflow built on paper records and physical queues breaks down at real scale. CampusCare targets four concrete failure points:
+
+<details>
+<summary><b>Unclear queues</b></summary>
+<br>
+
+Students have no reliable way to know who's ahead of them, when they'll be called, whether the doctor is available, or which doctor they're even waiting for.
+</details>
+
+<details>
+<summary><b>No accessible longitudinal record</b></summary>
+<br>
+
+A consultation begins with no convenient access to a student's previous visits, conditions, allergies, or prescriptions.
+</details>
+
+<details>
+<summary><b>Handwritten prescriptions</b></summary>
+<br>
+
+Hard to read, easy to lose, and impossible to structure for reminders or future analytics.
+</details>
+
+<details>
+<summary><b>No separation between routine care and emergencies</b></summary>
+<br>
+
+Routine consultations and trauma cases have fundamentally different operational needs — CampusCare keeps the emergency log entirely separate from the normal doctor queue.
+</details>
+
+---
+
+## Solution
+
+```mermaid
+flowchart TD
+    A[College ID / NFC] --> B[Student Identity]
+    B --> C[Check-in]
+    C --> D[Doctor Selection]
+    D --> E["Doctor's Queue"]
+    E --> F[Consultation]
+    F --> G[Prescription]
+    G --> H[Medicine Given]
+    H --> I[Visit History]
+```
+
+---
+
+## Core Workflow
+
+```mermaid
+flowchart TD
+    A[Sign in with college Google account] --> B[Complete / maintain health profile]
+    B --> C[Tap college ID card]
+    C --> D[CampusCare identifies student]
+    D --> E[Select available doctor]
+    E --> F["Join doctor's queue"]
+    F --> G[Track queue status]
+    G --> H[Doctor calls student]
+    H --> I[Consultation]
+    I --> J[Prescription created]
+    J --> K[Visit moves to medicine collection]
+    K --> L[Pharmacist confirms dispensing]
+    L --> M[Visit becomes COMPLETED]
+    M --> N[Visit appears in medical history]
+```
+
+---
+
+## User Roles
+
+<table>
+<tr><th>Role</th><th>Can</th><th>Cannot</th></tr>
+<tr>
+<td><b>Student</b></td>
+<td>Authenticate via college Google account · maintain health profile · NFC or staff-assisted check-in · select an available doctor · view own queue status, history, and prescriptions</td>
+<td>Change their own role · access other students' records · create prescriptions · modify completed clinical records</td>
+</tr>
+<tr>
+<td><b>Doctor</b></td>
+<td>View own queue · call next student · view patient history and health profile · record consultations · create structured prescriptions · redirect to the other doctor · mark consultation complete</td>
+<td>—</td>
+</tr>
+<tr>
+<td><b>Pharmacist / Receptionist</b></td>
+<td>Staff-assisted manual check-in · confirm medicine dispensing · log substitutions/deviations · log emergency/trauma cases · view records per access policy</td>
+<td>—</td>
+</tr>
+<tr>
+<td><b>Administrator</b></td>
+<td>Manage doctor and pharmacist/receptionist accounts · mark doctor availability · enroll and revoke RFID credentials · view system-level logs</td>
+<td>—</td>
+</tr>
+</table>
+
+---
+
+## Architecture
+
+CampusCare follows a conventional three-tier architecture, kept deliberately boring on purpose — the interesting engineering is in the workflow, not the topology.
+
+```mermaid
+flowchart TB
+    subgraph Client["Client Layer — React + Vite + Tailwind + PWA"]
+        C1[Student] 
+        C2[Doctor]
+        C3[Pharmacist]
+        C4[Admin]
+    end
+    subgraph App["Application Layer — Python + FastAPI"]
+        A1[Authentication & Authorization]
+        A2[Queue Logic]
+        A3[Consultation Logic]
+        A4[Prescription Logic]
+        A5[RFID Identity Mapping]
+        A6[Emergency Logging]
+    end
+    subgraph Data["Data Layer — PostgreSQL"]
+        D1[(Raw SQL + versioned migrations)]
+    end
+    Client -->|HTTPS / REST| App
+    App -->|SQL| Data
+```
+
+---
+
+## NFC Architecture
+
+```mermaid
+flowchart LR
+    A[Android device] --> B[Chrome + Web NFC]
+    B --> C[College ID card]
+    C --> D[Unique UID / serial]
+    D --> E[Client-side processing]
+    E --> F[Secure server request]
+    F --> G[Stored credential mapping]
+    G --> H[Student]
+    H --> I[Check-in]
+```
+
+> **Important:** CampusCare never treats the raw UID as identity. The system maintains a controlled mapping — `RFID credential → student → CampusCare account` — and the UID is **hashed before storage**, not kept in the clear.
+
+---
+
+## Authentication & Authorization
+
+Students authenticate via the college Google identity flow. Staff accounts are role-controlled. The backend is the single source of truth for permissions — the frontend hiding a button is never treated as authorization.
+
+```mermaid
+flowchart LR
+    A[Frontend request] --> B[FastAPI]
+    B --> C[Authenticate]
+    C --> D[Identify user]
+    D --> E[Verify role]
+    E --> F[Verify resource access]
+    F --> G[(PostgreSQL)]
+```
+
+Every protected endpoint performs server-side authorization, independent of anything the client claims.
+
+---
+
+## Medical Record Model
+
+**Health Profile** — longer-lived: allergies, known conditions, blood group, current medications, emergency contact.
+
+**Visit History** — per completed visit: doctor, consultation notes, prescription, dispensing record, timestamps, redirection info where applicable.
+
+Splitting these lets a doctor see longitudinal context instead of treating every consultation as an isolated event.
+
+---
+
+## Prescription Model
+
+No free-text prescription box. Every item is structured:
+
+| Field | Example |
+|---|---|
+| Medicine | Example Medicine |
+| Strength | 500 mg |
+| Form | Tablet |
+| Route | Oral |
+| Morning / Afternoon / Night | 1 / 0 / 1 |
+| Duration | 5 days |
+| Food instruction | After food |
+| PRN | — |
+| Additional instructions | — |
+
+Exact fields will be locked down with the finalized requirements before implementation.
+
+---
+
+## Queue Model
+
+Each doctor holds an independent queue:
+
+```
+Doctor A                  Doctor B
+─────────                 ─────────
+Student 01                Student 02
+Student 04                Student 05
+Student 09                Student 07
+```
+
+Queue position is *derived* from ordering/state, never stored as a fixed number.
+
+**No-show handling**
+
+```mermaid
+stateDiagram-v2
+    [*] --> WAITING
+    WAITING --> CALLED
+    CALLED --> IN_CONSULTATION : student appears
+    CALLED --> NO_SHOW : buffer expires
+    NO_SHOW --> WAITING : re-enters at end of queue
+    IN_CONSULTATION --> COMPLETED
+```
+
+**Doctor redirection** — if a student joined the wrong queue, the doctor moves them to the correct one. It stays the same clinical encounter; the system changes routing rather than silently spawning a second, unrelated visit.
+
+---
+
+## Emergency Workflow
+
+```mermaid
+flowchart LR
+    A[Emergency] --> B[Authorized staff member]
+    B --> C[Emergency log]
+```
 
-A digital campus health-center management system built around NFC-enabled college ID cards.
+No normal doctor queue. No student queue position. No doctor-selection screen. This mirrors how the dispensary actually operates — trauma cases aren't routed through routine consultation infrastructure.
 
-CampusCare is a Software Engineering project designed to replace a manual, paper-and-token campus health-center workflow with a secure, role-based digital system.
+---
 
-The system connects students, doctors, pharmacists/receptionists, and administrators through one workflow — from NFC check-in and doctor-specific queues to consultation, structured prescriptions, medicine dispensing, and permanent visit history.
+## Database
 
-✨ What makes CampusCare different?
+PostgreSQL, deliberately without an ORM:
 
-Most of the project is a conventional health-center management system.
+- Raw SQL
+- Foreign keys, constraints, indexes
+- Transactions
+- Version-controlled migrations
 
-The interesting part is the identity + queue entry point:
+**Conceptual entities:** Users · Students · Staff · Doctors · RFID Credentials · Health Profiles · Visits · Queue Entries · Consultations · Prescriptions · Prescription Items · Dispensing Records · Emergency Cases · Audit Logs
 
-College ID Card
-      │
-      │ NFC / Web NFC
-      ▼
-   Card UID
-      │
-      │ secure mapping
-      ▼
-   Student Identity
-      │
-      ▼
-   CampusCare
-      │
-      ├── Doctor Selection
-      ├── Live Queue
-      ├── Consultation
-      ├── Prescription
-      └── Visit History
+---
 
-The student does not need a new RFID card or dedicated RFID reader.
+## Testing Philosophy
 
-CampusCare uses the existing NFC-capable college ID card as the physical entry point into the digital health-center workflow.
+A feature isn't done because it works — it's done because its **failure paths** are handled too:
 
-Technical note: The team's actual college ID card has already been tested with Android Chrome using Web NFC over HTTPS, and the card's unique serial/UID is being read successfully.
+- Unknown or revoked card?
+- Student already checked in?
+- Doctor unavailable?
+- Student doesn't show?
+- Two requests arrive simultaneously?
+- Session expires mid-flow?
+- Network fails?
 
-📌 Table of Contents
+---
 
-Project Status
+## Security Principles
 
-Problem
+`Server-side authorization` · `Least-privilege role access` · `Secure authentication` · `Hashed RFID identifiers` · `HTTPS everywhere in deployment` · `Secrets outside source control` · `Database constraints` · `Transaction-safe queue operations` · `Audit logging` · `Synthetic data in dev/demo — no real medical records outside authorized environments`
 
-Solution
+---
 
-Core Workflow
+## Project Scope
 
-User Roles
+<table>
+<tr><td valign="top" width="34%">
 
-Architecture
+**Core — Semester Deliverable**
 
-Technology Stack
+- Google-based student auth
+- Health profile
+- NFC / RFID check-in
+- Staff-assisted manual check-in
+- Doctor selection & availability
+- Doctor-specific queues
+- No-show handling
+- Doctor redirection
+- Consultation records
+- Structured prescriptions
+- Pharmacist dispensing
+- Emergency log
+- Role-based access
+- Admin panel
+- Audit logging
+- Deployment & testing
 
-Core Features
+</td><td valign="top" width="33%">
 
-Prescription Model
+**Stretch Goals**
 
-Queue Model
+*Only after core is stable*
 
-Security
+- Medication reminders
+- Seasonal disease-surge analytics
 
-Project Scope
+</td><td valign="top" width="33%">
 
-Repository Structure
+**Explicitly Out of Scope**
 
-Development Workflow
+*This semester*
 
-Getting Started
+- Medicine inventory management
+- AI diagnosis
+- Symptom-based auto-triage
+- Automated medical decisions
+- Payment processing
+- Insurance integration
+- Native Android app
+- Hospital/ambulance integration
 
-Environment Variables
+</td></tr>
+</table>
 
-Database
+Scope discipline is intentional — a smaller system that works beats a larger one that doesn't.
 
-API
+---
 
-Testing
+## Repository Structure
 
-Deployment
-
-Team
-
-Roadmap
-
-Project Documentation
-
-🚦 Project Status
-
-Current phase: 🟡 Development / Foundation
-
-Overall
-
-Requirements       ░░░░░░░░░░  0%
-Architecture       ░░░░░░░░░░  0%
-Database           ░░░░░░░░░░  0%
-Backend            ░░░░░░░░░░  0%
-Frontend           ░░░░░░░░░░  0%
-Authentication     ░░░░░░░░░░  0%
-Queue System       ░░░░░░░░░░  0%
-Prescription       ░░░░░░░░░░  0%
-RFID / NFC         ████░░░░░░  40%  ← feasibility test complete
-Testing            ░░░░░░░░░░  0%
-Deployment         ░░░░░░░░░░  0%
-
-Percentages are intentionally approximate and will be updated as implementation progresses.
-
-🎯 Problem
-
-Campus health centers can become difficult to manage when the workflow depends heavily on paper records and physical queues.
-
-CampusCare targets several concrete problems:
-
-1. Unclear queues
-
-Students may have no reliable way to know:
-
-who is ahead of them
-
-when they will be called
-
-whether the doctor is available
-
-which doctor they are waiting for
-
-2. No easily accessible longitudinal record
-
-A consultation may begin without convenient access to previous:
-
-visits
-
-conditions
-
-allergies
-
-prescriptions
-
-consultation information
-
-3. Handwritten prescriptions
-
-Handwritten prescriptions can be:
-
-difficult to read
-
-misplaced
-
-difficult for students to reference later
-
-difficult to structure for reminders or future analytics
-
-4. No separation between routine care and emergencies
-
-Routine consultations and emergency/trauma cases have different operational requirements.
-
-CampusCare therefore keeps the emergency log separate from the normal doctor queue.
-
-💡 Solution
-
-CampusCare creates one connected workflow:
-
-                    ┌─────────────────┐
-                    │  College ID/NFC │
-                    └────────┬────────┘
-                             │
-                             ▼
-                    ┌─────────────────┐
-                    │ Student Identity│
-                    └────────┬────────┘
-                             │
-                             ▼
-                    ┌─────────────────┐
-                    │    Check-in     │
-                    └────────┬────────┘
-                             │
-                             ▼
-                    ┌─────────────────┐
-                    │ Doctor Selection│
-                    └────────┬────────┘
-                             │
-                             ▼
-                    ┌─────────────────┐
-                    │ Doctor's Queue  │
-                    └────────┬────────┘
-                             │
-                             ▼
-                    ┌─────────────────┐
-                    │  Consultation   │
-                    └────────┬────────┘
-                             │
-                             ▼
-                    ┌─────────────────┐
-                    │  Prescription  │
-                    └────────┬────────┘
-                             │
-                             ▼
-                    ┌─────────────────┐
-                    │ Medicine Given  │
-                    └────────┬────────┘
-                             │
-                             ▼
-                    ┌─────────────────┐
-                    │  Visit History  │
-                    └─────────────────┘
-
-🔄 Core Workflow
-
-Student
-
-1. Sign in with college Google account
-          ↓
-2. Complete / maintain health profile
-          ↓
-3. Tap college ID card
-          ↓
-4. CampusCare identifies student
-          ↓
-5. Select available doctor
-          ↓
-6. Join doctor's queue
-          ↓
-7. Track queue status
-          ↓
-8. Doctor calls student
-          ↓
-9. Consultation
-          ↓
-10. Prescription created
-          ↓
-11. Visit moves to medicine collection
-          ↓
-12. Pharmacist confirms dispensing
-          ↓
-13. Visit becomes COMPLETED
-          ↓
-14. Visit appears in medical history
-
-👥 User Roles
-
-🎓 Student
-
-Students can:
-
-authenticate using their college Google account
-
-create and maintain their health profile
-
-check in using NFC
-
-use staff-assisted manual check-in when required
-
-select an available doctor
-
-view their current queue status
-
-view their own medical history
-
-view prescriptions
-
-view completed visits
-
-Students cannot:
-
-change their role
-
-access other students' records
-
-create prescriptions
-
-modify completed clinical records
-
-🩺 Doctor
-
-Doctors can:
-
-view their own queue
-
-call the next student
-
-view the student's medical history
-
-view relevant health-profile information
-
-record consultation details
-
-create structured prescriptions
-
-redirect a student to the other doctor
-
-mark the consultation complete
-
-💊 Pharmacist / Receptionist
-
-The receptionist is also the authorized medicine dispenser in the CampusCare workflow.
-
-They can:
-
-perform staff-assisted manual check-in
-
-view the information required for their operational duties
-
-view medical history according to the project's access policy
-
-view prescriptions
-
-confirm medicine dispensing
-
-record medicine substitutions or deviations
-
-log emergency/trauma cases
-
-🛠️ Administrator
-
-Admins can:
-
-create/manage doctor accounts
-
-create/manage pharmacist/receptionist accounts
-
-manage system users
-
-mark doctors available/unavailable
-
-enroll RFID cards
-
-revoke RFID credentials
-
-view system-level records/logs
-
-🏗️ Architecture
-
-CampusCare follows a conventional three-tier web architecture.
-
-┌─────────────────────────────────────────────────────┐
-│                    CLIENT LAYER                     │
-│                                                     │
-│ React + Vite + Tailwind + PWA                      │
-│                                                     │
-│ Student │ Doctor │ Pharmacist │ Admin              │
-└─────────────────────────┬───────────────────────────┘
-                          │ HTTPS / REST
-                          ▼
-┌─────────────────────────────────────────────────────┐
-│                  APPLICATION LAYER                 │
-│                                                     │
-│ Python + FastAPI                                    │
-│                                                     │
-│ Authentication                                      │
-│ Authorization                                       │
-│ Queue logic                                         │
-│ Consultation logic                                  │
-│ Prescription logic                                  │
-│ RFID identity mapping                               │
-│ Emergency logging                                   │
-└─────────────────────────┬───────────────────────────┘
-                          │ SQL
-                          ▼
-┌─────────────────────────────────────────────────────┐
-│                     DATA LAYER                     │
-│                                                     │
-│ PostgreSQL                                          │
-│                                                     │
-│ Raw SQL + version-controlled migrations             │
-└─────────────────────────────────────────────────────┘
-
-📡 NFC Architecture
-
-The RFID/NFC flow is intentionally simple.
-
-Android device
-      │
-      ▼
-Chrome + Web NFC
-      │
-      ▼
-College ID Card
-      │
-      ▼
-Unique UID / serial
-      │
-      ▼
-Client-side processing
-      │
-      ▼
-Secure server request
-      │
-      ▼
-Stored credential mapping
-      │
-      ▼
-Student
-      │
-      ▼
-Check-in
-
-Important
-
-CampusCare does not treat the UID itself as a student's identity.
-
-The system maintains a controlled mapping:
-
-RFID credential
-       ↓
-Student
-       ↓
-CampusCare account
-
-The UID is hashed before storage.
-
-🔐 Authentication & Authorization
-
-Students use the college Google identity flow.
-
-Staff users have role-controlled access.
-
-The backend is authoritative for permissions.
-
-Frontend
-   │
-   │ request
-   ▼
-FastAPI
-   │
-   ├── authenticate
-   ├── identify user
-   ├── verify role
-   ├── verify resource access
-   │
-   ▼
-PostgreSQL
-
-The frontend hiding a button is not considered authorization.
-
-Every protected API endpoint performs server-side authorization.
-
-🩺 Medical Record Model
-
-A student's information is divided conceptually into:
-
-Health Profile
-
-Longer-lived information such as:
-
-allergies
-
-known conditions
-
-blood group
-
-current medications
-
-emergency contact
-
-other relevant health information
-
-Visit History
-
-Each completed visit can contain:
-
-doctor
-
-consultation information
-
-prescription
-
-dispensing record
-
-timestamps
-
-redirection information where applicable
-
-This allows a doctor to see the patient's longitudinal history instead of treating every consultation as an isolated event.
-
-💊 Prescription Model
-
-CampusCare intentionally avoids a single free-text prescription box.
-
-Prescription items use structured fields.
-
-Conceptually:
-
-Medicine
-   │
-   ├── Strength
-   ├── Form
-   ├── Route
-   ├── Dose
-   ├── Morning
-   ├── Afternoon
-   ├── Night
-   ├── Duration
-   ├── Food instruction
-   ├── PRN
-   └── Additional instructions
-
-Example:
-
-Medicine: Example Medicine
-Strength: 500 mg
-Form: Tablet
-Route: Oral
-
-Morning:   1
-Afternoon: 0
-Night:     1
-
-Duration: 5 days
-Food: After food
-
-The exact prescription fields will be finalized with the project requirements before implementation.
-
-🧑‍⚕️ Queue Model
-
-Each doctor has an independent queue.
-
-Doctor A
-──────────────
-Student 01
-Student 04
-Student 09
-
-Doctor B
-──────────────
-Student 02
-Student 05
-Student 07
-
-Queue position is derived from queue state and ordering information rather than being treated as a permanently stored number.
-
-No-show handling
-
-When a doctor calls a student:
-
-WAITING
-   ↓
-CALLED
-   ↓
-Student appears
-   ↓
-IN_CONSULTATION
-
-If the student does not appear within the configured buffer:
-
-CALLED
-   ↓
-NO_SHOW
-   ↓
-re-enter at end of queue
-
-The no-show event is retained as part of the visit/queue history.
-
-Doctor redirection
-
-If a student selected the wrong doctor:
-
-Doctor A
-   │
-   │ redirect
-   ▼
-Doctor B
-
-The visit itself remains the same clinical encounter.
-
-The system changes the operational routing rather than silently creating an unrelated second visit.
-
-🚨 Emergency Workflow
-
-Emergency/trauma cases intentionally bypass the normal queue.
-
-Emergency
-    │
-    ▼
-Authorized staff member
-    │
-    ▼
-Emergency log
-
-There is:
-
-no normal doctor queue
-
-no student queue position
-
-no doctor-selection screen
-
-no requirement to route the emergency through the routine consultation flow
-
-This separation reflects the actual campus operational workflow.
-
-🗃️ Database
-
-CampusCare uses PostgreSQL.
-
-The project intentionally uses:
-
-raw SQL
-
-foreign keys
-
-constraints
-
-indexes
-
-transactions
-
-version-controlled SQL migrations
-
-An ORM is not currently planned.
-
-Conceptual entities include:
-
-Users
-Students
-Staff
-Doctors
-RFID Credentials
-Health Profiles
-Visits
-Queue Entries
-Consultations
-Prescriptions
-Prescription Items
-Dispensing Records
-Emergency Cases
-Audit Logs
-
-🧪 Testing Philosophy
-
-CampusCare will test both:
-
-Functional correctness
-
-Does the feature work?
-
-and:
-
-Failure behavior
-
-What happens when:
-- card is unknown?
-- card is revoked?
-- student is already checked in?
-- doctor is unavailable?
-- student doesn't show?
-- two requests arrive simultaneously?
-- session expires?
-- network fails?
-
-A feature is considered complete only when its normal and important failure paths are handled.
-
-🔒 Security Principles
-
-CampusCare deals with sensitive student health information, so security is treated as a first-class engineering concern.
-
-Key principles:
-
-server-side authorization
-
-least-privilege role access where applicable
-
-secure authentication
-
-hashed RFID identifiers
-
-HTTPS in deployed environments
-
-secrets stored outside source control
-
-database constraints
-
-transaction-safe queue operations
-
-audit logging for important actions
-
-synthetic data for development/testing
-
-no real medical records in public demo environments
-
-Development and demonstration environments should use synthetic data unless appropriate authorization and safeguards have been established for real data.
-
-📦 Project Scope
-
-✅ Core — Semester Deliverable
-
-Google-based student authentication
-
-Student account/profile
-
-Health profile
-
-NFC/RFID check-in
-
-Staff-assisted manual check-in
-
-Doctor selection
-
-Doctor availability
-
-Doctor-specific queues
-
-Queue position
-
-No-show handling
-
-Doctor redirection
-
-Consultation records
-
-Medical history
-
-Structured prescriptions
-
-Pharmacist dispensing
-
-Medicine substitution logging
-
-Emergency log
-
-Role-based access
-
-Admin panel
-
-Audit logging
-
-Deployment
-
-Testing
-
-🟡 Stretch Goals
-
-Only after the core system is stable:
-
-Medication reminders
-
-Seasonal disease-surge analytics
-
-❌ Explicitly Out of Scope
-
-For the current semester:
-
-Medicine inventory management
-
-AI diagnosis
-
-Symptom-based automated triage
-
-Automated medical decision-making
-
-Payment processing
-
-Insurance integration
-
-Native Android application
-
-Hospital/ambulance integration
-
-Scope discipline is intentional.
-
-🗂️ Repository Structure
-
+```
 campuscare/
-│
 ├── frontend/
 │   ├── src/
 │   ├── public/
-│   ├── package.json
-│   └── ...
+│   └── package.json
 │
 ├── backend/
 │   ├── app/
@@ -772,11 +429,9 @@ campuscare/
 │   │   ├── services/
 │   │   ├── repositories/
 │   │   ├── schemas/
-│   │   ├── auth/
-│   │   └── ...
+│   │   └── auth/
 │   ├── tests/
-│   ├── requirements.txt
-│   └── ...
+│   └── requirements.txt
 │
 ├── database/
 │   ├── migrations/
@@ -787,553 +442,229 @@ campuscare/
 │   ├── use-cases.md
 │   ├── permissions.md
 │   ├── architecture.md
-│   ├── decisions.md
-│   └── ...
+│   └── decisions.md
 │
 ├── .gitignore
-├── README.md
-└── ...
+└── README.md
+```
 
-🧑‍💻 Development Workflow
+---
 
-CampusCare uses feature branches and pull requests.
+## Development Workflow
 
+```
 main
-  │
-  └── develop
-         │
-         ├── feature/student-auth
-         ├── feature/queue-system
-         ├── feature/rfid-checkin
-         └── feature/prescription
+ └── develop
+      ├── feature/student-auth
+      ├── feature/queue-system
+      ├── feature/rfid-checkin
+      └── feature/prescription
+```
 
-Rules
+- No direct pushes to `main`
+- One feature → one branch → one pull request
+- At least one teammate reviews every change
+- Tests pass before merge
+- Keep commits focused
+- Never commit secrets or real medical records
 
-Do not push directly to main.
+---
 
-One feature → one branch.
+## Technology Stack
 
-Open a pull request.
+| Layer | Technology |
+|---|---|
+| Frontend | React |
+| Build Tool | Vite |
+| Styling | Tailwind CSS |
+| App Model | Progressive Web App |
+| Backend | Python |
+| API Framework | FastAPI |
+| Database | PostgreSQL (raw SQL) |
+| Authentication | Google Identity + application session |
+| RFID / NFC | Web NFC |
+| Real-time (v1) | Polling |
+| Real-time (v2) | WebSockets |
+| Frontend Hosting | Vercel / Netlify |
+| Backend Hosting | Render (or similar) |
+| Database Hosting | Managed PostgreSQL |
+| Version Control | Git + GitHub |
 
-At least one teammate reviews the change.
+---
 
-Tests should pass before merging.
+## Getting Started
 
-Keep commits focused.
+### Prerequisites
 
-Never commit secrets.
+`Git` · `Node.js LTS` · `Python 3.11+` · `PostgreSQL` · an IDE
 
-Never commit real student medical records.
+Recommended: Postman/Bruno/Insomnia, pgAdmin/DBeaver, an Android device with NFC for Web NFC testing.
 
-🛠️ Technology Stack
+### Clone
 
-Layer
-
-Technology
-
-Frontend
-
-React
-
-Build Tool
-
-Vite
-
-Styling
-
-Tailwind CSS
-
-App Model
-
-Progressive Web App
-
-Backend
-
-Python
-
-API Framework
-
-FastAPI
-
-Database
-
-PostgreSQL
-
-Database Access
-
-Raw SQL
-
-Authentication
-
-Google Identity + application session
-
-RFID/NFC
-
-Web NFC
-
-Real-time V1
-
-Polling
-
-Real-time V2
-
-WebSockets
-
-Version Control
-
-Git + GitHub
-
-Frontend Hosting
-
-Vercel / Netlify
-
-Backend Hosting
-
-Render / similar
-
-Database Hosting
-
-Managed PostgreSQL
-
-🚀 Getting Started
-
-The exact setup commands will be finalized as the implementation is created.
-
-Prerequisites
-
-Install:
-
-Git
-
-Node.js LTS
-
-Python 3.11+
-
-PostgreSQL
-
-VS Code or another IDE
-
-Optional but recommended:
-
-Postman / Bruno / Insomnia
-
-pgAdmin / DBeaver
-
-Android device with NFC for Web NFC testing
-
-Clone
-
+```bash
 git clone <repository-url>
 cd campuscare
+```
 
-Frontend
+### Frontend
 
+```bash
 cd frontend
 npm install
 npm run dev
+```
 
-Backend
+### Backend
 
+```bash
 cd backend
-
 python -m venv .venv
 
-Windows
-
+# Windows
 .venv\Scripts\activate
-
-macOS / Linux
-
+# macOS / Linux
 source .venv/bin/activate
 
-Install dependencies:
-
 pip install -r requirements.txt
-
-Start FastAPI:
-
 uvicorn app.main:app --reload
+```
 
-🔑 Environment Variables
+### Database
 
-Never commit actual secrets.
+```bash
+# apply migrations in order
+psql -d campuscare -f database/migrations/001_initial.sql
+# ...continue through subsequent migrations
 
-Use:
+# seed synthetic development data
+psql -d campuscare -f database/seed/seed.sql
+```
 
-.env
-.env.example
+---
 
-Example:
+## Environment Variables
 
+Never commit real secrets — use `.env` locally and keep `.env.example` (names only) in source control.
+
+```env
 DATABASE_URL=
 GOOGLE_CLIENT_ID=
 JWT_SECRET=
 CORS_ORIGINS=
+```
+
+---
+
+## Deployment
+
+```mermaid
+flowchart TB
+    A[Users] -->|HTTPS| B[Frontend — Vercel / Netlify]
+    B -->|HTTPS| C[FastAPI Backend — Render]
+    C --> D[(Managed PostgreSQL)]
+```
 
-The .env.example file should contain variable names but no real credentials.
-
-🗄️ Database Setup
-
-Create the PostgreSQL database.
-
-Then apply migrations in order:
-
-001_initial.sql
-002_...
-003_...
-
-Seed development data:
-
-seed.sql
-
-Development data must be synthetic.
-
-📡 NFC Development
-
-Web NFC requires an appropriate secure context and compatible browser/device environment.
-
-CampusCare's NFC implementation is targeted at:
-
-Android
-+
-Chrome
-+
-HTTPS
-+
-NFC enabled
+Public deployments run on synthetic data only.
 
-The project has already completed an initial real-card feasibility test:
+---
 
-College ID
-    ↓
-Android NFC
-    ↓
-Chrome Web NFC
-    ↓
-UID / serial successfully read
+## Development Roadmap
 
-The production implementation will add the secure server-side credential lookup and check-in workflow around that capability.
+```mermaid
+flowchart LR
+    A[1. Requirements] --> B[2. Architecture + ERD]
+    B --> C[3. DB + migrations]
+    C --> D[4. Auth]
+    D --> E[5. Walking skeleton]
+    E --> F[6. Student portal]
+    F --> G[7. Doctor workflow]
+    G --> H[8. Prescription + dispensing]
+    H --> I[9. 2nd doctor + redirect + no-show]
+    I --> J[10. Queue polling]
+    J --> K[11. RFID/NFC]
+    K --> L[12. Admin + emergency]
+    L --> M[13. Security + audit]
+    M --> N[14. Testing]
+    N --> O[15. Deployment]
+    O --> P[16. Pilot + hardening]
+    P --> Q[17. Stretch goals]
+```
 
-🌐 Deployment
+| Phase | Target |
+|---|---|
+| Requirements & architecture | Week 1 |
+| Database & backend foundation | Week 2 |
+| Walking skeleton | Week 3 |
+| Student + doctor workflows | Weeks 4–5 |
+| Queue + redirect + no-show | Week 6 |
+| RFID + admin + emergency | Week 7 |
+| Security + testing | Week 8 |
+| Deployment + integration testing | Week 9 |
+| Pilot + documentation + demo | Week 10 |
+| Buffer / stretch goals | Remaining time |
 
-Target architecture:
+---
 
-                 ┌───────────────────┐
-                 │       Users       │
-                 └─────────┬─────────┘
-                           │ HTTPS
-                           ▼
-                 ┌───────────────────┐
-                 │ Frontend Hosting  │
-                 │ Vercel / Netlify  │
-                 └─────────┬─────────┘
-                           │ HTTPS
-                           ▼
-                 ┌───────────────────┐
-                 │ FastAPI Backend   │
-                 │ Render / similar  │
-                 └─────────┬─────────┘
-                           │
-                           ▼
-                 ┌───────────────────┐
-                 │ Managed PostgreSQL│
-                 └───────────────────┘
+## Definition of Done
 
-Public deployment will use synthetic test data.
+A feature isn't done because its UI exists. It's done when every layer is addressed:
 
-🧭 Development Roadmap
+```mermaid
+flowchart LR
+    A[Requirement] --> B[Database]
+    B --> C[Backend]
+    C --> D[Authorization]
+    D --> E[Frontend]
+    E --> F[Error handling]
+    F --> G[Testing]
+    G --> H[Documentation]
+```
 
-┌──────────────────────────────────────────────┐
-│ 1. Requirements                              │
-│    ↓                                         │
-│ 2. Architecture + ERD                        │
-│    ↓                                         │
-│ 3. Database + migrations                     │
-│    ↓                                         │
-│ 4. Authentication                            │
-│    ↓                                         │
-│ 5. Walking skeleton                          │
-│    ↓                                         │
-│ 6. Student portal                            │
-│    ↓                                         │
-│ 7. Doctor workflow                            │
-│    ↓                                         │
-│ 8. Prescription + dispensing                 │
-│    ↓                                         │
-│ 9. Second doctor + redirect + no-show        │
-│    ↓                                         │
-│10. Queue polling                             │
-│    ↓                                         │
-│11. RFID/NFC integration                      │
-│    ↓                                         │
-│12. Admin + emergency                         │
-│    ↓                                         │
-│13. Security + audit                          │
-│    ↓                                         │
-│14. Testing                                   │
-│    ↓                                         │
-│15. Deployment                                │
-│    ↓                                         │
-│16. Pilot + hardening                         │
-│    ↓                                         │
-│17. Optional stretch goals                    │
-└──────────────────────────────────────────────┘
+**Worked example — RFID check-in isn't "done" because a phone can read a UID.** It's done when:
 
-📅 Target Timeline
+`NFC card → UID read → credential verified → student identified → duplicate check → visit created → queue entry created → student sees queue → invalid/revoked card rejected`
 
-Phase
+---
 
-Target
+## Engineering Principles
 
-Requirements & architecture
+1. **Correctness over feature count** — a small system that works beats a large one that half-works.
+2. **Backend is authoritative** — the client never decides role, permissions, queue state, identity, or prescription ownership.
+3. **Explicit state transitions** — visits move through known states, never arbitrary status changes.
+4. **Structured clinical data** — anything queried later isn't stored as unstructured text.
+5. **Privacy by design** — development environments run on synthetic data.
+6. **Scope discipline** — a feature earns a place only if it has a clear slot in the semester deliverable.
 
-Week 1
+---
 
-Database & backend foundation
+## Team
 
-Week 2
+CampusCare — 4-person team, Thapar Institute of Engineering and Technology, UCS503P (5th Semester Software Engineering)
 
-Walking skeleton
+| Responsibility | Owner |
+|---|---|
+| Backend / API | TBD |
+| Frontend / PWA | TBD |
+| Database / Clinical Workflow | TBD |
+| Infrastructure / Integration / RFID | TBD |
 
-Week 3
+---
 
-Student + doctor workflows
+## Why This Belongs on a CV
 
-Weeks 4–5
+Not the technology count — the fact that one workflow connects physical identity, software identity, queue management, clinical records, prescriptions, and dispensing, end to end, with the backend authoritative at every step.
 
-Queue + redirect + no-show
+`React` · `FastAPI` · `PostgreSQL` · `Raw SQL` · `Auth + RBAC` · `Web NFC` · `REST APIs` · `PWA` · `Real-time queueing` · `Transactions` · `Testing` · `Cloud deployment`
 
-Week 6
+---
 
-RFID + admin + emergency
+## License
 
-Week 7
+To be decided by the team.
 
-Security + testing
+<div align="center">
 
-Week 8
+**CampusCare** — from ID card tap to completed care.
 
-Deployment + integration testing
-
-Week 9
-
-Pilot + documentation + demo
-
-Week 10
-
-Buffer / stretch
-
-Remaining time
-
-The project follows a walking-skeleton-first strategy: a small end-to-end workflow is made functional before expanding the system.
-
-🧱 Definition of Done
-
-A CampusCare feature is not considered complete merely because its UI exists.
-
-A feature is considered done when:
-
-Requirement
-    ↓
-Database
-    ↓
-Backend
-    ↓
-Authorization
-    ↓
-Frontend
-    ↓
-Error handling
-    ↓
-Testing
-    ↓
-Documentation
-
-are all addressed.
-
-For example, RFID check-in is not "done" merely because the phone can read a UID.
-
-It is done when:
-
-NFC card
-   ↓
-UID read
-   ↓
-Credential verified
-   ↓
-Student identified
-   ↓
-Duplicate check
-   ↓
-Visit created
-   ↓
-Queue entry created
-   ↓
-Student sees queue
-   ↓
-Invalid/revoked card rejected
-
-📚 Project Documentation
-
-Documentation will live under /docs.
-
-Planned documents:
-
-requirements.md
-
-use-cases.md
-
-permissions.md
-
-architecture.md
-
-decisions.md
-
-Database design
-
-API specification
-
-State machines
-
-Testing strategy
-
-Deployment guide
-
-📊 Engineering Principles
-
-CampusCare is being built around a few simple principles:
-
-1. Correctness over feature count
-
-A smaller system that works reliably is better than a large system full of unfinished features.
-
-2. Backend is authoritative
-
-The client never gets to decide:
-
-role
-
-permissions
-
-queue state
-
-identity
-
-prescription ownership
-
-3. Explicit state transitions
-
-Visits move through known states rather than arbitrary status changes.
-
-4. Structured clinical data
-
-Information that needs to be queried later should not unnecessarily be stored as unstructured text.
-
-5. Privacy by design
-
-Development environments use synthetic data.
-
-6. Scope discipline
-
-Features are added only when they have a clear place in the semester deliverable.
-
-👨‍💻 Team
-
-CampusCare Team — 4 members
-
-Responsibility
-
-Owner
-
-Backend / API
-
-TBD
-
-Frontend / PWA
-
-TBD
-
-Database / Clinical Workflow
-
-TBD
-
-Infrastructure / Integration / RFID
-
-TBD
-
-Team assignments will be maintained as the project develops.
-
-🎓 Academic Context
-
-CampusCare is being developed as a 5th-semester Software Engineering project.
-
-The project is intentionally designed to demonstrate practical software engineering rather than only UI development:
-
-requirements engineering
-
-system design
-
-relational database design
-
-REST API development
-
-authentication and authorization
-
-state management
-
-concurrency considerations
-
-hardware/browser integration
-
-testing
-
-deployment
-
-version control
-
-team collaboration
-
-technical documentation
-
-⭐ Why this belongs on a CV
-
-CampusCare combines several practical engineering areas in one project:
-
-React
-+
-FastAPI
-+
-PostgreSQL
-+
-Raw SQL
-+
-Authentication
-+
-RBAC
-+
-NFC / Web NFC
-+
-REST APIs
-+
-PWA
-+
-Real-time queueing
-+
-Transactions
-+
-Testing
-+
-Cloud deployment
-
-The strongest part of the project is not the number of technologies.
-
-It is the end-to-end workflow connecting physical identity, software identity, queue management, clinical records, prescriptions, and dispensing.
-
-📜 License
-
-License to be decided by the team.
-
-<p align="center">
-  <b>CampusCare</b><br>
-  From ID card tap → to completed care.
-</p>
+</div>
