@@ -1,0 +1,10 @@
+-- =========================================================
+-- Table: SPECIALTY
+-- Master/lookup list of doctor specialties
+-- =========================================================
+CREATE TABLE SPECIALTY (
+    specialty_id  BIGINT AUTO_INCREMENT PRIMARY KEY,
+    name          VARCHAR(100) NOT NULL UNIQUE,
+    description   VARCHAR(255) NULL,
+    is_active     BOOLEAN NOT NULL DEFAULT TRUE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
