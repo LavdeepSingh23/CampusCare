@@ -1,40 +1,16 @@
-import React, { useState, useRef, useEffect } from 'react'
-
-const queueData = [
-  { rollNumber: '2021CS045', name: 'Aman Sharma', waitingSince: '10:12 AM', age: 21, bloodGroup: 'B+' },
-  { rollNumber: '2022ME102', name: 'Priya Verma', waitingSince: '10:20 AM', age: 20, bloodGroup: 'O+' },
-  { rollNumber: '2020EC078', name: 'Rohit Singh', waitingSince: '10:25 AM', age: 22, bloodGroup: 'A-' },
-]
-
-const historyData = {
-  '2021CS045': [
-    {
-      date: '12 Aug 2026',
-      diagnosis: 'Viral fever',
-      notes: 'Advised rest, fluids',
-      medicines: [{ name: 'Paracetamol 650', timing: 'morning, night', note: 'after food' }],
-    },
-    {
-      date: '02 Jul 2026',
-      diagnosis: 'Common cold',
-      notes: 'Prescribed antihistamine',
-      medicines: [{ name: 'Cetirizine 10mg', timing: 'night', note: '' }],
-    },
-  ],
-}
-
-const summaryData = {
-  '2021CS045': { conditions: 'Asthma', allergies: 'None recorded', medication: 'None recorded' },
-  '2022ME102': { conditions: 'None recorded', allergies: 'Peanuts', medication: 'None recorded' },
-  '2020EC078': { conditions: 'None recorded', allergies: 'None recorded', medication: 'None recorded' },
-}
-
-const doctorProfile = {
-  name: 'Dr. Neha Kapoor',
-  specialization: 'General Physician',
-  shift: '9:00 AM – 2:00 PM',
-  email: 'neha.kapoor@campuscare.edu',
-}
+import React, { useState, useRef, useEffect, useCallback } from 'react'
+import { useAuth } from '../../context/AuthContext'
+import {
+  fetchDoctorProfile,
+  fetchDoctorQueue,
+  fetchDoctorStats,
+  fetchPatientSummary,
+  fetchPatientHistory,
+  completeConsultation,
+  updateAllergy,
+  updateCondition,
+  updateMedication,
+} from '../../api'
 
 function ChevronIcon({ open }) {
   return (
@@ -164,29 +140,85 @@ function Section({ label, valuePreview, badgeTone, open, onToggle, children }) {
   )
 }
 
+const EMPTY_SUMMARY = { conditions: 'None recorded', allergies: 'None recorded', medication: 'None recorded' }
+
 function Doctors_Dashboard() {
-  const [queue, setQueue] = useState(queueData)
+  const { doctor, logout } = useAuth()
+  const doctorId = doctor?.doctorId
+
+  const [doctorProfile, setDoctorProfile] = useState({
+    name: doctor?.name ?? '',
+    specialization: doctor?.specialization ?? '',
+    shift: '',
+    email: '',
+  })
+
+  const [queue, setQueue] = useState([])
+  const [stats, setStats] = useState({ waiting: 0, seenToday: 0 })
+  const [loadingQueue, setLoadingQueue] = useState(true)
+  const [loadError, setLoadError] = useState('')
+
   const [selected, setSelected] = useState(null)
 
   const [diagnosis, setDiagnosis] = useState('')
   const [general, setGeneral] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [submitError, setSubmitError] = useState('')
 
   const [drawerOpen, setDrawerOpen] = useState(false)
-  const [records, setRecords] = useState(summaryData)
+  const [summary, setSummary] = useState(EMPTY_SUMMARY)
+  const [history, setHistory] = useState([])
+  const [loadingRecord, setLoadingRecord] = useState(false)
+
   const [openSections, setOpenSections] = useState({})
   const [editingField, setEditingField] = useState(null)
   const [editValue, setEditValue] = useState('')
+  const [savingField, setSavingField] = useState(false)
   const [expandedVisit, setExpandedVisit] = useState(null)
 
   // profile dropdown state
   const [profileOpen, setProfileOpen] = useState(false)
   const profileRef = useRef(null)
-  const [patientsSeen, setPatientsSeen] = useState(0)
-  const totalToday = patientsSeen + queue.length
 
   const [medicines, setMedicines] = useState([
     { name: '', morning: false, evening: false, night: false, note: '' },
   ])
+
+  // ── initial load: profile, queue, stats ────────────────────────────
+
+  const loadQueueAndStats = useCallback(async () => {
+    if (!doctorId) return
+    setLoadError('')
+    try {
+      const [queueRes, statsRes] = await Promise.all([
+        fetchDoctorQueue(doctorId),
+        fetchDoctorStats(doctorId),
+      ])
+      setQueue(queueRes)
+      setStats(statsRes)
+    } catch (err) {
+      setLoadError(err.message || 'Failed to load queue')
+    } finally {
+      setLoadingQueue(false)
+    }
+  }, [doctorId])
+
+  useEffect(() => {
+    if (!doctorId) return
+    fetchDoctorProfile(doctorId)
+      .then((p) =>
+        setDoctorProfile({
+          name: p.name,
+          specialization: p.specialization,
+          shift: p.shift,
+          email: p.email,
+        })
+      )
+      .catch(() => {
+        /* fall back to the name/specialization we already have from login */
+      })
+    loadQueueAndStats()
+  }, [doctorId, loadQueueAndStats])
 
   // close the profile dropdown on outside click or Escape
   useEffect(() => {
@@ -215,22 +247,27 @@ function Doctors_Dashboard() {
     }
   }
 
-  const history = selected && historyData[selected] ? historyData[selected] : []
-
-  const summary =
-    selected && records[selected]
-      ? records[selected]
-      : { conditions: 'None recorded', allergies: 'None recorded', medication: 'None recorded' }
-
   function handleSelect(rollNumber) {
     setSelected(rollNumber)
     setDiagnosis('')
     setGeneral('')
+    setSubmitError('')
     setMedicines([{ name: '', morning: false, evening: false, night: false, note: '' }])
     setDrawerOpen(false)
     setOpenSections({})
     setEditingField(null)
     setExpandedVisit(null)
+    setSummary(EMPTY_SUMMARY)
+    setHistory([])
+
+    setLoadingRecord(true)
+    Promise.all([fetchPatientSummary(rollNumber), fetchPatientHistory(rollNumber)])
+      .then(([summaryRes, historyRes]) => {
+        setSummary(summaryRes)
+        setHistory(historyRes)
+      })
+      .catch((err) => setLoadError(err.message || 'Failed to load patient record'))
+      .finally(() => setLoadingRecord(false))
   }
 
   function toggleSection(key) {
@@ -243,13 +280,20 @@ function Doctors_Dashboard() {
     setEditValue(currentValue === 'None recorded' ? '' : currentValue)
   }
 
-  function saveCard(field) {
-    const value = editValue.trim() === '' ? 'None recorded' : editValue.trim()
-    setRecords({
-      ...records,
-      [selected]: { ...records[selected], [field]: value },
-    })
-    setEditingField(null)
+  async function saveCard(field) {
+    if (!selected) return
+    setSavingField(true)
+    try {
+      const value = editValue.trim() === '' ? 'None recorded' : editValue.trim()
+      const updaters = { conditions: updateCondition, allergies: updateAllergy, medication: updateMedication }
+      const updatedSummary = await updaters[field](selected, value)
+      setSummary(updatedSummary)
+      setEditingField(null)
+    } catch (err) {
+      setLoadError(err.message || `Failed to save ${field}`)
+    } finally {
+      setSavingField(false)
+    }
   }
 
   function toggleVisit(index) {
@@ -270,19 +314,28 @@ function Doctors_Dashboard() {
     setMedicines(medicines.filter((_, i) => i !== index))
   }
 
-  function markDone() {
-    if (!currentPatient) return
-
-    // this is where we'd normally hit the API to save the prescription
-    console.log('diagnosis:', diagnosis)
-    console.log('medicines:', medicines)
-    console.log('general notes:', general)
-
-    setQueue(queue.filter((p) => p.rollNumber !== selected))
-    setPatientsSeen((prev) => prev + 1)
-    setSelected(null)
-    setDrawerOpen(false)
+  async function markDone() {
+    if (!currentPatient || !doctorId) return
+    setSubmitting(true)
+    setSubmitError('')
+    try {
+      await completeConsultation(doctorId, {
+        roll_number: selected,
+        diagnosis,
+        general,
+        medicines,
+      })
+      setSelected(null)
+      setDrawerOpen(false)
+      await loadQueueAndStats()
+    } catch (err) {
+      setSubmitError(err.message || 'Failed to save consultation')
+    } finally {
+      setSubmitting(false)
+    }
   }
+
+  const totalToday = stats.seenToday + queue.length
 
   return (
     <div className="max-w-6xl mx-auto p-5 bg-slate-50 min-h-screen relative">
@@ -296,7 +349,9 @@ function Doctors_Dashboard() {
         </div>
 
         <div className="flex items-center gap-3">
-          <span className="text-sm text-slate-400">Monday, 24 Aug</span>
+          <span className="text-sm text-slate-400">
+            {new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'short' })}
+          </span>
           <div className="w-px h-6 bg-slate-200" />
 
           <div className="relative" ref={profileRef}>
@@ -356,7 +411,7 @@ function Doctors_Dashboard() {
                         <CheckCircleIcon />
                         <span className="text-xs">Seen</span>
                       </div>
-                      <div className="text-lg font-bold text-slate-800">{patientsSeen}</div>
+                      <div className="text-lg font-bold text-slate-800">{stats.seenToday}</div>
                     </div>
                     <div className="bg-slate-50 rounded-md px-3 py-2">
                       <div className="flex items-center gap-1.5 text-slate-500 mb-1">
@@ -370,7 +425,7 @@ function Doctors_Dashboard() {
                 </div>
 
                 <button
-                  onClick={() => setProfileOpen(false)}
+                  onClick={logout}
                   className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 border-t border-slate-100 transition-colors"
                 >
                   <LogoutIcon />
@@ -382,11 +437,22 @@ function Doctors_Dashboard() {
         </div>
       </div>
 
+      {loadError && (
+        <div className="bg-red-50 border border-red-200 rounded-md px-3 py-2 mb-4 text-sm text-red-700 flex items-center justify-between">
+          <span>{loadError}</span>
+          <button onClick={loadQueueAndStats} className="text-red-700 underline text-xs">
+            Retry
+          </button>
+        </div>
+      )}
+
       <div className="flex gap-4 items-start">
         <div className="w-64 bg-white border border-slate-200 rounded-lg p-3 shadow-sm h-fit">
           <h2 className="font-semibold mb-2 text-slate-700 text-sm">Waiting ({queue.length})</h2>
 
-          {queue.length === 0 && (
+          {loadingQueue && <p className="text-sm text-slate-400 py-3 text-center">Loading queue…</p>}
+
+          {!loadingQueue && queue.length === 0 && (
             <p className="text-sm text-slate-400 py-3 text-center">No one in queue</p>
           )}
           {queue.map((p) => (
@@ -438,12 +504,19 @@ function Doctors_Dashboard() {
                   </button>
                   <button
                     onClick={markDone}
-                    className="bg-teal-600 hover:bg-teal-700 text-white px-4 py-1.5 rounded-md text-sm transition-colors"
+                    disabled={submitting}
+                    className="bg-teal-600 hover:bg-teal-700 disabled:bg-teal-300 text-white px-4 py-1.5 rounded-md text-sm transition-colors"
                   >
-                    Done
+                    {submitting ? 'Saving…' : 'Done'}
                   </button>
                 </div>
               </div>
+
+              {submitError && (
+                <div className="bg-red-50 border border-red-200 rounded-md px-3 py-2 mb-4 text-sm text-red-700">
+                  {submitError}
+                </div>
+              )}
 
               {summary.allergies !== 'None recorded' && (
                 <div className="bg-red-50 border border-red-200 rounded-md px-3 py-2 mb-4 text-sm text-red-700">
@@ -575,177 +648,186 @@ function Doctors_Dashboard() {
             </div>
 
             <div className="p-3">
-              <Section
-                label="Conditions"
-                valuePreview={summary.conditions}
-                open={!!openSections.conditions}
-                onToggle={() => toggleSection('conditions')}
-              >
-                {editingField === 'conditions' ? (
-                  <div>
-                    <textarea
-                      value={editValue}
-                      onChange={(e) => setEditValue(e.target.value)}
-                      rows="2"
-                      placeholder="eg. Asthma, diabetes etc"
-                      className="border border-slate-300 bg-white p-1.5 rounded-md text-sm w-full focus:outline-none focus:ring-1 focus:ring-teal-400 focus:border-teal-400"
-                    />
-                    <div className="flex justify-end gap-2 mt-1.5">
-                      <button onClick={() => setEditingField(null)} className="text-xs text-slate-500 hover:text-slate-700 px-2 py-1">
-                        Cancel
-                      </button>
-                      <button
-                        onClick={() => saveCard('conditions')}
-                        className="text-xs bg-teal-600 hover:bg-teal-700 text-white px-2.5 py-1 rounded-md"
-                      >
-                        Save
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-slate-700">{summary.conditions}</span>
-                    <button
-                      onClick={() => startEdit('conditions', summary.conditions)}
-                      className="text-xs text-teal-700 hover:text-teal-900 ml-2"
-                    >
-                      Edit
-                    </button>
-                  </div>
-                )}
-              </Section>
+              {loadingRecord && <p className="text-sm text-slate-400 text-center py-4">Loading record…</p>}
 
-              <Section
-                label="Allergies"
-                valuePreview={summary.allergies}
-                badgeTone={summary.allergies === 'None recorded' ? 'default' : 'red'}
-                open={!!openSections.allergies}
-                onToggle={() => toggleSection('allergies')}
-              >
-                {editingField === 'allergies' ? (
-                  <div>
-                    <textarea
-                      value={editValue}
-                      onChange={(e) => setEditValue(e.target.value)}
-                      rows="2"
-                      placeholder="eg. Peanuts, penicillin etc"
-                      className="border border-slate-300 bg-white p-1.5 rounded-md text-sm w-full focus:outline-none focus:ring-1 focus:ring-teal-400 focus:border-teal-400"
-                    />
-                    <div className="flex justify-end gap-2 mt-1.5">
-                      <button onClick={() => setEditingField(null)} className="text-xs text-slate-500 hover:text-slate-700 px-2 py-1">
-                        Cancel
-                      </button>
-                      <button
-                        onClick={() => saveCard('allergies')}
-                        className="text-xs bg-teal-600 hover:bg-teal-700 text-white px-2.5 py-1 rounded-md"
-                      >
-                        Save
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex items-center justify-between">
-                    <span className={summary.allergies === 'None recorded' ? 'text-sm text-slate-700' : 'text-sm text-red-700 font-medium'}>
-                      {summary.allergies}
-                    </span>
-                    <button
-                      onClick={() => startEdit('allergies', summary.allergies)}
-                      className="text-xs text-teal-700 hover:text-teal-900 ml-2"
-                    >
-                      Edit
-                    </button>
-                  </div>
-                )}
-              </Section>
-
-              <Section
-                label="Ongoing Medication"
-                valuePreview={summary.medication}
-                open={!!openSections.medication}
-                onToggle={() => toggleSection('medication')}
-              >
-                {editingField === 'medication' ? (
-                  <div>
-                    <textarea
-                      value={editValue}
-                      onChange={(e) => setEditValue(e.target.value)}
-                      rows="2"
-                      placeholder="eg. Metformin 500mg - morning, night"
-                      className="border border-slate-300 bg-white p-1.5 rounded-md text-sm w-full focus:outline-none focus:ring-1 focus:ring-teal-400 focus:border-teal-400"
-                    />
-                    <div className="flex justify-end gap-2 mt-1.5">
-                      <button onClick={() => setEditingField(null)} className="text-xs text-slate-500 hover:text-slate-700 px-2 py-1">
-                        Cancel
-                      </button>
-                      <button
-                        onClick={() => saveCard('medication')}
-                        className="text-xs bg-teal-600 hover:bg-teal-700 text-white px-2.5 py-1 rounded-md"
-                      >
-                        Save
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-slate-700">{summary.medication}</span>
-                    <button
-                      onClick={() => startEdit('medication', summary.medication)}
-                      className="text-xs text-teal-700 hover:text-teal-900 ml-2"
-                    >
-                      Edit
-                    </button>
-                  </div>
-                )}
-              </Section>
-
-              <Section
-                label="Previous Visits"
-                valuePreview={history.length === 0 ? 'No previous visits' : `${history.length} visit${history.length > 1 ? 's' : ''}`}
-                open={!!openSections.visits}
-                onToggle={() => toggleSection('visits')}
-              >
-                {history.length === 0 && <p className="text-sm text-slate-400">No previous visits</p>}
-
-                {history.map((h, index) => (
-                  <div key={index} className="border border-slate-200 rounded-md mb-1.5 overflow-hidden">
-                    <button
-                      onClick={() => toggleVisit(index)}
-                      className="w-full flex items-center justify-between px-3 py-2 text-left hover:bg-teal-50/60 transition-colors"
-                    >
+              {!loadingRecord && (
+                <>
+                  <Section
+                    label="Conditions"
+                    valuePreview={summary.conditions}
+                    open={!!openSections.conditions}
+                    onToggle={() => toggleSection('conditions')}
+                  >
+                    {editingField === 'conditions' ? (
                       <div>
-                        <b className="text-slate-800 text-sm block">{h.date}</b>
-                        <span className="text-sm text-slate-600">{h.diagnosis}</span>
-                      </div>
-                      <span className="text-teal-600/60">
-                        <ChevronIcon open={expandedVisit === index} />
-                      </span>
-                    </button>
-                    <div
-                      style={{
-                        display: 'grid',
-                        gridTemplateRows: expandedVisit === index ? '1fr' : '0fr',
-                        transition: 'grid-template-rows 250ms ease',
-                      }}
-                    >
-                      <div className="overflow-hidden">
-                        <div className="px-3 pb-3 pt-1 bg-slate-50 border-t border-slate-100">
-                          <div className="text-xs text-slate-500 mb-2">{h.notes}</div>
-                          {h.medicines && h.medicines.length > 0 && (
-                            <div>
-                              <div className="text-slate-400 text-xs tracking-wide mb-1">MEDICINES GIVEN</div>
-                              {h.medicines.map((m, mi) => (
-                                <div key={mi} className="text-sm text-slate-700 mb-0.5">
-                                  {m.name} <span className="text-slate-400">— {m.timing}{m.note ? `, ${m.note}` : ''}</span>
-                                </div>
-                              ))}
-                            </div>
-                          )}
+                        <textarea
+                          value={editValue}
+                          onChange={(e) => setEditValue(e.target.value)}
+                          rows="2"
+                          placeholder="eg. Asthma, diabetes etc"
+                          className="border border-slate-300 bg-white p-1.5 rounded-md text-sm w-full focus:outline-none focus:ring-1 focus:ring-teal-400 focus:border-teal-400"
+                        />
+                        <div className="flex justify-end gap-2 mt-1.5">
+                          <button onClick={() => setEditingField(null)} className="text-xs text-slate-500 hover:text-slate-700 px-2 py-1">
+                            Cancel
+                          </button>
+                          <button
+                            onClick={() => saveCard('conditions')}
+                            disabled={savingField}
+                            className="text-xs bg-teal-600 hover:bg-teal-700 disabled:bg-teal-300 text-white px-2.5 py-1 rounded-md"
+                          >
+                            {savingField ? 'Saving…' : 'Save'}
+                          </button>
                         </div>
                       </div>
-                    </div>
-                  </div>
-                ))}
-              </Section>
+                    ) : (
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-slate-700">{summary.conditions}</span>
+                        <button
+                          onClick={() => startEdit('conditions', summary.conditions)}
+                          className="text-xs text-teal-700 hover:text-teal-900 ml-2"
+                        >
+                          Edit
+                        </button>
+                      </div>
+                    )}
+                  </Section>
+
+                  <Section
+                    label="Allergies"
+                    valuePreview={summary.allergies}
+                    badgeTone={summary.allergies === 'None recorded' ? 'default' : 'red'}
+                    open={!!openSections.allergies}
+                    onToggle={() => toggleSection('allergies')}
+                  >
+                    {editingField === 'allergies' ? (
+                      <div>
+                        <textarea
+                          value={editValue}
+                          onChange={(e) => setEditValue(e.target.value)}
+                          rows="2"
+                          placeholder="eg. Peanuts, penicillin etc"
+                          className="border border-slate-300 bg-white p-1.5 rounded-md text-sm w-full focus:outline-none focus:ring-1 focus:ring-teal-400 focus:border-teal-400"
+                        />
+                        <div className="flex justify-end gap-2 mt-1.5">
+                          <button onClick={() => setEditingField(null)} className="text-xs text-slate-500 hover:text-slate-700 px-2 py-1">
+                            Cancel
+                          </button>
+                          <button
+                            onClick={() => saveCard('allergies')}
+                            disabled={savingField}
+                            className="text-xs bg-teal-600 hover:bg-teal-700 disabled:bg-teal-300 text-white px-2.5 py-1 rounded-md"
+                          >
+                            {savingField ? 'Saving…' : 'Save'}
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-between">
+                        <span className={summary.allergies === 'None recorded' ? 'text-sm text-slate-700' : 'text-sm text-red-700 font-medium'}>
+                          {summary.allergies}
+                        </span>
+                        <button
+                          onClick={() => startEdit('allergies', summary.allergies)}
+                          className="text-xs text-teal-700 hover:text-teal-900 ml-2"
+                        >
+                          Edit
+                        </button>
+                      </div>
+                    )}
+                  </Section>
+
+                  <Section
+                    label="Ongoing Medication"
+                    valuePreview={summary.medication}
+                    open={!!openSections.medication}
+                    onToggle={() => toggleSection('medication')}
+                  >
+                    {editingField === 'medication' ? (
+                      <div>
+                        <textarea
+                          value={editValue}
+                          onChange={(e) => setEditValue(e.target.value)}
+                          rows="2"
+                          placeholder="eg. Metformin 500mg - morning, night"
+                          className="border border-slate-300 bg-white p-1.5 rounded-md text-sm w-full focus:outline-none focus:ring-1 focus:ring-teal-400 focus:border-teal-400"
+                        />
+                        <div className="flex justify-end gap-2 mt-1.5">
+                          <button onClick={() => setEditingField(null)} className="text-xs text-slate-500 hover:text-slate-700 px-2 py-1">
+                            Cancel
+                          </button>
+                          <button
+                            onClick={() => saveCard('medication')}
+                            disabled={savingField}
+                            className="text-xs bg-teal-600 hover:bg-teal-700 disabled:bg-teal-300 text-white px-2.5 py-1 rounded-md"
+                          >
+                            {savingField ? 'Saving…' : 'Save'}
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-slate-700">{summary.medication}</span>
+                        <button
+                          onClick={() => startEdit('medication', summary.medication)}
+                          className="text-xs text-teal-700 hover:text-teal-900 ml-2"
+                        >
+                          Edit
+                        </button>
+                      </div>
+                    )}
+                  </Section>
+
+                  <Section
+                    label="Previous Visits"
+                    valuePreview={history.length === 0 ? 'No previous visits' : `${history.length} visit${history.length > 1 ? 's' : ''}`}
+                    open={!!openSections.visits}
+                    onToggle={() => toggleSection('visits')}
+                  >
+                    {history.length === 0 && <p className="text-sm text-slate-400">No previous visits</p>}
+
+                    {history.map((h, index) => (
+                      <div key={index} className="border border-slate-200 rounded-md mb-1.5 overflow-hidden">
+                        <button
+                          onClick={() => toggleVisit(index)}
+                          className="w-full flex items-center justify-between px-3 py-2 text-left hover:bg-teal-50/60 transition-colors"
+                        >
+                          <div>
+                            <b className="text-slate-800 text-sm block">{h.date}</b>
+                            <span className="text-sm text-slate-600">{h.diagnosis}</span>
+                          </div>
+                          <span className="text-teal-600/60">
+                            <ChevronIcon open={expandedVisit === index} />
+                          </span>
+                        </button>
+                        <div
+                          style={{
+                            display: 'grid',
+                            gridTemplateRows: expandedVisit === index ? '1fr' : '0fr',
+                            transition: 'grid-template-rows 250ms ease',
+                          }}
+                        >
+                          <div className="overflow-hidden">
+                            <div className="px-3 pb-3 pt-1 bg-slate-50 border-t border-slate-100">
+                              <div className="text-xs text-slate-500 mb-2">{h.notes}</div>
+                              {h.medicines && h.medicines.length > 0 && (
+                                <div>
+                                  <div className="text-slate-400 text-xs tracking-wide mb-1">MEDICINES GIVEN</div>
+                                  {h.medicines.map((m, mi) => (
+                                    <div key={mi} className="text-sm text-slate-700 mb-0.5">
+                                      {m.name} <span className="text-slate-400">— {m.timing}{m.note ? `, ${m.note}` : ''}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </Section>
+                </>
+              )}
             </div>
           </div>
         </>
