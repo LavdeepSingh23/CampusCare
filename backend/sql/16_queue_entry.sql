@@ -6,8 +6,8 @@
 CREATE TABLE QUEUE_ENTRY (
     queue_entry_id  BIGINT AUTO_INCREMENT PRIMARY KEY,
     visit_id         BIGINT NOT NULL,
-    doctor_id        BIGINT NOT NULL UNIQUE,
-    queue_sequence   INT NOT NULL UNIQUE,
+    doctor_id        BIGINT NOT NULL ,
+    queue_sequence   INT NOT NULL ,
     status           ENUM('IN_CONSULTATION', 'COMPLETED', 'CANCELLED', 'NO_SHOW', 'REDIRECTED','WAITING') NOT NULL,
     entered_at       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     queue_data       DATETIME NOT NULL UNIQUE,
@@ -15,6 +15,8 @@ CREATE TABLE QUEUE_ENTRY (
     exited_at        DATETIME NULL,
     entry_reason     ENUM('INITIAL_CHECKIN', 'DOCTOR_REDIRECT', 'NO_SHOW_RESCHEDULE') NOT NULL,
     exit_reason      ENUM('CALLED', 'REDIRECTED', 'NO_SHOW', 'CANCELLED', 'COMPLETED') NULL,
+    UNIQUE(doctor_id, queue_date, queue_sequence),
+
 
     CONSTRAINT fk_qe_visit
         FOREIGN KEY (visit_id) REFERENCES VISIT(visit_id)

@@ -16,7 +16,7 @@ CREATE TABLE VISIT (
     cancel_reason                VARCHAR(255) NULL,
     created_at                   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at                   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-
+    FOREIGN KEY (doctor_id) REFERENCES doctor(doctor_id),
     CONSTRAINT fk_visit_roll_number
         FOREIGN KEY (roll_number) REFERENCES STUDENT(roll_number)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
