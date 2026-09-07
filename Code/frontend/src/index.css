@@ -1,1 +1,53 @@
 @import "tailwindcss";
+
+/* ── Global Smoothness & Typography Refinements ── */
+html {
+  scroll-behavior: smooth;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  overflow-x: hidden;
+}
+
+/* Silky smooth selection */
+::selection {
+  background-color: rgba(20, 184, 166, 0.35);
+  color: #ffffff;
+}
+
+/* Custom minimal dark teal scrollbar */
+::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+
+::-webkit-scrollbar-track {
+  background: #09201f;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #134e4a;
+  border-radius: 9999px;
+  transition: background-color 0.2s ease;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #0f766e;
+}
+
+/* ── Liquid Glass Animation & Utilities ── */
+.rounded-inherit {
+  border-radius: inherit;
+}
+
+@keyframes moveBackground {
+  from {
+    background-position: 0% 0%;
+  }
+  to {
+    background-position: 0% -1000%;
+  }
+}
