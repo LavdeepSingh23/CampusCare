@@ -1,26 +1,66 @@
 import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
-import tietLogo from '../../assets/tiet-logo.jpg'
+import { Eye, EyeOff, Stethoscope, Building2, ArrowLeft, CheckCircle2 } from 'lucide-react'
+import tiMark from '../../assets/ti-mark.png'
+import { GlassFilter, GlassEffect } from '@/components/ui/liquid-glass'
 
-function EyeIcon({ open }) {
-  return open ? (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z" />
-      <circle cx="12" cy="12" r="3" />
-    </svg>
-  ) : (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a20.3 20.3 0 0 1 5.06-5.94M9.9 4.24A10.4 10.4 0 0 1 12 4c7 0 11 8 11 8a20.3 20.3 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
-      <line x1="1" y1="1" x2="23" y2="23" />
-    </svg>
-  )
-}
+// --- HELPER COMPONENTS (ICONS) ---
+
+const GoogleIcon = () => (
+  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 48 48">
+    <path
+      fill="#FFC107"
+      d="M43.611 20.083H42V20H24v8h11.303c-1.649 4.657-6.08 8-11.303 8-6.627 0-12-5.373-12-12s12-5.373 12-12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 12.955 4 4 12.955 4 24s8.955 20 20 20 20-8.955 20-20c0-2.641-.21-5.236-.611-7.743z"
+    />
+    <path
+      fill="#FF3D00"
+      d="M6.306 14.691l6.571 4.819C14.655 15.108 18.961 12 24 12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 16.318 4 9.656 8.337 6.306 14.691z"
+    />
+    <path
+      fill="#4CAF50"
+      d="M24 44c5.166 0 9.86-1.977 13.409-5.192l-6.19-5.238C29.211 35.091 26.715 36 24 36c-5.202 0-9.619-3.317-11.283-7.946l-6.522 5.025C9.505 39.556 16.227 44 24 44z"
+    />
+    <path
+      fill="#1976D2"
+      d="M43.611 20.083H42V20H24v8h11.303c-.792 2.237-2.231 4.166-4.087 5.571l6.19 5.238C42.022 35.026 44 30.038 44 24c0-2.641-.21-5.236-.611-7.743z"
+    />
+  </svg>
+)
+
+// --- SUB-COMPONENTS ---
+
+const GlassInputWrapper = ({ children }) => (
+  <div className="rounded-2xl border border-slate-200 bg-slate-50/70 backdrop-blur-sm transition-all focus-within:border-teal-500 focus-within:bg-white focus-within:ring-2 focus-within:ring-teal-500/20">
+    {children}
+  </div>
+)
+
+const TestimonialCard = ({ avatarText, name, handle, text, isSpecial }) => (
+  <GlassEffect className="rounded-3xl p-5 shadow-xl text-white transition-all hover:bg-white/20 border border-white/25">
+    <div className="flex items-start gap-3">
+      <div className="h-10 w-10 rounded-2xl bg-teal-800 text-white font-bold flex items-center justify-center text-xs shrink-0 shadow-sm border border-white/20">
+        {avatarText}
+      </div>
+      <div className="text-sm leading-snug">
+        <p className="flex items-center gap-1 font-semibold text-white">
+          {name}
+          {isSpecial && <CheckCircle2 className="w-3.5 h-3.5 text-teal-300" />}
+        </p>
+        <p className="text-xs text-teal-100/70">{handle}</p>
+        <p className="mt-1.5 text-xs text-white/85 leading-relaxed">{text}</p>
+      </div>
+    </div>
+  </GlassEffect>
+)
+
+// --- MAIN LOGIN COMPONENT ---
 
 export default function Login() {
   const { login, error, loading } = useAuth()
   const navigate = useNavigate()
-  const [mode, setMode] = useState('doctor')
+
+  const [mode, setMode] = useState('doctor') // 'doctor' | 'student'
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
@@ -37,11 +77,7 @@ export default function Login() {
   }
 
   function handleGoogleSignIn() {
-    // TODO: wire this up to your real OAuth flow, e.g.
-    // window.location.href = `${import.meta.env.VITE_API_URL}/api/auth/google`
-    // or a Firebase/Auth0/Google Identity Services popup that resolves
-    // to the same `login`-style success path used above.
-    console.log('Google sign-in not wired up yet')
+    console.log('Google sign-in flow placeholder')
   }
 
   function handleStudentSubmit(e) {
@@ -56,257 +92,312 @@ export default function Login() {
   }
 
   return (
-    <div className="min-h-screen flex bg-white relative">
-      <img
-        src={tietLogo}
-        alt="Thapar Institute of Engineering & Technology"
-        className="absolute top-6 left-6 h-24 w-auto z-10"
-      />
-      {/* ── Left: form ─────────────────────────────────────── */}
-      <div className="flex-1 flex items-center justify-center p-6 sm:p-10">
-        <div className="w-full max-w-sm">
-          <div className="mb-6">
-            <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Welcome</h1>
-            <p className="text-sm text-slate-500 mt-0.5">
-              {mode === 'doctor' ? "Sign in to CampusCare's Doctor's Dashboard" : 'Look up your CampusCare prescription history'}
-            </p>
+    <div className="min-h-screen w-full flex flex-col lg:flex-row bg-white">
+      <GlassFilter />
+      {/* ── Left Column: Sign-in Form ── */}
+      <section className="flex-1 flex flex-col justify-between p-6 sm:p-10 lg:p-14 overflow-y-auto">
+        {/* Top Header: Brand & Back to Home */}
+        <div className="flex items-center justify-between mb-8">
+          <div
+            onClick={() => navigate('/')}
+            className="flex items-center gap-2.5 cursor-pointer group"
+          >
+            <img
+              src={tiMark}
+              alt="TI Logo"
+              className="h-8 w-auto object-contain transition-transform group-hover:scale-105"
+            />
+            <span className="text-lg font-bold tracking-tight text-slate-900">
+              CampusCare
+            </span>
           </div>
 
-          <div className="inline-flex bg-slate-100 rounded-full p-1 mb-6">
-            <button
-              type="button"
-              onClick={() => setMode('doctor')}
-              className={
-                'px-4 py-1.5 rounded-full text-sm font-medium transition-colors ' +
-                (mode === 'doctor' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700')
-              }
-            >
-              Doctor
-            </button>
-            <button
-              type="button"
-              onClick={() => setMode('student')}
-              className={
-                'px-4 py-1.5 rounded-full text-sm font-medium transition-colors ' +
-                (mode === 'student' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700')
-              }
-            >
-              Student
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={() => navigate('/')}
+            className="text-xs font-medium text-slate-500 hover:text-slate-900 flex items-center gap-1.5 transition-colors cursor-pointer"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" />
+            <span>Back to home</span>
+          </button>
+        </div>
 
-          {mode === 'doctor' && error && (
-            <div className="bg-red-50 border border-red-200 rounded-md px-3 py-2 mb-5 text-sm text-red-700">
-              {error}
-            </div>
-          )}
-
-          {mode === 'doctor' && (
-          <form onSubmit={handleSubmit}>
-            <div className="mb-4">
-              <label className="text-sm font-medium block mb-1.5 text-slate-700">Email address</label>
-              <input
-                type="email"
-                required
-                autoFocus
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@thapar.edu"
-                className="border border-slate-300 bg-slate-50 p-2.5 rounded-lg text-sm w-full focus:outline-none focus:ring-2 focus:ring-teal-400/40 focus:border-teal-400 focus:bg-white transition-colors"
-              />
+        {/* Center Form Container */}
+        <div className="w-full max-w-md mx-auto my-auto py-4">
+          <div className="flex flex-col gap-6">
+            {/* Title & Description */}
+            <div>
+              <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-slate-900">
+                Welcome
+              </h1>
+              <p className="mt-1 text-sm text-slate-500">
+                {mode === 'doctor'
+                  ? "Sign in to CampusCare's Doctor & Medical Staff Console"
+                  : 'Look up your live prescriptions and medical history'}
+              </p>
             </div>
 
-            <div className="mb-3">
-              <label className="text-sm font-medium block mb-1.5 text-slate-700">Password</label>
-              <div className="relative">
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Enter your password"
-                  className="border border-slate-300 bg-slate-50 p-2.5 pr-10 rounded-lg text-sm w-full focus:outline-none focus:ring-2 focus:ring-teal-400/40 focus:border-teal-400 focus:bg-white transition-colors"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword((v) => !v)}
-                  aria-label={showPassword ? 'Hide password' : 'Show password'}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                >
-                  <EyeIcon open={showPassword} />
-                </button>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between mb-6 mt-3">
-              <label className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={keepSignedIn}
-                  onChange={(e) => setKeepSignedIn(e.target.checked)}
-                  className="accent-teal-600"
-                />
-                Keep me signed in
-              </label>
+            {/* Mode Toggle (Doctor / Student) */}
+            <div className="inline-flex bg-slate-100 rounded-full p-1 self-start border border-slate-200/80">
               <button
                 type="button"
-                title="Not available in this demo"
-                className="text-sm text-teal-700 hover:text-teal-900 cursor-not-allowed opacity-70"
+                onClick={() => setMode('doctor')}
+                className={`px-5 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer ${
+                  mode === 'doctor'
+                    ? 'bg-white text-slate-900 shadow-sm'
+                    : 'text-slate-500 hover:text-slate-800'
+                }`}
               >
-                Reset password
+                Doctor Portal
+              </button>
+              <button
+                type="button"
+                onClick={() => setMode('student')}
+                className={`px-5 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer ${
+                  mode === 'student'
+                    ? 'bg-white text-slate-900 shadow-sm'
+                    : 'text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                Student Portal
               </button>
             </div>
 
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full bg-slate-900 hover:bg-slate-800 disabled:bg-slate-400 text-white py-2.5 rounded-lg text-sm font-medium transition-colors"
-            >
-              {loading ? 'Signing in…' : 'Sign in'}
-            </button>
-          </form>
-          )}
-
-          {mode === 'doctor' && (
-          <>
-          <div className="flex items-center gap-3 my-5">
-            <div className="h-px bg-slate-200 flex-1" />
-            <span className="text-xs text-slate-400">Or continue with</span>
-            <div className="h-px bg-slate-200 flex-1" />
-          </div>
-
-          <button
-            type="button"
-            onClick={handleGoogleSignIn}
-            className="w-full flex items-center justify-center gap-2.5 border border-slate-300 hover:bg-slate-50 text-slate-700 py-2.5 rounded-lg text-sm font-medium transition-colors"
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24">
-              <path fill="#4285F4" d="M23.52 12.27c0-.85-.08-1.67-.22-2.45H12v4.64h6.46c-.28 1.5-1.13 2.77-2.4 3.62v3h3.88c2.27-2.09 3.58-5.17 3.58-8.81z" />
-              <path fill="#34A853" d="M12 24c3.24 0 5.95-1.07 7.94-2.92l-3.88-3c-1.08.72-2.45 1.15-4.06 1.15-3.12 0-5.77-2.11-6.71-4.94H1.28v3.1C3.26 21.3 7.31 24 12 24z" />
-              <path fill="#FBBC05" d="M5.29 14.29A7.2 7.2 0 0 1 4.91 12c0-.79.14-1.56.38-2.29v-3.1H1.28A11.98 11.98 0 0 0 0 12c0 1.94.46 3.77 1.28 5.39l4.01-3.1z" />
-              <path fill="#EA4335" d="M12 4.77c1.76 0 3.35.61 4.6 1.8l3.44-3.44C17.94 1.19 15.24 0 12 0 7.31 0 3.26 2.7 1.28 6.61l4.01 3.1C6.23 6.88 8.88 4.77 12 4.77z" />
-            </svg>
-            Continue with Google
-          </button>
-
-          <p className="text-sm text-slate-500 text-center mt-5">
-            New to CampusCare?{' '}
-            <button
-              type="button"
-              title="Not available in this demo"
-              className="text-teal-700 font-medium hover:text-teal-900 cursor-not-allowed opacity-70"
-            >
-              Create Account
-            </button>
-          </p>
-          </>
-          )}
-
-          {mode === 'student' && (
-          <form onSubmit={handleStudentSubmit}>
-            <div className="mb-4">
-              <label className="text-sm font-medium block mb-1.5 text-slate-700">Roll number</label>
-              <input
-                type="text"
-                autoFocus
-                value={rollNumber}
-                onChange={(e) => {
-                  setRollNumber(e.target.value)
-                  if (rollError) setRollError('')
-                }}
-                placeholder="e.g. CS21B045"
-                className="border border-slate-300 bg-slate-50 p-2.5 rounded-lg text-sm w-full focus:outline-none focus:ring-2 focus:ring-teal-400/40 focus:border-teal-400 focus:bg-white transition-colors"
-              />
-              <p className="text-xs text-slate-400 mt-1.5">Use the roll number on your ID card.</p>
-            </div>
-
-            {rollError && (
-              <div className="bg-red-50 border border-red-200 rounded-md px-3 py-2 mb-4 text-sm text-red-700">
-                {rollError}
+            {/* Error Message */}
+            {mode === 'doctor' && error && (
+              <div className="bg-red-50 border border-red-200 rounded-2xl px-4 py-3 text-xs text-red-700 font-medium">
+                {error}
               </div>
             )}
 
+            {/* ── DOCTOR FORM ── */}
+            {mode === 'doctor' && (
+              <form className="space-y-4" onSubmit={handleSubmit}>
+                <div>
+                  <label className="text-xs font-semibold text-slate-600 mb-1.5 block">
+                    Institutional Email Address
+                  </label>
+                  <GlassInputWrapper>
+                    <input
+                      name="email"
+                      type="email"
+                      required
+                      autoFocus
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="you@thapar.edu"
+                      className="w-full bg-transparent text-sm p-4 rounded-2xl focus:outline-none text-slate-900 placeholder:text-slate-400"
+                    />
+                  </GlassInputWrapper>
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-slate-600 mb-1.5 block">
+                    Password
+                  </label>
+                  <GlassInputWrapper>
+                    <div className="relative">
+                      <input
+                        name="password"
+                        type={showPassword ? 'text' : 'password'}
+                        required
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        placeholder="Enter your security password"
+                        className="w-full bg-transparent text-sm p-4 pr-12 rounded-2xl focus:outline-none text-slate-900 placeholder:text-slate-400"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute inset-y-0 right-3.5 flex items-center text-slate-400 hover:text-slate-700 transition-colors"
+                      >
+                        {showPassword ? (
+                          <EyeOff className="w-4 h-4" />
+                        ) : (
+                          <Eye className="w-4 h-4" />
+                        )}
+                      </button>
+                    </div>
+                  </GlassInputWrapper>
+                </div>
+
+                <div className="flex items-center justify-between text-xs pt-1">
+                  <label className="flex items-center gap-2 text-slate-600 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={keepSignedIn}
+                      onChange={(e) => setKeepSignedIn(e.target.checked)}
+                      className="rounded accent-teal-700"
+                    />
+                    <span>Keep me signed in</span>
+                  </label>
+                  <button
+                    type="button"
+                    title="Not available in this demo"
+                    className="hover:underline text-teal-700 font-medium transition-colors cursor-not-allowed opacity-80"
+                  >
+                    Reset password
+                  </button>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full rounded-2xl bg-slate-900 py-3.5 font-semibold text-white hover:bg-slate-800 disabled:bg-slate-400 transition-all cursor-pointer shadow-md hover:scale-[1.01] active:scale-[0.99] text-sm mt-2"
+                >
+                  {loading ? 'Signing in…' : 'Sign In as Doctor'}
+                </button>
+              </form>
+            )}
+
+            {/* ── STUDENT FORM ── */}
+            {mode === 'student' && (
+              <form className="space-y-4" onSubmit={handleStudentSubmit}>
+                <div>
+                  <label className="text-xs font-semibold text-slate-600 mb-1.5 block">
+                    University Roll Number
+                  </label>
+                  <GlassInputWrapper>
+                    <input
+                      name="rollNumber"
+                      type="text"
+                      required
+                      autoFocus
+                      value={rollNumber}
+                      onChange={(e) => {
+                        setRollNumber(e.target.value)
+                        if (rollError) setRollError('')
+                      }}
+                      placeholder="e.g. 102403001 or CS21B045"
+                      className="w-full bg-transparent text-sm p-4 rounded-2xl focus:outline-none text-slate-900 placeholder:text-slate-400"
+                    />
+                  </GlassInputWrapper>
+                  <p className="text-[11px] text-slate-400 mt-1.5">
+                    Found directly on your physical TIET Student ID card.
+                  </p>
+                </div>
+
+                {rollError && (
+                  <div className="bg-red-50 border border-red-200 rounded-2xl px-4 py-3 text-xs text-red-700 font-medium">
+                    {rollError}
+                  </div>
+                )}
+
+                <button
+                  type="submit"
+                  className="w-full rounded-2xl bg-slate-900 py-3.5 font-semibold text-white hover:bg-slate-800 transition-all cursor-pointer shadow-md hover:scale-[1.01] active:scale-[0.99] text-sm mt-2"
+                >
+                  View My Student Dashboard
+                </button>
+              </form>
+            )}
+
+            {/* Divider */}
+            <div className="relative flex items-center justify-center my-1">
+              <span className="w-full border-t border-slate-200"></span>
+              <span className="px-3 text-xs text-slate-400 bg-white absolute">
+                Or continue with
+              </span>
+            </div>
+
+            {/* Google Sign In */}
             <button
-              type="submit"
-              className="w-full bg-slate-900 hover:bg-slate-800 text-white py-2.5 rounded-lg text-sm font-medium transition-colors mt-3"
+              type="button"
+              onClick={handleGoogleSignIn}
+              className="w-full flex items-center justify-center gap-3 border border-slate-200 rounded-2xl py-3 hover:bg-slate-50 text-slate-700 font-medium text-xs sm:text-sm transition-all shadow-xs cursor-pointer"
             >
-              View my dashboard
+              <GoogleIcon />
+              <span>Continue with Thapar Google Workspace</span>
             </button>
-          </form>
-          )}
 
-          {mode === 'student' && (
-          <>
-          <div className="flex items-center gap-3 my-5">
-            <div className="h-px bg-slate-200 flex-1" />
-            <span className="text-xs text-slate-400">Or continue with</span>
-            <div className="h-px bg-slate-200 flex-1" />
+            {/* Bottom info */}
+            <p className="text-center text-xs text-slate-500 mt-1">
+              New to CampusCare?{' '}
+              <button
+                type="button"
+                className="text-teal-700 font-semibold hover:underline cursor-not-allowed opacity-80"
+              >
+                Create Account
+              </button>
+            </p>
           </div>
-
-          <button
-            type="button"
-            onClick={handleGoogleSignIn}
-            className="w-full flex items-center justify-center gap-2.5 border border-slate-300 hover:bg-slate-50 text-slate-700 py-2.5 rounded-lg text-sm font-medium transition-colors"
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24">
-              <path fill="#4285F4" d="M23.52 12.27c0-.85-.08-1.67-.22-2.45H12v4.64h6.46c-.28 1.5-1.13 2.77-2.4 3.62v3h3.88c2.27-2.09 3.58-5.17 3.58-8.81z" />
-              <path fill="#34A853" d="M12 24c3.24 0 5.95-1.07 7.94-2.92l-3.88-3c-1.08.72-2.45 1.15-4.06 1.15-3.12 0-5.77-2.11-6.71-4.94H1.28v3.1C3.26 21.3 7.31 24 12 24z" />
-              <path fill="#FBBC05" d="M5.29 14.29A7.2 7.2 0 0 1 4.91 12c0-.79.14-1.56.38-2.29v-3.1H1.28A11.98 11.98 0 0 0 0 12c0 1.94.46 3.77 1.28 5.39l4.01-3.1z" />
-              <path fill="#EA4335" d="M12 4.77c1.76 0 3.35.61 4.6 1.8l3.44-3.44C17.94 1.19 15.24 0 12 0 7.31 0 3.26 2.7 1.28 6.61l4.01 3.1C6.23 6.88 8.88 4.77 12 4.77z" />
-            </svg>
-            Continue with Google
-          </button>
-          </>
-          )}
-
-          <p className="text-xs text-slate-400 mt-8 text-center">
-            {mode === 'doctor'
-              ? 'Doctor access is limited to verified Thapar staff email addresses.'
-              : "Don't know your roll number? Check your Thapar ID card."}
-          </p>
         </div>
-      </div>
 
-      {/* ── Right: visual panel ────────────────────────────── */}
-      <div className="hidden lg:flex flex-1 relative overflow-hidden">
+        {/* Footer legal note */}
+        <div className="text-center text-[11px] text-slate-400 mt-6">
+          {mode === 'doctor'
+            ? 'Doctor access is restricted to verified Thapar medical faculty.'
+            : 'Your medical telemetry is encrypted under TIET student health privacy guidelines.'}
+        </div>
+      </section>
+
+      {/* ── Right Column: CampusCare Signature Visual Panel + Testimonials ── */}
+      <section className="hidden lg:flex flex-1 relative p-4 lg:p-6">
         <div
-          className="absolute inset-0"
+          className="relative w-full h-full rounded-3xl overflow-hidden shadow-2xl flex flex-col justify-between p-8 xl:p-12 text-white"
           style={{
             background: 'linear-gradient(135deg, #134E4A 0%, #0F766E 45%, #1E293B 100%)',
           }}
-        />
-        <div
-          className="absolute inset-0 opacity-30"
-          style={{
-            backgroundImage:
-              'repeating-linear-gradient(115deg, rgba(255,255,255,0.06) 0px, rgba(255,255,255,0.06) 2px, transparent 2px, transparent 40px)',
-          }}
-        />
+        >
+          {/* Diagonal Line Pattern Overlay */}
+          <div
+            className="absolute inset-0 opacity-25 pointer-events-none"
+            style={{
+              backgroundImage:
+                'repeating-linear-gradient(115deg, rgba(255,255,255,0.08) 0px, rgba(255,255,255,0.08) 2px, transparent 2px, transparent 40px)',
+            }}
+          />
 
-        <div className="relative z-10 flex flex-col justify-end p-10 w-full">
-          <h2 className="text-white text-3xl font-bold leading-tight tracking-tight max-w-sm mb-2">
-            One queue.<br />Every patient's full picture.
-          </h2>
-          <p className="text-teal-100/80 text-sm max-w-sm mb-8">
-            See who's waiting, their history, and their prescriptions — all in one screen.
-          </p>
+          {/* Radial Ambient Glow */}
+          <div
+            className="absolute inset-0 pointer-events-none"
+            style={{
+              background: 'radial-gradient(circle at 75% 35%, rgba(20, 184, 166, 0.25), transparent 60%)',
+            }}
+          />
 
-          <div className="bg-white/95 backdrop-blur rounded-xl p-4 max-w-sm shadow-lg">
-            <div className="flex items-start gap-3">
-              <div className="w-9 h-9 rounded-full bg-teal-600 text-white flex items-center justify-center text-xs font-semibold shrink-0">
-                NK
-              </div>
-              <div>
-                <div className="text-sm font-semibold text-slate-800">Dr. Neha Kapoor</div>
-                <div className="text-xs text-slate-400 mb-1.5">General Physician</div>
-                <p className="text-sm text-slate-600 leading-snug">
-                  I stopped juggling paper charts between patients — everything's already pulled up before they sit down.
-                </p>
-              </div>
+          {/* Top: Institutional Pill Tag */}
+          <div className="relative z-10">
+            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/10 border border-white/20 backdrop-blur-md text-xs font-medium text-teal-100 shadow-sm">
+              <Building2 className="w-3.5 h-3.5 text-teal-300" />
+              <span>TIET Health Center • Digital Medical Wing</span>
+            </div>
+          </div>
+
+          {/* Middle: Headline & Value Proposition */}
+          <div className="relative z-10 max-w-lg my-auto py-8">
+            <h2 className="text-3xl xl:text-4xl font-bold leading-tight tracking-tight mb-3">
+              One queue.
+              <br />
+              Every patient's full picture.
+            </h2>
+            <p className="text-teal-100/80 text-sm xl:text-base leading-relaxed">
+              Instant contactless RFID check-ins, zero paper lines, real-time doctor consultation queues, and verified student prescription histories.
+            </p>
+          </div>
+
+          {/* Bottom: Testimonials (Matching user layout specifications) */}
+          <div className="relative z-10 flex flex-col xl:flex-row gap-3.5 w-full">
+            <TestimonialCard
+              avatarText="NK"
+              name="Dr. Neha Kapoor"
+              handle="General Physician • Room 104"
+              text="I stopped juggling paper charts between patients — everything's already pulled up before they sit down."
+              isSpecial={true}
+            />
+
+            <div className="hidden xl:block">
+              <TestimonialCard
+                avatarText="SS"
+                name="Simar Singh"
+                handle="Roll #102403499 • B.Tech CSE"
+                text="Tapping my RFID card at the dispensary kiosk saves 20 minutes between lectures."
+                isSpecial={false}
+              />
             </div>
           </div>
         </div>
-      </div>
+      </section>
     </div>
   )
 }
