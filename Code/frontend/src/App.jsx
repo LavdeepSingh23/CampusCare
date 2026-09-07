@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import LandingPage from './Components/Landing/landing_page';
 import Login from './Components/Auth/Login';
 import Doctors_Dashboard from './Components/Doctors/Doctors_Dashboard';
 import Students_Dashboard from './Components/Students/Students_Dashboard';
@@ -12,6 +13,7 @@ function ProtectedRoute({ children }) {
 function AppRoutes() {
   return (
     <Routes>
+      <Route path="/" element={<LandingPage />} />
       <Route path="/user_login" element={<Login />} />
       <Route
         path="/doctor_dashboard"
@@ -22,7 +24,7 @@ function AppRoutes() {
         }
       />
       <Route path="/student_dashboard/:rollNumber" element={<Students_Dashboard />} />
-      <Route path="*" element={<Navigate to="/user_login" replace />} />
+      <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
 }
