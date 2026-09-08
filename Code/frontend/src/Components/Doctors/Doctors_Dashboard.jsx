@@ -164,6 +164,7 @@ function Doctors_Dashboard() {
   const [general, setGeneral] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState('')
+  const [savedMessage, setSavedMessage] = useState('')
 
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [summary, setSummary] = useState(EMPTY_SUMMARY)
@@ -252,6 +253,7 @@ function Doctors_Dashboard() {
     setDiagnosis('')
     setGeneral('')
     setSubmitError('')
+    setSavedMessage('')
     setMedicines([{ name: '', morning: false, evening: false, night: false, note: '' }])
     setDrawerOpen(false)
     setOpenSections({})
@@ -316,6 +318,10 @@ function Doctors_Dashboard() {
 
   async function markDone() {
     if (!currentPatient || !doctorId) return
+    if (!diagnosis.trim()) {
+      setSubmitError('Please add a diagnosis before completing the consultation.')
+      return
+    }
     setSubmitting(true)
     setSubmitError('')
     try {
@@ -325,6 +331,7 @@ function Doctors_Dashboard() {
         general,
         medicines,
       })
+      setSavedMessage(`${currentPatient.name}'s consultation was saved successfully.`)
       setSelected(null)
       setDrawerOpen(false)
       await loadQueueAndStats()
@@ -338,284 +345,321 @@ function Doctors_Dashboard() {
   const totalToday = stats.seenToday + queue.length
 
   return (
-    <div className="max-w-6xl mx-auto p-5 bg-slate-50 min-h-screen relative">
-      <div className="flex items-center justify-between mb-5 border-b border-teal-100 pb-3">
-        <div className="flex items-center gap-3">
-          <div className="w-1.5 h-9 rounded-full bg-teal-600" />
-          <div>
-            <h1 className="text-xl font-bold text-slate-800">Doctor's Dashboard</h1>
-            <p className="text-sm text-teal-700/70">CampusCare</p>
+    <div className="min-h-screen bg-[#F7F8F6] px-4 py-5 sm:px-6 sm:py-7">
+      <div className="max-w-6xl mx-auto">
+        <div className="flex items-center justify-between mb-6 border-b border-slate-200 pb-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-teal-700 text-white flex items-center justify-center shadow-sm">
+              <span className="text-lg font-semibold">+</span>
+            </div>
+            <div>
+              <h1 className="text-xl font-bold tracking-tight text-slate-900">Doctor Dashboard</h1>
+              <p className="text-sm text-slate-500">CampusCare Medical Wing</p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <span className="text-sm text-slate-500">
+              {new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'short' })}
+            </span>
+            <div className="w-px h-6 bg-slate-200" />
+
+            <div className="relative" ref={profileRef}>
+              <button
+                onClick={() => setProfileOpen((prev) => !prev)}
+                aria-expanded={profileOpen}
+                aria-haspopup="true"
+                className={
+                  'flex items-center gap-2 pl-1 pr-2 py-1 rounded-full border transition-colors ' +
+                  (profileOpen ? 'bg-white border-slate-200' : 'border-transparent hover:bg-white hover:border-slate-200')
+                }
+              >
+                <div className="w-8 h-8 rounded-full bg-teal-700 text-white flex items-center justify-center text-xs font-semibold shrink-0">
+                  {doctorProfile.name.split(' ').map((n) => n[0]).slice(-2).join('')}
+                </div>
+                <div className="text-left leading-tight">
+                  <div className="text-sm font-semibold text-slate-800">{doctorProfile.name}</div>
+                  <div className="text-xs text-slate-400">{doctorProfile.specialization}</div>
+                </div>
+                <span className={'text-slate-400 ml-0.5 transition-transform duration-200' + (profileOpen ? ' rotate-180' : '')}>
+                  <ChevronDownIcon />
+                </span>
+              </button>
+
+              {profileOpen && (
+                <div className="absolute right-0 top-full mt-2 w-64 bg-white border border-slate-200 rounded-lg shadow-lg z-50 overflow-hidden">
+                  <div className="p-3 border-b border-slate-100 bg-teal-50/50 flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-teal-700 text-white flex items-center justify-center text-sm font-semibold shrink-0">
+                      {doctorProfile.name.split(' ').map((n) => n[0]).slice(-2).join('')}
+                    </div>
+                    <div className="min-w-0">
+                      <div className="text-sm font-semibold text-slate-800 truncate">{doctorProfile.name}</div>
+                      <div className="text-xs text-teal-700">{doctorProfile.specialization}</div>
+                    </div>
+                  </div>
+
+                  <div className="p-3 space-y-2 border-b border-slate-100">
+                    <div className="flex items-center gap-2 text-sm text-slate-600">
+                      <span className="text-teal-600/70 shrink-0">
+                        <ClockIcon />
+                      </span>
+                      <span>Shift: {doctorProfile.shift}</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-sm text-slate-600">
+                      <span className="text-teal-600/70 shrink-0">
+                        <MailIcon />
+                      </span>
+                      <span className="truncate">{doctorProfile.email}</span>
+                    </div>
+                  </div>
+
+                  <div className="p-3 border-b border-slate-100">
+                    <div className="text-xs font-semibold tracking-wide uppercase text-teal-700/70 mb-2">Today</div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="bg-teal-50 rounded-md px-3 py-2">
+                        <div className="flex items-center gap-1.5 text-teal-700/80 mb-1">
+                          <CheckCircleIcon />
+                          <span className="text-xs">Seen</span>
+                        </div>
+                        <div className="text-lg font-bold text-slate-800">{stats.seenToday}</div>
+                      </div>
+                      <div className="bg-slate-50 rounded-md px-3 py-2">
+                        <div className="flex items-center gap-1.5 text-slate-500 mb-1">
+                          <UsersIcon />
+                          <span className="text-xs">Waiting</span>
+                        </div>
+                        <div className="text-lg font-bold text-slate-800">{queue.length}</div>
+                      </div>
+                    </div>
+                    <div className="text-xs text-slate-400 mt-2">
+                      {totalToday} patient{totalToday === 1 ? '' : 's'} total today
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={logout}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 border-t border-slate-100 transition-colors"
+                  >
+                    <LogoutIcon />
+                    End shift
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
-          <span className="text-sm text-slate-400">
-            {new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'short' })}
-          </span>
-          <div className="w-px h-6 bg-slate-200" />
-
-          <div className="relative" ref={profileRef}>
-            <button
-              onClick={() => setProfileOpen((prev) => !prev)}
-              aria-expanded={profileOpen}
-              aria-haspopup="true"
-              className={
-                'flex items-center gap-2 pl-1 pr-2 py-1 rounded-full transition-colors ' +
-                (profileOpen ? 'bg-white' : 'hover:bg-white')
-              }
-            >
-              <div className="w-8 h-8 rounded-full bg-teal-600 text-white flex items-center justify-center text-xs font-semibold shrink-0">
-                {doctorProfile.name.split(' ').map((n) => n[0]).slice(-2).join('')}
-              </div>
-              <div className="text-left leading-tight">
-                <div className="text-sm font-semibold text-slate-800">{doctorProfile.name}</div>
-                <div className="text-xs text-slate-400">{doctorProfile.specialization}</div>
-              </div>
-              <span className={'text-slate-400 ml-0.5 transition-transform duration-200' + (profileOpen ? ' rotate-180' : '')}>
-                <ChevronDownIcon />
-              </span>
+        {loadError && (
+          <div className="bg-red-50 border border-red-200 rounded-md px-3 py-2 mb-4 text-sm text-red-700 flex items-center justify-between">
+            <span>{loadError}</span>
+            <button onClick={loadQueueAndStats} className="text-red-700 underline text-xs">
+              Retry
             </button>
+          </div>
+        )}
 
-            {profileOpen && (
-              <div className="absolute right-0 top-full mt-2 w-64 bg-white border border-slate-200 rounded-lg shadow-lg z-50 overflow-hidden">
-                <div className="p-3 border-b border-slate-100 bg-teal-50/50 flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-teal-600 text-white flex items-center justify-center text-sm font-semibold shrink-0">
-                    {doctorProfile.name.split(' ').map((n) => n[0]).slice(-2).join('')}
-                  </div>
-                  <div className="min-w-0">
-                    <div className="text-sm font-semibold text-slate-800 truncate">{doctorProfile.name}</div>
-                    <div className="text-xs text-teal-700">{doctorProfile.specialization}</div>
-                  </div>
+        {savedMessage && (
+          <div className="mb-4 flex items-center justify-between gap-3 rounded-2xl border border-teal-200 bg-teal-50 px-4 py-3 text-sm text-teal-900">
+            <div className="flex items-center gap-2">
+              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-teal-700 text-xs font-bold text-white">
+                ✓
+              </span>
+              {savedMessage}
+            </div>
+            <button onClick={() => setSavedMessage('')} className="text-xs font-semibold text-teal-800 hover:text-teal-950">
+              Dismiss
+            </button>
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 lg:grid-cols-[260px_minmax(0,1fr)] gap-5 items-start">
+          <aside className="bg-white border border-slate-200 rounded-2xl p-3.5 shadow-sm lg:sticky lg:top-5">
+            <div className="flex items-center justify-between mb-3 px-1">
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-wider text-teal-700">Live queue</p>
+                <h2 className="font-semibold text-slate-900 text-sm mt-0.5">Waiting patients</h2>
+              </div>
+              <span className="min-w-7 h-7 px-2 rounded-full bg-teal-50 text-teal-800 text-xs font-bold flex items-center justify-center">
+                {queue.length}
+              </span>
+            </div>
+
+            {loadingQueue && <p className="text-sm text-slate-400 py-3 text-center">Loading queue…</p>}
+
+            {!loadingQueue && queue.length === 0 && (
+              <p className="text-sm text-slate-400 py-3 text-center">No one in queue</p>
+            )}
+            {queue.map((p) => (
+              <button
+                key={p.rollNumber}
+                type="button"
+                onClick={() => handleSelect(p.rollNumber)}
+                className={
+                  'w-full text-left p-3 mb-1.5 rounded-xl border transition-all ' +
+                  (p.rollNumber === selected
+                    ? 'bg-teal-50 border-teal-300 shadow-sm'
+                    : 'border-transparent hover:bg-slate-50 hover:border-slate-200')
+                }
+              >
+                <div className="flex items-center justify-between">
+                  <span className="font-medium text-sm text-slate-800">{p.name}</span>
+                  {p.priority && <span className="text-red-600 text-xs">urgent</span>}
                 </div>
+                <div className="text-xs text-slate-500">{p.rollNumber}</div>
+                <div className="text-xs text-slate-400">Waiting since {p.waitingSince}</div>
+              </button>
+            ))}
+          </aside>
 
-                <div className="p-3 space-y-2 border-b border-slate-100">
-                  <div className="flex items-center gap-2 text-sm text-slate-600">
-                    <span className="text-teal-600/70 shrink-0">
-                      <ClockIcon />
-                    </span>
-                    <span>Shift: {doctorProfile.shift}</span>
-                  </div>
-                  <div className="flex items-center gap-2 text-sm text-slate-600">
-                    <span className="text-teal-600/70 shrink-0">
-                      <MailIcon />
-                    </span>
-                    <span className="truncate">{doctorProfile.email}</span>
-                  </div>
+          <main className="min-h-[590px] bg-white border border-slate-200 rounded-2xl p-5 sm:p-6 shadow-sm relative overflow-hidden">
+            {!currentPatient && (
+              <div className="max-w-xs mx-auto text-center py-28">
+                <div className="w-12 h-12 mx-auto mb-4 rounded-2xl bg-teal-50 text-teal-700 flex items-center justify-center text-lg">
+                  +
                 </div>
-
-                <div className="p-3 border-b border-slate-100">
-                  <div className="text-xs font-semibold tracking-wide uppercase text-teal-700/70 mb-2">Today</div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div className="bg-teal-50 rounded-md px-3 py-2">
-                      <div className="flex items-center gap-1.5 text-teal-700/80 mb-1">
-                        <CheckCircleIcon />
-                        <span className="text-xs">Seen</span>
-                      </div>
-                      <div className="text-lg font-bold text-slate-800">{stats.seenToday}</div>
-                    </div>
-                    <div className="bg-slate-50 rounded-md px-3 py-2">
-                      <div className="flex items-center gap-1.5 text-slate-500 mb-1">
-                        <UsersIcon />
-                        <span className="text-xs">Waiting</span>
-                      </div>
-                      <div className="text-lg font-bold text-slate-800">{queue.length}</div>
-                    </div>
-                  </div>
-                  <div className="text-xs text-slate-400 mt-2">{totalToday} patient{totalToday === 1 ? '' : 's'} total today</div>
-                </div>
-
-                <button
-                  onClick={logout}
-                  className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 border-t border-slate-100 transition-colors"
-                >
-                  <LogoutIcon />
-                  End shift
-                </button>
+                <h2 className="font-semibold text-slate-800">Select a patient</h2>
+                <p className="text-slate-500 text-sm mt-1.5">
+                  Choose someone from the live queue to begin their consultation.
+                </p>
               </div>
             )}
-          </div>
-        </div>
-      </div>
 
-      {loadError && (
-        <div className="bg-red-50 border border-red-200 rounded-md px-3 py-2 mb-4 text-sm text-red-700 flex items-center justify-between">
-          <span>{loadError}</span>
-          <button onClick={loadQueueAndStats} className="text-red-700 underline text-xs">
-            Retry
-          </button>
-        </div>
-      )}
-
-      <div className="flex gap-4 items-start">
-        <div className="w-64 bg-white border border-slate-200 rounded-lg p-3 shadow-sm h-fit">
-          <h2 className="font-semibold mb-2 text-slate-700 text-sm">Waiting ({queue.length})</h2>
-
-          {loadingQueue && <p className="text-sm text-slate-400 py-3 text-center">Loading queue…</p>}
-
-          {!loadingQueue && queue.length === 0 && (
-            <p className="text-sm text-slate-400 py-3 text-center">No one in queue</p>
-          )}
-          {queue.map((p) => (
-            <div
-              key={p.rollNumber}
-              onClick={() => handleSelect(p.rollNumber)}
-              className={
-                'p-2.5 mb-1.5 rounded-md cursor-pointer border transition-colors ' +
-                (p.rollNumber === selected
-                  ? 'bg-teal-50 border-teal-300'
-                  : 'border-transparent hover:bg-slate-50')
-              }
-            >
-              <div className="flex items-center justify-between">
-                <span className="font-medium text-sm text-slate-800">{p.name}</span>
-                {p.priority && <span className="text-red-600 text-xs">urgent</span>}
-              </div>
-              <div className="text-xs text-slate-500">{p.rollNumber}</div>
-              <div className="text-xs text-slate-400">since {p.waitingSince}</div>
-            </div>
-          ))}
-        </div>
-
-        <div className="flex-1 bg-white border border-slate-200 rounded-lg p-4 shadow-sm relative overflow-hidden">
-          {!currentPatient && (
-            <p className="text-slate-400 text-sm text-center py-10">Select a patient from the queue to start</p>
-          )}
-
-          {currentPatient && (
-            <div>
-              <div className="flex justify-between items-start border-b border-slate-100 pb-3 mb-4">
-                <div>
-                  <h2 className="font-bold text-lg text-slate-800">{currentPatient.name}</h2>
-                  <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-slate-500 mt-0.5">
-                    <span>{currentPatient.rollNumber}</span>
-                    <span>·</span>
-                    <span>{currentPatient.age} yrs</span>
-                    <span>·</span>
-                    <span className="font-medium text-teal-700">{currentPatient.bloodGroup}</span>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => setDrawerOpen(true)}
-                    title="Patient history, medication, allergies, conditions"
-                    className="p-2 rounded-md border border-slate-200 text-slate-500 hover:bg-teal-50 hover:text-teal-700 hover:border-teal-200 transition-colors"
-                  >
-                    <MenuIcon />
-                  </button>
-                  <button
-                    onClick={markDone}
-                    disabled={submitting}
-                    className="bg-teal-600 hover:bg-teal-700 disabled:bg-teal-300 text-white px-4 py-1.5 rounded-md text-sm transition-colors"
-                  >
-                    {submitting ? 'Saving…' : 'Done'}
-                  </button>
-                </div>
-              </div>
-
-              {submitError && (
-                <div className="bg-red-50 border border-red-200 rounded-md px-3 py-2 mb-4 text-sm text-red-700">
-                  {submitError}
-                </div>
-              )}
-
-              {summary.allergies !== 'None recorded' && (
-                <div className="bg-red-50 border border-red-200 rounded-md px-3 py-2 mb-4 text-sm text-red-700">
-                  <span className="font-medium">Allergy alert:</span> {summary.allergies}
-                </div>
-              )}
-
-              <h3 className="font-semibold text-sm mb-2 text-slate-700">New Prescription</h3>
-
-              <div className="mb-3">
-                <label className="text-sm block mb-1 text-slate-600">Diagnosis</label>
-                <input
-                  type="text"
-                  value={diagnosis}
-                  onChange={(e) => setDiagnosis(e.target.value)}
-                  placeholder="eg. viral fever, cold etc"
-                  className="border border-slate-300 p-1.5 rounded-md text-sm w-full focus:outline-none focus:ring-1 focus:ring-teal-400 focus:border-teal-400"
-                />
-              </div>
-
-              <div className="border border-slate-200 rounded-md p-3 mb-3 bg-slate-50">
-                <p className="font-semibold text-sm mb-2 text-slate-700">Daywise</p>
-
-                {medicines.map((med, index) => (
-                  <div key={index} className="flex flex-wrap gap-2 items-center mb-2">
-                    <input
-                      type="text"
-                      placeholder="medicine name"
-                      value={med.name}
-                      onChange={(e) => handleMedicineChange(index, 'name', e.target.value)}
-                      className="border border-slate-300 bg-white p-1.5 rounded-md text-sm"
-                    />
-
-                    <label className="text-sm flex items-center gap-1 text-slate-600">
-                      <input
-                        type="checkbox"
-                        checked={med.morning}
-                        onChange={(e) => handleMedicineChange(index, 'morning', e.target.checked)}
-                        className="accent-teal-600"
-                      />
-                      morning
-                    </label>
-
-                    <label className="text-sm flex items-center gap-1 text-slate-600">
-                      <input
-                        type="checkbox"
-                        checked={med.evening}
-                        onChange={(e) => handleMedicineChange(index, 'evening', e.target.checked)}
-                        className="accent-teal-600"
-                      />
-                      evening
-                    </label>
-
-                    <label className="text-sm flex items-center gap-1 text-slate-600">
-                      <input
-                        type="checkbox"
-                        checked={med.night}
-                        onChange={(e) => handleMedicineChange(index, 'night', e.target.checked)}
-                        className="accent-teal-600"
-                      />
-                      night
-                    </label>
-
-                    <input
-                      type="text"
-                      placeholder="instructions (after food etc)"
-                      value={med.note}
-                      onChange={(e) => handleMedicineChange(index, 'note', e.target.value)}
-                      className="border border-slate-300 bg-white p-1.5 rounded-md text-sm flex-1"
-                    />
-
-                    {medicines.length > 1 && (
-                      <button onClick={() => removeMedicine(index)} className="text-red-600 text-xs">
-                        remove
-                      </button>
-                    )}
-                  </div>
-                ))}
-
-                <button
-                  onClick={addMedicine}
-                  className="text-sm border border-dashed border-teal-400 px-2 py-1 rounded-md mt-1 text-teal-700 hover:bg-white"
-                >
-                  + add medicine
-                </button>
-              </div>
-
+            {currentPatient && (
               <div>
-                <label className="text-sm block mb-1 text-slate-600">General Instructions</label>
-                <textarea
-                  value={general}
-                  onChange={(e) => setGeneral(e.target.value)}
-                  rows="3"
-                  placeholder="anything without fixed timing - rest, diet, follow up etc"
-                  className="border border-slate-300 p-1.5 rounded-md text-sm w-full focus:outline-none focus:ring-1 focus:ring-teal-400 focus:border-teal-400"
-                ></textarea>
+                <div className="flex justify-between items-start border-b border-slate-100 pb-4 mb-5">
+                  <div>
+                    <h2 className="font-bold text-lg text-slate-800">{currentPatient.name}</h2>
+                    <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-slate-500 mt-0.5">
+                      <span>{currentPatient.rollNumber}</span>
+                      <span>·</span>
+                      <span>{currentPatient.age} yrs</span>
+                      <span>·</span>
+                      <span className="font-medium text-teal-700">{currentPatient.bloodGroup}</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setDrawerOpen(true)}
+                      title="Patient history, medication, allergies, conditions"
+                      className="p-2 rounded-md border border-slate-200 text-slate-500 hover:bg-teal-50 hover:text-teal-700 hover:border-teal-200 transition-colors"
+                    >
+                      <MenuIcon />
+                    </button>
+                    <button
+                      onClick={markDone}
+                      disabled={submitting}
+                      className="bg-teal-600 hover:bg-teal-700 disabled:bg-teal-300 text-white px-4 py-1.5 rounded-md text-sm transition-colors"
+                    >
+                      {submitting ? 'Saving…' : 'Done'}
+                    </button>
+                  </div>
+                </div>
+
+                {submitError && (
+                  <div className="bg-red-50 border border-red-200 rounded-md px-3 py-2 mb-4 text-sm text-red-700">
+                    {submitError}
+                  </div>
+                )}
+
+                {summary.allergies !== 'None recorded' && (
+                  <div className="bg-red-50 border border-red-200 rounded-md px-3 py-2 mb-4 text-sm text-red-700">
+                    <span className="font-medium">Allergy alert:</span> {summary.allergies}
+                  </div>
+                )}
+
+                <h3 className="font-semibold text-sm mb-2 text-slate-700">New Prescription</h3>
+
+                <div className="mb-3">
+                  <label className="text-sm block mb-1 text-slate-600">Diagnosis</label>
+                  <input
+                    type="text"
+                    value={diagnosis}
+                    onChange={(e) => setDiagnosis(e.target.value)}
+                    placeholder="eg. viral fever, cold etc"
+                    className="border border-slate-300 p-1.5 rounded-md text-sm w-full focus:outline-none focus:ring-1 focus:ring-teal-400 focus:border-teal-400"
+                  />
+                </div>
+
+                <div className="border border-slate-200 rounded-md p-3 mb-3 bg-slate-50">
+                  <p className="font-semibold text-sm mb-2 text-slate-700">Daywise</p>
+
+                  {medicines.map((med, index) => (
+                    <div key={index} className="flex flex-wrap gap-2 items-center mb-2">
+                      <input
+                        type="text"
+                        placeholder="medicine name"
+                        value={med.name}
+                        onChange={(e) => handleMedicineChange(index, 'name', e.target.value)}
+                        className="border border-slate-300 bg-white p-1.5 rounded-md text-sm"
+                      />
+
+                      <label className="text-sm flex items-center gap-1 text-slate-600">
+                        <input
+                          type="checkbox"
+                          checked={med.morning}
+                          onChange={(e) => handleMedicineChange(index, 'morning', e.target.checked)}
+                          className="accent-teal-600"
+                        />
+                        morning
+                      </label>
+
+                      <label className="text-sm flex items-center gap-1 text-slate-600">
+                        <input
+                          type="checkbox"
+                          checked={med.evening}
+                          onChange={(e) => handleMedicineChange(index, 'evening', e.target.checked)}
+                          className="accent-teal-600"
+                        />
+                        evening
+                      </label>
+
+                      <label className="text-sm flex items-center gap-1 text-slate-600">
+                        <input
+                          type="checkbox"
+                          checked={med.night}
+                          onChange={(e) => handleMedicineChange(index, 'night', e.target.checked)}
+                          className="accent-teal-600"
+                        />
+                        night
+                      </label>
+
+                      <input
+                        type="text"
+                        placeholder="instructions (after food etc)"
+                        value={med.note}
+                        onChange={(e) => handleMedicineChange(index, 'note', e.target.value)}
+                        className="border border-slate-300 bg-white p-1.5 rounded-md text-sm flex-1"
+                      />
+
+                      {medicines.length > 1 && (
+                        <button onClick={() => removeMedicine(index)} className="text-red-600 text-xs">
+                          remove
+                        </button>
+                      )}
+                    </div>
+                  ))}
+
+                  <button
+                    onClick={addMedicine}
+                    className="text-sm border border-dashed border-teal-400 px-2 py-1 rounded-md mt-1 text-teal-700 hover:bg-white"
+                  >
+                    + add medicine
+                  </button>
+                </div>
+
+                <div>
+                  <label className="text-sm block mb-1 text-slate-600">General Instructions</label>
+                  <textarea
+                    value={general}
+                    onChange={(e) => setGeneral(e.target.value)}
+                    rows="3"
+                    placeholder="anything without fixed timing - rest, diet, follow up etc"
+                    className="border border-slate-300 p-1.5 rounded-md text-sm w-full focus:outline-none focus:ring-1 focus:ring-teal-400 focus:border-teal-400"
+                  ></textarea>
+                </div>
               </div>
-            </div>
-          )}
+            )}
+          </main>
         </div>
       </div>
 
@@ -637,7 +681,9 @@ function Doctors_Dashboard() {
             <div className="flex items-center justify-between p-4 border-b border-teal-100 bg-teal-50/50">
               <div>
                 <h3 className="font-semibold text-slate-800 text-sm">Patient Record</h3>
-                <p className="text-xs text-slate-500">{currentPatient.name} · {currentPatient.rollNumber}</p>
+                <p className="text-xs text-slate-500">
+                  {currentPatient.name} · {currentPatient.rollNumber}
+                </p>
               </div>
               <button
                 onClick={() => setDrawerOpen(false)}
