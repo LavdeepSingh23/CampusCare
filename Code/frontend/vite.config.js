@@ -12,8 +12,15 @@ export default defineConfig({
     },
   },
   server: {
-    host: true,
-    allowedHosts: true,
+    host: '0.0.0.0',
+    allowedHosts: [
+      'alarm-diagnoses-lash.ngrok-free.dev',
+      '.ngrok-free.dev',
+      '.ngrok.io',
+      '.ngrok-free.app',
+      'localhost',
+      '127.0.0.1',
+    ],
     proxy: {
       '/api': {
         target: 'http://localhost:8000',
