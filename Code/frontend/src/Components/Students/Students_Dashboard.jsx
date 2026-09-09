@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react'
-import { useParams } from 'react-router-dom'
+import { useParams, useNavigate } from 'react-router-dom'
+import { useAuth } from '../../context/AuthContext'
 import {
   fetchPatientProfile,
   fetchPatientSummary,
@@ -130,6 +131,8 @@ const IMPORTANT_NUMBERS = [
 
 function Students_Dashboard() {
   const { rollNumber } = useParams()
+  const navigate = useNavigate()
+  const { student, logout } = useAuth()
 
   const [profile, setProfile] = useState({
     name: '',
@@ -264,7 +267,15 @@ function Students_Dashboard() {
                   </div>
                   <div className="min-w-0">
                     <div className="text-sm font-semibold text-slate-800 truncate">{profile.name}</div>
-                    <div className="text-xs text-teal-700">{profile.rollNumber}</div>
+                    <div className="text-xs text-teal-700 font-medium">{profile.rollNumber}</div>
+                    {(student?.email?.endsWith('@thapar.edu') || profile.email?.endsWith('@thapar.edu')) && (
+                      <div className="inline-flex items-center gap-1 mt-1 px-1.5 py-0.5 rounded bg-emerald-100/80 text-emerald-800 text-[10px] font-medium border border-emerald-200">
+                        <svg className="w-2.5 h-2.5 text-emerald-600 shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clipRule="evenodd" />
+                        </svg>
+                        <span>@thapar.edu Verified</span>
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -279,12 +290,29 @@ function Students_Dashboard() {
                   </div>
                   <div className="flex items-center gap-2 text-sm text-slate-600">
                     <span className="text-teal-600/70 shrink-0"><MailIcon /></span>
-                    <span className="truncate">{profile.email}</span>
+                    <span className="truncate">{student?.email || profile.email}</span>
                   </div>
                   <div className="flex items-center gap-2 text-sm text-slate-600">
                     <span className="text-teal-600/70 shrink-0"><PhoneIcon /></span>
                     <span>{profile.contact || 'Not on file'}</span>
                   </div>
+                </div>
+
+                <div className="p-2 bg-slate-50">
+                  <button
+                    onClick={() => {
+                      logout()
+                      navigate('/user_login')
+                    }}
+                    className="w-full flex items-center justify-center gap-2 px-3 py-1.5 text-xs font-medium text-red-600 hover:text-red-700 hover:bg-red-50 rounded-md transition-colors"
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                      <polyline points="16 17 21 12 16 7" />
+                      <line x1="21" y1="12" x2="9" y2="12" />
+                    </svg>
+                    Sign out
+                  </button>
                 </div>
               </div>
             )}

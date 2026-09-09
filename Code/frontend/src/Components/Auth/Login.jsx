@@ -1,9 +1,8 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
-import { Eye, EyeOff, Stethoscope, Building2, ArrowLeft, CheckCircle2 } from 'lucide-react'
+import { Eye, EyeOff, Stethoscope, Building2, ArrowLeft, CheckCircle2, AlertCircle, GraduationCap, X, Loader2 } from 'lucide-react'
 import tiMark from '../../assets/ti-mark.png'
-import { GlassFilter, GlassEffect } from '@/components/ui/liquid-glass'
 
 // --- HELPER COMPONENTS (ICONS) ---
 
@@ -37,7 +36,7 @@ const GlassInputWrapper = ({ children }) => (
 )
 
 const TestimonialCard = ({ avatarText, name, handle, text, isSpecial }) => (
-  <GlassEffect className="rounded-3xl p-5 shadow-xl text-white transition-all hover:bg-white/20 border border-white/25">
+  <div className="rounded-3xl p-5 shadow-xl text-white bg-white/10 backdrop-blur-md border border-white/20 transition-all hover:bg-white/15">
     <div className="flex items-start gap-3">
       <div className="h-10 w-10 rounded-2xl bg-teal-800 text-white font-bold flex items-center justify-center text-xs shrink-0 shadow-sm border border-white/20">
         {avatarText}
@@ -51,13 +50,13 @@ const TestimonialCard = ({ avatarText, name, handle, text, isSpecial }) => (
         <p className="mt-1.5 text-xs text-white/85 leading-relaxed">{text}</p>
       </div>
     </div>
-  </GlassEffect>
+  </div>
 )
 
 // --- MAIN LOGIN COMPONENT ---
 
 export default function Login() {
-  const { login, error, loading } = useAuth()
+  const { login, loginStudentGoogle, error, setError, loading } = useAuth()
   const navigate = useNavigate()
 
   const [mode, setMode] = useState('doctor') // 'doctor' | 'student'
@@ -69,6 +68,68 @@ export default function Login() {
   const [rollNumber, setRollNumber] = useState('')
   const [rollError, setRollError] = useState('')
 
+  // Google Student Authorization State
+  const [googleError, setGoogleError] = useState('')
+  const [googleLoading, setGoogleLoading] = useState(false)
+  const [showSandboxModal, setShowSandboxModal] = useState(false)
+  const [customTestEmail, setCustomTestEmail] = useState('')
+
+  const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || ''
+  const googleBtnRef = useRef(null)
+  const [gisLoaded, setGisLoaded] = useState(false)
+
+  // Initialize and render Google Identity Services
+  useEffect(() => {
+    if (!googleClientId) return
+
+    function renderGis() {
+      if (!window.google?.accounts?.id) return
+      try {
+        window.google.accounts.id.initialize({
+          client_id: googleClientId,
+          callback: handleGoogleCredentialResponse,
+          hosted_domain: 'thapar.edu',
+          auto_select: false,
+        })
+        if (googleBtnRef.current) {
+          googleBtnRef.current.innerHTML = ''
+          window.google.accounts.id.renderButton(googleBtnRef.current, {
+            theme: 'outline',
+            size: 'large',
+            type: 'standard',
+            text: 'continue_with',
+            shape: 'pill',
+            logo_alignment: 'left',
+            width: 340,
+          })
+          setGisLoaded(true)
+        }
+        // Also trigger One Tap prompt if eligible
+        window.google.accounts.id.prompt(() => {})
+      } catch (e) {
+        console.error('Google GIS render error', e)
+      }
+    }
+
+    if (!window.google?.accounts?.id) {
+      const scriptId = 'google-gsi-client'
+      let script = document.getElementById(scriptId)
+      if (!script) {
+        script = document.createElement('script')
+        script.id = scriptId
+        script.src = 'https://accounts.google.com/gsi/client'
+        script.async = true
+        script.defer = true
+        script.onload = renderGis
+        document.body.appendChild(script)
+      } else {
+        script.addEventListener('load', renderGis)
+      }
+    } else {
+      renderGis()
+    }
+  }, [googleClientId, mode])
+
   function handleSubmit(e) {
     e.preventDefault()
     login(email, password).then((success) => {
@@ -76,8 +137,53 @@ export default function Login() {
     })
   }
 
-  function handleGoogleSignIn() {
-    console.log('Google sign-in flow placeholder')
+  async function handleGoogleCredentialResponse(response) {
+    if (!response?.credential) return
+    setGoogleLoading(true)
+    setGoogleError('')
+    try {
+      const student = await loginStudentGoogle(response.credential)
+      if (student) {
+        navigate(`/student_dashboard/${student.rollNumber}`)
+      }
+    } catch (err) {
+      setGoogleError(err.message || 'Google sign-in failed. Please ensure you use an official @thapar.edu account.')
+    } finally {
+      setGoogleLoading(false)
+    }
+  }
+
+  async function handleSimulatedSignIn(simulatedUser) {
+    setGoogleLoading(true)
+    setGoogleError('')
+    setShowSandboxModal(false)
+    try {
+      const student = await loginStudentGoogle(null, simulatedUser)
+      if (student) {
+        navigate(`/student_dashboard/${student.rollNumber}`)
+      }
+    } catch (err) {
+      setGoogleError(err.message || 'Domain rejected. Only @thapar.edu accounts are permitted.')
+    } finally {
+      setGoogleLoading(false)
+    }
+  }
+
+  function handleGoogleSignInClick() {
+    setGoogleError('')
+    if (googleClientId && window.google?.accounts?.id) {
+      try {
+        window.google.accounts.id.prompt((notification) => {
+          if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
+            setShowSandboxModal(true)
+          }
+        })
+      } catch {
+        setShowSandboxModal(true)
+      }
+    } else {
+      setShowSandboxModal(true)
+    }
   }
 
   function handleStudentSubmit(e) {
@@ -93,7 +199,6 @@ export default function Login() {
 
   return (
     <div className="min-h-screen w-full flex flex-col lg:flex-row bg-white">
-      <GlassFilter />
       {/* ── Left Column: Sign-in Form ── */}
       <section className="flex-1 flex flex-col justify-between p-6 sm:p-10 lg:p-14 overflow-y-auto">
         {/* Top Header: Brand & Back to Home */}
@@ -175,7 +280,7 @@ export default function Login() {
               <form className="space-y-4" onSubmit={handleSubmit}>
                 <div>
                   <label className="text-xs font-semibold text-slate-600 mb-1.5 block">
-                    Institutional Email Address
+                    Doctor / Staff Email Address
                   </label>
                   <GlassInputWrapper>
                     <input
@@ -185,10 +290,13 @@ export default function Login() {
                       autoFocus
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
-                      placeholder="you@thapar.edu"
+                      placeholder="dr.kapoor@campuscare.edu"
                       className="w-full bg-transparent text-sm p-4 rounded-2xl focus:outline-none text-slate-900 placeholder:text-slate-400"
                     />
                   </GlassInputWrapper>
+                  <p className="text-[11px] text-slate-400 mt-1">
+                    Medical console access for authorized doctors and clinical staff.
+                  </p>
                 </div>
 
                 <div>
@@ -233,7 +341,7 @@ export default function Login() {
                   </label>
                   <button
                     type="button"
-                    title="Not available in this demo"
+                    title="Contact administrator"
                     className="hover:underline text-teal-700 font-medium transition-colors cursor-not-allowed opacity-80"
                   >
                     Reset password
@@ -250,65 +358,135 @@ export default function Login() {
               </form>
             )}
 
-            {/* ── STUDENT FORM ── */}
+            {/* ── STUDENT FORM (GOOGLE WORKSPACE AUTHORIZATION) ── */}
             {mode === 'student' && (
-              <form className="space-y-4" onSubmit={handleStudentSubmit}>
-                <div>
-                  <label className="text-xs font-semibold text-slate-600 mb-1.5 block">
-                    University Roll Number
-                  </label>
-                  <GlassInputWrapper>
-                    <input
-                      name="rollNumber"
-                      type="text"
-                      required
-                      autoFocus
-                      value={rollNumber}
-                      onChange={(e) => {
-                        setRollNumber(e.target.value)
-                        if (rollError) setRollError('')
-                      }}
-                      placeholder="e.g. 102403001 or CS21B045"
-                      className="w-full bg-transparent text-sm p-4 rounded-2xl focus:outline-none text-slate-900 placeholder:text-slate-400"
-                    />
-                  </GlassInputWrapper>
-                  <p className="text-[11px] text-slate-400 mt-1.5">
-                    Found directly on your physical TIET Student ID card.
-                  </p>
+              <div className="space-y-4">
+                {/* Institutional Badge */}
+                <div className="rounded-2xl border border-teal-500/25 bg-teal-50/70 p-3.5 flex items-start gap-3">
+                  <div className="p-2 rounded-xl bg-teal-800 text-white shrink-0 mt-0.5">
+                    <GraduationCap className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-xs font-semibold text-teal-950">
+                      TIET Student Single Sign-On
+                    </h3>
+                    <p className="text-[11px] text-teal-800/80 leading-relaxed mt-0.5">
+                      Log in with your official Thapar University Google account to view prescriptions, medical history, and queue position.
+                    </p>
+                  </div>
                 </div>
 
-                {rollError && (
-                  <div className="bg-red-50 border border-red-200 rounded-2xl px-4 py-3 text-xs text-red-700 font-medium">
-                    {rollError}
+                {/* Domain Mismatch Alert */}
+                {googleError && (
+                  <div className="bg-red-50 border border-red-200 rounded-2xl p-4 text-xs text-red-700 font-medium flex items-start gap-2.5">
+                    <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-semibold text-red-800">Thapar Account Required</p>
+                      <p className="mt-0.5 text-red-700 leading-relaxed">{googleError}</p>
+                    </div>
                   </div>
                 )}
 
-                <button
-                  type="submit"
-                  className="w-full rounded-2xl bg-slate-900 py-3.5 font-semibold text-white hover:bg-slate-800 transition-all cursor-pointer shadow-md hover:scale-[1.01] active:scale-[0.99] text-sm mt-2"
-                >
-                  View My Student Dashboard
-                </button>
-              </form>
+                {/* Official Google Workspace Sign-In Area */}
+                <div className="w-full flex flex-col items-center gap-3">
+                  {/* Official Google GIS Button Container */}
+                  <div
+                    ref={googleBtnRef}
+                    className="w-full flex justify-center items-center min-h-[44px]"
+                  />
+
+                  {/* Fallback button if Google script is loading or blocked by adblock */}
+                  {!gisLoaded && (
+                    <button
+                      type="button"
+                      onClick={handleGoogleSignInClick}
+                      disabled={googleLoading}
+                      className="w-full flex items-center justify-between gap-3 border-2 border-slate-200/90 rounded-2xl p-3.5 hover:border-teal-600 hover:bg-teal-50/40 text-slate-800 font-semibold text-xs sm:text-sm transition-all shadow-sm hover:shadow-md cursor-pointer group"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="p-1.5 rounded-xl bg-white shadow-xs group-hover:scale-105 transition-transform">
+                          <GoogleIcon />
+                        </div>
+                        <div className="text-left leading-tight">
+                          <span className="block font-semibold text-slate-900">
+                            {googleLoading ? 'Authorizing with Google…' : 'Continue with Thapar Google Workspace'}
+                          </span>
+                          <span className="text-[11px] text-slate-500 font-normal">
+                            TIET Single Sign-On
+                          </span>
+                        </div>
+                      </div>
+                      <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-teal-100 text-teal-800 border border-teal-200">
+                        @thapar.edu only
+                      </span>
+                    </button>
+                  )}
+
+                  {googleLoading && (
+                    <div className="flex items-center gap-2 text-xs text-teal-700 font-medium py-1">
+                      <Loader2 className="w-4 h-4 animate-spin text-teal-600" />
+                      <span>Verifying your Thapar account…</span>
+                    </div>
+                  )}
+
+                  <div className="flex items-center justify-between w-full px-1 pt-0.5">
+                    <span className="text-[10px] font-semibold text-teal-700 bg-teal-50 px-2 py-0.5 rounded-full border border-teal-200/80">
+                      @thapar.edu only
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setShowSandboxModal(true)}
+                      className="text-[11px] text-slate-400 hover:text-teal-700 transition-colors underline cursor-pointer"
+                    >
+                      Dev Sandbox Chooser
+                    </button>
+                  </div>
+                </div>
+
+                {/* Divider */}
+                <div className="relative flex items-center justify-center my-2">
+                  <span className="w-full border-t border-slate-200"></span>
+                  <span className="px-3 text-xs text-slate-400 bg-white absolute">
+                    Or direct ID lookup
+                  </span>
+                </div>
+
+                {/* Roll Number Form */}
+                <form className="space-y-3" onSubmit={handleStudentSubmit}>
+                  <div>
+                    <label className="text-xs font-semibold text-slate-600 mb-1.5 block">
+                      University Roll Number
+                    </label>
+                    <GlassInputWrapper>
+                      <input
+                        name="rollNumber"
+                        type="text"
+                        value={rollNumber}
+                        onChange={(e) => {
+                          setRollNumber(e.target.value)
+                          if (rollError) setRollError('')
+                        }}
+                        placeholder="e.g. 102403499 or CS21B045"
+                        className="w-full bg-transparent text-sm p-4 rounded-2xl focus:outline-none text-slate-900 placeholder:text-slate-400"
+                      />
+                    </GlassInputWrapper>
+                  </div>
+
+                  {rollError && (
+                    <div className="bg-red-50 border border-red-200 rounded-2xl px-4 py-3 text-xs text-red-700 font-medium">
+                      {rollError}
+                    </div>
+                  )}
+
+                  <button
+                    type="submit"
+                    className="w-full rounded-2xl bg-slate-100 hover:bg-slate-200 py-3 font-semibold text-slate-700 transition-all cursor-pointer text-xs"
+                  >
+                    View My Student Dashboard
+                  </button>
+                </form>
+              </div>
             )}
-
-            {/* Divider */}
-            <div className="relative flex items-center justify-center my-1">
-              <span className="w-full border-t border-slate-200"></span>
-              <span className="px-3 text-xs text-slate-400 bg-white absolute">
-                Or continue with
-              </span>
-            </div>
-
-            {/* Google Sign In */}
-            <button
-              type="button"
-              onClick={handleGoogleSignIn}
-              className="w-full flex items-center justify-center gap-3 border border-slate-200 rounded-2xl py-3 hover:bg-slate-50 text-slate-700 font-medium text-xs sm:text-sm transition-all shadow-xs cursor-pointer"
-            >
-              <GoogleIcon />
-              <span>Continue with Thapar Google Workspace</span>
-            </button>
 
             {/* Bottom info */}
             <p className="text-center text-xs text-slate-500 mt-1">
@@ -326,9 +504,166 @@ export default function Login() {
         {/* Footer legal note */}
         <div className="text-center text-[11px] text-slate-400 mt-6">
           {mode === 'doctor'
-            ? 'Doctor access is restricted to verified Thapar medical faculty.'
+            ? 'Doctor access is restricted to verified medical faculty.'
             : 'Your medical telemetry is encrypted under TIET student health privacy guidelines.'}
         </div>
+
+        {/* ── Thapar Google Workspace Sandbox Modal ── */}
+        {showSandboxModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+            <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full p-6 border border-slate-100 relative">
+              <button
+                type="button"
+                onClick={() => setShowSandboxModal(false)}
+                className="absolute top-5 right-5 p-1.5 rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+
+              <div className="flex items-center gap-3 mb-4">
+                <div className="p-2.5 rounded-2xl bg-teal-50 border border-teal-100 text-teal-800">
+                  <GoogleIcon />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900">
+                    Thapar Google Workspace SSO
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Select an account to verify domain authorization
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-2.5 my-4">
+                <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
+                  Test Student Accounts
+                </p>
+
+                {/* Valid Account 1 */}
+                <button
+                  type="button"
+                  onClick={() =>
+                    handleSimulatedSignIn({
+                      name: 'Simar Singh',
+                      email: 'simar.singh102403499@thapar.edu',
+                      rollNumber: '102403499',
+                    })
+                  }
+                  className="w-full flex items-center justify-between p-3 rounded-2xl border border-slate-200 hover:border-teal-500 hover:bg-teal-50/40 text-left transition-all group cursor-pointer"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-full bg-teal-800 text-white font-bold flex items-center justify-center text-xs">
+                      SS
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold text-slate-800 group-hover:text-teal-900">
+                        Simar Singh
+                      </p>
+                      <p className="text-[11px] text-slate-500">
+                        simar.singh102403499@thapar.edu
+                      </p>
+                    </div>
+                  </div>
+                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
+                    Valid
+                  </span>
+                </button>
+
+                {/* Valid Account 2 */}
+                <button
+                  type="button"
+                  onClick={() =>
+                    handleSimulatedSignIn({
+                      name: 'Priya Singh',
+                      email: 'priya.singh@thapar.edu',
+                      rollNumber: 'EC20B012',
+                    })
+                  }
+                  className="w-full flex items-center justify-between p-3 rounded-2xl border border-slate-200 hover:border-teal-500 hover:bg-teal-50/40 text-left transition-all group cursor-pointer"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-full bg-teal-600 text-white font-bold flex items-center justify-center text-xs">
+                      PS
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold text-slate-800 group-hover:text-teal-900">
+                        Priya Singh
+                      </p>
+                      <p className="text-[11px] text-slate-500">
+                        priya.singh@thapar.edu
+                      </p>
+                    </div>
+                  </div>
+                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
+                    Valid
+                  </span>
+                </button>
+
+                {/* Invalid Personal Gmail Account (Domain Rejection Test) */}
+                <button
+                  type="button"
+                  onClick={() =>
+                    handleSimulatedSignIn({
+                      name: 'Student Personal',
+                      email: 'student.personal@gmail.com',
+                      rollNumber: 'NON_THAPAR',
+                    })
+                  }
+                  className="w-full flex items-center justify-between p-3 rounded-2xl border border-rose-200 bg-rose-50/30 hover:bg-rose-50/80 text-left transition-all group cursor-pointer"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-full bg-rose-500 text-white font-bold flex items-center justify-center text-xs">
+                      GM
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold text-slate-800">
+                        Personal Gmail Account
+                      </p>
+                      <p className="text-[11px] text-rose-600 font-medium">
+                        student.personal@gmail.com
+                      </p>
+                    </div>
+                  </div>
+                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-rose-100 text-rose-800">
+                    Test Rejection
+                  </span>
+                </button>
+              </div>
+
+              {/* Custom Email Input */}
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault()
+                  if (!customTestEmail.trim()) return
+                  handleSimulatedSignIn({
+                    name: customTestEmail.split('@')[0],
+                    email: customTestEmail.trim(),
+                  })
+                }}
+                className="mt-4 pt-4 border-t border-slate-100"
+              >
+                <label className="text-[11px] font-semibold text-slate-500 block mb-1">
+                  Or test any custom email:
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="email"
+                    value={customTestEmail}
+                    onChange={(e) => setCustomTestEmail(e.target.value)}
+                    placeholder="username@thapar.edu"
+                    className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-teal-500"
+                  />
+                  <button
+                    type="submit"
+                    className="px-4 py-2 rounded-xl bg-slate-900 text-white font-semibold text-xs hover:bg-slate-800 transition-colors cursor-pointer"
+                  >
+                    Authorize
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
       </section>
 
       {/* ── Right Column: CampusCare Signature Visual Panel + Testimonials ── */}

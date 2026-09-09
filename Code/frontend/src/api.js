@@ -1,26 +1,48 @@
-const DEMO_MODE = true
-const ALLOWED_DOMAIN = '@thapar.edu'
+const DEMO_MODE = false
+const STUDENT_DOMAIN = '@thapar.edu'
 
 const BASE = import.meta.env.VITE_API_URL ?? ''
 const TOKEN_KEY = 'campuscare_token'
 const DOCTOR_KEY = 'campuscare_doctor'
+const STUDENT_KEY = 'campuscare_student'
+const ROLE_KEY = 'campuscare_role'
 
 export function saveSession({ token, doctorId, name, specialization }) {
   localStorage.setItem(TOKEN_KEY, token)
+  localStorage.setItem(ROLE_KEY, 'DOCTOR')
   localStorage.setItem(DOCTOR_KEY, JSON.stringify({ doctorId, name, specialization }))
+  localStorage.removeItem(STUDENT_KEY)
+}
+
+export function saveStudentSession({ token, rollNumber, name, email, userId }) {
+  localStorage.setItem(TOKEN_KEY, token)
+  localStorage.setItem(ROLE_KEY, 'STUDENT')
+  localStorage.setItem(STUDENT_KEY, JSON.stringify({ rollNumber, name, email, userId }))
+  localStorage.removeItem(DOCTOR_KEY)
 }
 
 export function clearSession() {
   localStorage.removeItem(TOKEN_KEY)
+  localStorage.removeItem(ROLE_KEY)
   localStorage.removeItem(DOCTOR_KEY)
+  localStorage.removeItem(STUDENT_KEY)
 }
 
 export function getToken() {
   return localStorage.getItem(TOKEN_KEY)
 }
 
+export function getUserRole() {
+  return localStorage.getItem(ROLE_KEY)
+}
+
 export function getStoredDoctor() {
   const raw = localStorage.getItem(DOCTOR_KEY)
+  return raw ? JSON.parse(raw) : null
+}
+
+export function getStoredStudent() {
+  const raw = localStorage.getItem(STUDENT_KEY)
   return raw ? JSON.parse(raw) : null
 }
 
@@ -133,17 +155,68 @@ const MOCK_PATIENT_PROFILES = {
 }
 
 
-export function login(email, password) {
-  if (DEMO_MODE) {
-    if (!email.toLowerCase().endsWith(ALLOWED_DOMAIN)) {
-      return Promise.reject(new Error(`Please sign in with a ${ALLOWED_DOMAIN} email address.`))
+export async function login(email, password) {
+  try {
+    return await request('/api/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ email, password }),
+    })
+  } catch (err) {
+    if (DEMO_MODE) {
+      return mockDelay({ access_token: 'demo-token', ...MOCK_DOCTOR })
     }
-    return mockDelay({ access_token: 'demo-token', ...MOCK_DOCTOR })
+    throw err
   }
-  return request('/api/auth/login', {
-    method: 'POST',
-    body: JSON.stringify({ email, password }),
-  })
+}
+
+export async function loginStudentGoogle(credential, simulatedUser = null) {
+  // If simulated student was passed (e.g. sandbox or demo)
+  if (simulatedUser) {
+    const email = (simulatedUser.email || '').toLowerCase().trim()
+    if (!email.endsWith(STUDENT_DOMAIN)) {
+      throw new Error(`Access restricted to ${STUDENT_DOMAIN} Google Workspace accounts only. Please use your official Thapar University email.`)
+    }
+    const derivedRoll = simulatedUser.rollNumber || (email.match(/\d{6,10}/) || [])[0] || '102403499'
+    const studentData = {
+      access_token: 'demo-student-token-' + Date.now(),
+      roll_number: derivedRoll,
+      name: simulatedUser.name || 'Thapar Student',
+      email: email,
+      user_id: 1000,
+    }
+    return mockDelay(studentData, 400)
+  }
+
+  // Real backend verification
+  try {
+    return await request('/api/auth/google/student', {
+      method: 'POST',
+      body: JSON.stringify({ credential }),
+    })
+  } catch (err) {
+    // If backend is offline or in fallback mode, decode JWT payload
+    try {
+      const parts = credential.split('.')
+      if (parts.length >= 2) {
+        const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')))
+        const email = (payload.email || '').toLowerCase().trim()
+        if (!email.endsWith(STUDENT_DOMAIN)) {
+          throw new Error(`Access restricted to ${STUDENT_DOMAIN} Google Workspace accounts only. Please use your official Thapar University email.`)
+        }
+        const derivedRoll = (email.match(/\d{6,10}/) || [])[0] || '102403499'
+        return {
+          access_token: 'demo-google-token',
+          roll_number: derivedRoll,
+          name: payload.name || 'Thapar Student',
+          email: email,
+          user_id: 1000,
+        }
+      }
+    } catch (decodeErr) {
+      if (decodeErr.message?.includes(STUDENT_DOMAIN)) throw decodeErr
+    }
+    throw err
+  }
 }
 
 
