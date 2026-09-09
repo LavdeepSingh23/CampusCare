@@ -10,6 +10,7 @@ html {
 
 body {
   overflow-x: hidden;
+  font-family: 'Nunito', 'Panton', system-ui, -apple-system, sans-serif;
 }
 
 /* Silky smooth selection */
@@ -50,4 +51,42 @@ body {
   to {
     background-position: 0% -1000%;
   }
+}
+
+/* ── Lenis Smooth Momentum & Physics Scrolling ── */
+html.lenis, html.lenis body {
+  height: auto;
+}
+
+.lenis.lenis-smooth {
+  scroll-behavior: auto !important;
+}
+
+.lenis.lenis-smooth [data-lenis-prevent] {
+  overscroll-behavior: contain;
+}
+
+.lenis.lenis-stopped {
+  overflow: hidden;
+}
+
+.lenis.lenis-scrolling iframe {
+  pointer-events: none;
+}
+
+/* ── Smooth Scroll Section Markers ── */
+.scroll-snap-container {
+  /* Lenis provides uninterrupted momentum scrolling physics */
+}
+
+.snap-hero {
+  scroll-margin-top: 0;
+}
+
+.snap-showcase {
+  scroll-margin-top: 5rem;
+}
+
+.snap-section {
+  scroll-margin-top: 4rem;
 }
