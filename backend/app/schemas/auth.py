@@ -13,3 +13,17 @@ class LoginResponse(BaseModel):
     doctor_id: int
     name: str
     specialization: str
+
+
+class GoogleStudentLoginRequest(BaseModel):
+    credential: str
+
+
+class StudentLoginResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    expires_in_minutes: int
+    roll_number: str
+    name: str
+    email: EmailStr
+    user_id: int
