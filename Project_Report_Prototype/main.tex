@@ -1,0 +1,1347 @@
+\documentclass{tietreport}
+
+% ============================================================
+% PACKAGES
+% ============================================================
+
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{array}
+\usepackage{longtable}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{enumitem}
+\usepackage{csquotes}
+
+% ============================================================
+% BIBLIOGRAPHY
+% ============================================================
+
+\usepackage[
+    backend=biber,
+    style=alphabetic,
+    sorting=nyt
+]{biblatex}
+
+\addbibresource{references.bib}
+
+% ============================================================
+% GENERAL FORMATTING
+% ============================================================
+
+% Better table columns
+\newcolumntype{Y}{>{\raggedright\arraybackslash}X}
+
+% Longtable alignment
+\setlength{\LTleft}{0pt}
+\setlength{\LTright}{0pt}
+
+% Paragraph formatting
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{6pt}
+
+% Compact but readable lists
+\setlist[itemize]{itemsep=2pt, topsep=4pt}
+\setlist[enumerate]{itemsep=2pt, topsep=4pt}
+
+% ============================================================
+% DOCUMENT
+% ============================================================
+
+\begin{document}
+
+% ============================================================
+% TITLE PAGE
+% ============================================================
+
+\begin{titlepage}
+
+\thispagestyle{empty}
+
+\begin{center}
+
+
+{\large\bfseries
+UCS 503\\
+Software Engineering Practice Project Report
+}
+
+\vspace{2.0cm}
+
+{\Huge\bfseries CampusCare}
+
+\vspace{0.6cm}
+
+{\large
+An Integrated Digital Healthcare Platform\\
+for Thapar's Health Center
+}
+
+\vspace{2.0cm}
+
+{\large\bfseries Submitted by}
+
+\vspace{0.6cm}
+
+\begin{tabular}{ll}
+1024030107 Lavdeep Singh \\
+1024030109 Harshveer Singh \\
+1024030110 Damanbir Singh \\
+1024030111 Kriti
+\end{tabular}
+
+\vspace{1.2cm}
+
+{\large
+BE Third Year\\
+Computer Science and Engineering
+}
+
+\vspace{1.2cm}
+
+{\large\bfseries Under the Guidance of}
+
+\vspace{0.5cm}
+
+{\large
+Ms. Anushka
+}
+
+\vfill
+
+{\large
+Department of Computer Science and Engineering\\
+Thapar Institute of Engineering and Technology\\
+Patiala
+}
+
+\end{center}
+
+\end{titlepage}
+
+% ============================================================
+% TABLE OF CONTENTS
+% ============================================================
+
+\tableofcontents
+
+\clearpage
+
+
+% ============================================================
+% CHAPTER 1
+% INTRODUCTION
+% ============================================================
+
+\chapter{Introduction}
+
+\section{Background}
+
+CampusCare is an integrated digital healthcare platform designed for
+campus health centers. The system brings the major activities of a
+routine student healthcare visit together within a single platform.
+
+In a conventional campus health-center environment, student
+registration, doctor queues, consultation records and prescriptions
+may be handled through separate or partially manual processes. This
+can make it difficult to maintain consistent records and can increase
+the amount of administrative work required from healthcare-center
+staff.
+
+CampusCare addresses this problem through a centralized,
+role-based system. The platform connects student identification and
+check-in with doctor availability, queue management, consultation,
+medical history, prescription generation and medicine dispensing.
+
+The system is divided into six major functional modules:
+
+\begin{enumerate}
+    \item Authentication and User Management
+    \item Student Profile and Check-in
+    \item Doctor Availability and Queue Management
+    \item Consultation and Medical History
+    \item Prescription and Dispensing
+    \item Administration and Audit
+\end{enumerate}
+
+These modules represent the main workflow of the system and are
+reflected in the Data Flow Diagrams and UML models presented later in
+this report.
+
+\section{Problem Statement}
+
+Campus health centers need an organized method for managing student
+visits, doctor availability, waiting queues, medical records and
+prescriptions.
+
+When these activities are handled manually or through disconnected
+systems, several problems can occur:
+
+\begin{itemize}
+    \item student information may have to be entered or verified
+    repeatedly;
+    \item managing separate doctor queues can become difficult;
+    \item previous medical information may take time to retrieve;
+    \item consultation and prescription records may become
+    disconnected;
+    \item dispensing information may not be clearly linked to the
+    original prescription;
+    \item administrative activities may be difficult to track.
+\end{itemize}
+
+CampusCare is intended to provide a centralized solution that manages
+the routine healthcare workflow from student check-in through
+consultation, prescription and dispensing.
+
+\section{Objectives}
+
+The main objectives of CampusCare are:
+
+\begin{enumerate}
+    \item To provide secure authentication and role-based access.
+    
+    \item To maintain student profile and identification information.
+    
+    \item To provide an organized student check-in process.
+    
+    \item To manage doctor availability and doctor-specific queues.
+    
+    \item To provide authorized access to student medical history.
+    
+    \item To allow doctors to record consultation information.
+    
+    \item To allow doctors to create structured prescriptions.
+    
+    \item To maintain separate prescription and dispensing records.
+    
+    \item To provide administrative controls and audit information.
+    
+    \item To provide a foundation for RFID/NFC-based identification
+    where suitable hardware and browser support are available.
+\end{enumerate}
+
+\section{Scope}
+
+CampusCare focuses on the routine healthcare-management activities
+performed within a campus health center.
+
+The core scope includes:
+
+\begin{itemize}
+    \item authentication and user management;
+    \item student profiles;
+    \item student identification and check-in;
+    \item doctor availability;
+    \item doctor-specific queue management;
+    \item consultation management;
+    \item medical-history management;
+    \item prescription generation;
+    \item medicine dispensing;
+    \item administration;
+    \item audit information.
+\end{itemize}
+
+RFID/NFC-based identification, advanced real-time functionality,
+medication reminders and advanced reporting can be considered
+extensions to the core system.
+
+Inventory management is outside the current project scope.
+
+\section{Users of the System}
+
+CampusCare provides different interfaces and permissions for the
+following roles.
+
+\subsection{Student}
+
+Students use the system for authentication, identification,
+check-in and accessing information relevant to their visits.
+
+\subsection{Doctor}
+
+Doctors manage their availability, access authorized student medical
+history, conduct consultations and create prescriptions.
+
+\subsection{Receptionist}
+
+Receptionists assist students with identification and check-in and
+manage routine queue-related operations.
+
+\subsection{Pharmacist}
+
+Pharmacists review valid prescriptions and record medicine dispensing.
+
+\subsection{Administrator}
+
+Administrators manage user accounts, system configuration, doctor
+availability, identification credentials and audit information.
+
+
+% ============================================================
+% CHAPTER 2
+% REQUIREMENTS ANALYSIS
+% ============================================================
+
+\chapter{Requirements Analysis}
+
+\section{Functional Requirements}
+
+The functional requirements of CampusCare are listed below.
+
+\begin{longtable}{p{1.3cm}p{4.0cm}p{7.0cm}}
+\toprule
+\textbf{ID} & \textbf{Requirement} & \textbf{Description} \\
+\midrule
+
+FR-01 &
+Authentication &
+The system shall authenticate users and provide access according to
+their assigned role. \\
+
+FR-02 &
+Student Profile &
+The system shall maintain student profile and identification
+information. \\
+
+FR-03 &
+Student Check-in &
+The receptionist shall be able to verify and check in a student. \\
+
+FR-04 &
+Doctor Availability &
+The system shall maintain doctor availability information. \\
+
+FR-05 &
+Queue Management &
+The system shall maintain separate queues for different doctors. \\
+
+FR-06 &
+Queue Status &
+The system shall maintain queue position and status information. \\
+
+FR-07 &
+Medical History &
+An authorized doctor shall be able to access relevant student medical
+history. \\
+
+FR-08 &
+Consultation &
+The doctor shall be able to record the reason for consultation,
+diagnosis and clinical notes. \\
+
+FR-09 &
+Prescription &
+The doctor shall be able to create a structured prescription linked
+to the consultation. \\
+
+FR-10 &
+Dispensing &
+The pharmacist shall be able to record medicine dispensing against a
+valid prescription. \\
+
+FR-11 &
+Administration &
+The administrator shall be able to manage users, configuration and
+operational information. \\
+
+FR-12 &
+RFID/NFC &
+The system may support RFID/NFC-based identification where suitable
+hardware and browser support are available. \\
+
+FR-13 &
+Audit &
+Important administrative and system actions shall be recorded for
+auditing. \\
+
+FR-14 &
+No-show Handling &
+The queue system shall support handling of students who do not
+respond when called. \\
+
+FR-15 &
+Queue Redirection &
+Authorized staff shall be able to redirect a student to an
+appropriate doctor queue when required. \\
+
+\bottomrule
+\end{longtable}
+
+\section{Non-Functional Requirements}
+
+\subsection{Security}
+
+CampusCare shall restrict system functionality and healthcare
+information according to user roles. Authentication and
+authorization are therefore important parts of the system.
+
+\subsection{Reliability}
+
+Student, consultation, prescription and dispensing information should
+remain consistent and available during normal system operation.
+
+\subsection{Usability}
+
+The system should provide simple and understandable interfaces for
+students and healthcare-center staff.
+
+\subsection{Maintainability}
+
+The application should be modular so that individual components can
+be modified and maintained without unnecessary changes to unrelated
+components.
+
+\subsection{Performance}
+
+Routine operations such as login, check-in, queue operations and
+record retrieval should provide reasonable response times under
+normal campus health-center usage.
+
+\subsection{Auditability}
+
+Important administrative and system activities should be traceable
+through audit information.
+
+\section{Technology Stack}
+
+The CampusCare technology stack consists of:
+
+\begin{itemize}
+    \item \textbf{Frontend:} React with Vite
+    \item \textbf{Styling:} Tailwind CSS
+    \item \textbf{Backend:} FastAPI
+    \item \textbf{API:} REST API
+    \item \textbf{Database:} MySQL
+    \item \textbf{Database Management:} SQL with
+    version-controlled migrations
+    \item \textbf{Identification:} Staff-assisted check-in with
+    planned RFID/NFC support
+    \item \textbf{Testing:} Unit and integration testing
+\end{itemize}
+
+
+% ============================================================
+% CHAPTER 3
+% SYSTEM DESIGN AND ARCHITECTURE
+% ============================================================
+
+\chapter{System Design and Architecture}
+
+\section{System Architecture}
+
+CampusCare follows a client-server architecture consisting of a
+frontend, backend and relational database.
+
+The frontend is responsible for providing role-specific interfaces
+for students, doctors, receptionists, pharmacists and administrators.
+
+The FastAPI backend handles authentication, authorization, business
+logic, queue operations, consultation processing, prescriptions and
+administrative operations.
+
+MySQL provides persistent storage for the system data.
+
+The overall architecture can be represented as:
+
+\begin{center}
+\textbf{React Frontend}
+$\rightarrow$
+\textbf{FastAPI REST API}
+$\rightarrow$
+\textbf{Application Logic}
+$\rightarrow$
+\textbf{MySQL Database}
+\end{center}
+
+This separation allows the user interface, application logic and
+database layer to be developed and maintained independently.
+
+% ------------------------------------------------------------
+% CONTEXT DIAGRAM
+% ------------------------------------------------------------
+
+\section{Context Diagram}
+
+The Context Diagram represents CampusCare as a single system and
+shows its interaction with the external actors.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[
+        width=0.90\textwidth,
+        keepaspectratio
+    ]{levle000.jpeg}
+    \caption{CampusCare Context Diagram}
+    \label{fig:context}
+\end{figure}
+
+The main external actors are:
+
+\begin{itemize}
+    \item Student
+    \item Doctor
+    \item Receptionist
+    \item Pharmacist
+    \item Administrator
+\end{itemize}
+
+The diagram provides a high-level view of the information exchanged
+between these actors and the CampusCare system.
+
+% ------------------------------------------------------------
+% LEVEL 1 DFD
+% ------------------------------------------------------------
+
+\section{Level-1 Data Flow Diagram}
+
+The Level-1 DFD decomposes CampusCare into six major processes.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[
+        width=0.95\textwidth,
+        keepaspectratio
+    ]{level1 se (1).png}
+    \caption{CampusCare Level-1 Data Flow Diagram}
+    \label{fig:level1}
+\end{figure}
+
+The six Level-1 processes are:
+
+\begin{enumerate}
+    \item \textbf{1.0 Authentication and User Management}
+    \item \textbf{2.0 Student Profile and Check-in}
+    \item \textbf{3.0 Doctor Availability and Queue Management}
+    \item \textbf{4.0 Consultation and Medical History}
+    \item \textbf{5.0 Prescription and Dispensing}
+    \item \textbf{6.0 Administration and Audit}
+\end{enumerate}
+
+The Level-2 diagrams below provide a more detailed decomposition of
+each of these processes.
+
+% ------------------------------------------------------------
+% LEVEL 2
+% ------------------------------------------------------------
+
+\section{Level-2 Data Flow Diagrams}
+
+\subsection{1.0 Authentication and User Management}
+
+The first Level-2 DFD decomposes authentication and user management
+into smaller activities such as authentication, authorization and
+user-account management.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[
+        width=0.95\textwidth,
+        keepaspectratio
+    ]{level2_1.png}
+    \caption{Level-2 DFD for Authentication and User Management}
+    \label{fig:l2-authentication}
+\end{figure}
+
+\subsection{2.0 Student Profile and Check-in}
+
+This Level-2 DFD describes student identification, profile
+verification and the check-in process.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[
+        width=0.95\textwidth,
+        keepaspectratio
+    ]{level2_2.png}
+    \caption{Level-2 DFD for Student Profile and Check-in}
+    \label{fig:l2-checkin}
+\end{figure}
+
+\subsection{3.0 Doctor Availability and Queue Management}
+
+This Level-2 DFD describes doctor availability, queue creation,
+queue position, queue status, no-show handling and queue redirection.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[
+        width=0.95\textwidth,
+        keepaspectratio
+    ]{level2_3.png}
+    \caption{Level-2 DFD for Doctor Availability and Queue Management}
+    \label{fig:l2-queue}
+\end{figure}
+
+\subsection{4.0 Consultation and Medical History}
+
+This Level-2 DFD describes authorized access to student medical
+history and the recording of consultation information.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[
+        width=0.95\textwidth,
+        keepaspectratio
+    ]{level2_4.png}
+    \caption{Level-2 DFD for Consultation and Medical History}
+    \label{fig:l2-consultation}
+\end{figure}
+
+\subsection{5.0 Prescription and Dispensing}
+
+This Level-2 DFD describes prescription creation by the doctor and
+medicine dispensing by the pharmacist.
+
+The prescription and dispensing records are kept separate. The
+prescription represents the doctor's original instruction, while the
+dispensing record represents the pharmacist's action.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[
+        width=0.95\textwidth,
+        keepaspectratio
+    ]{level2_5.png}
+    \caption{Level-2 DFD for Prescription and Dispensing}
+    \label{fig:l2-prescription}
+\end{figure}
+
+\subsection{6.0 Administration and Audit}
+
+This Level-2 DFD describes administrative operations such as user
+management, doctor availability management, identification
+credential management, record retrieval and audit operations.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[
+        width=0.95\textwidth,
+        keepaspectratio
+    ]{Level6_diag.png}
+    \caption{Level-2 DFD for Administration and Audit}
+    \label{fig:l2-admin}
+\end{figure}
+
+% ------------------------------------------------------------
+% UML
+% ------------------------------------------------------------
+
+\section{UML Design}
+
+UML diagrams provide complementary views of the CampusCare system.
+Four UML diagrams are included:\newline
+
+1. Use Case Diagram \newline
+2. Activity Diagram \newline
+3. Class Diagram\newline
+4. Sequence Diagram\newline
+These diagrams describe the system from the functional, behavioral,
+structural and interaction perspectives.
+
+% ------------------------------------------------------------
+% USE CASE
+% ------------------------------------------------------------
+
+\subsection{Use Case Diagram}
+
+The Use Case Diagram represents the interactions between the
+different CampusCare actors and the system.
+
+The main actors are Student, Doctor, Receptionist, Pharmacist and
+Administrator.
+
+Major use cases include authentication, student check-in, queue
+management, consultation, medical-history access, prescription
+creation, medicine dispensing and administrative management.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[
+        width=0.95\textwidth,
+        keepaspectratio
+    ]{User_case_dig.png}
+    \caption{CampusCare Use Case Diagram}
+    \label{fig:usecase}
+\end{figure}
+
+% ------------------------------------------------------------
+% ACTIVITY
+% ------------------------------------------------------------
+
+\subsection{Activity Diagram}
+
+The Activity Diagram represents the normal workflow of a student
+health-center visit.
+
+The process begins with authentication and student identification,
+followed by check-in, queue assignment, consultation and, when
+required, prescription and dispensing.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[
+        width=0.92\textwidth,
+        keepaspectratio
+    ]{Activity_diag.jpeg}
+    \caption{CampusCare Activity Diagram}
+    \label{fig:activity}
+\end{figure}
+
+The activity model focuses on the normal healthcare workflow and does
+not include any emergency or ambulance workflow.
+
+% ------------------------------------------------------------
+% CLASS
+% ------------------------------------------------------------
+
+\subsection{Class Diagram}
+
+The Class Diagram represents the main structural entities of
+CampusCare and their relationships.
+
+The model covers users and roles, student information, doctor
+availability, visits, queue entries, consultations, prescriptions,
+prescription items, dispensing records, RFID/NFC credentials and
+audit information.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[
+        width=0.95\textwidth,
+        keepaspectratio
+    ]{class_daig.jpeg}
+    \caption{CampusCare Class Diagram}
+    \label{fig:class}
+\end{figure}
+
+The class model is focused on the current CampusCare database and
+does not contain emergency or ambulance classes.
+
+% ------------------------------------------------------------
+% SEQUENCE
+% ------------------------------------------------------------
+
+\subsection{Sequence Diagram}
+
+The Sequence Diagram represents the interaction between the user,
+CampusCare application services and the MySQL database during a
+typical healthcare visit.
+
+The sequence covers authentication, student check-in, queue
+processing, consultation, prescription creation and dispensing.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[
+        width=0.95\textwidth,
+        keepaspectratio
+    ]{Sequence_diag.jpeg}
+    \caption{CampusCare Sequence Diagram}
+    \label{fig:sequence}
+\end{figure}
+
+
+% ============================================================
+% DATABASE DESIGN
+% ============================================================
+
+\section{Database Design}
+
+CampusCare uses MySQL as its relational database.
+
+The database is organized around the lifecycle of a routine student
+visit:
+
+\begin{center}
+\textbf{Student}
+$\rightarrow$
+\textbf{Visit}
+$\rightarrow$
+\textbf{Queue Entry}
+$\rightarrow$
+\textbf{Consultation}
+$\rightarrow$
+\textbf{Prescription}
+$\rightarrow$
+\textbf{Dispensing}
+\end{center}
+
+The major conceptual entities include:
+
+\begin{itemize}
+    \item User
+    \item Student
+    \item Doctor
+    \item Receptionist
+    \item Pharmacist
+    \item Administrator
+    \item RFID Card
+    \item Doctor Availability
+    \item Visit
+    \item Queue Entry
+    \item Consultation
+    \item Prescription
+    \item Prescription Item
+    \item Dispensing Record
+    \item Audit Log
+\end{itemize}
+
+The exact implementation of these entities is maintained through the
+MySQL database schema and version-controlled migration files.
+
+\section{Prescription and Dispensing Separation}
+
+A major database-design decision is to keep prescriptions and
+dispensing as separate records.
+
+A prescription records what the doctor has prescribed. A dispensing
+record records what the pharmacist has actually dispensed.
+
+This separation prevents the dispensing process from silently
+changing the doctor's original prescription and provides a clearer
+record of the healthcare workflow.
+
+\section{Database Migration Strategy}
+
+Database schema changes are managed using version-controlled
+migration files.
+
+This allows changes to the MySQL schema to be tracked and reproduced
+across development environments.
+
+
+% ============================================================
+% CHAPTER 4
+% SYSTEM IMPLEMENTATION
+% ============================================================
+
+\chapter{System Implementation}
+
+\section{Frontend Implementation}
+
+The CampusCare frontend is developed using React with Vite.
+Tailwind CSS is used for styling and interface development.
+
+The frontend provides role-specific screens for the different
+CampusCare users.
+
+\subsection{Login Page}
+
+The login page provides the entry point for user authentication.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[
+        width=0.88\textwidth,
+        keepaspectratio
+    ]{login_page.png}
+    \caption{CampusCare Login Page}
+    \label{fig:login}
+\end{figure}
+
+\subsection{Landing Page}
+
+The landing page provides access to functionality available to the
+authenticated user.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[
+        width=0.88\textwidth,
+        keepaspectratio
+    ]{Lnding_page.jpeg}
+    \caption{CampusCare Landing Page}
+    \label{fig:landing}
+\end{figure}
+
+\subsection{Queue Management Console}
+
+The queue management console allows staff to monitor and manage
+doctor-specific queues.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[
+        width=0.90\textwidth,
+        keepaspectratio
+    ]{live_queue_console.png}
+    \caption{CampusCare Queue Management Console}
+    \label{fig:queue-console}
+\end{figure}
+
+\subsection{Doctor Dashboard -- Patient Record}
+
+The doctor dashboard provides access to authorized student records
+and relevant medical information.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[
+        width=0.90\textwidth,
+        keepaspectratio
+    ]{doctor_dashboard_patient_record.jpeg}
+    \caption{Doctor Dashboard -- Patient Record}
+    \label{fig:doctor-record}
+\end{figure}
+
+\subsection{Doctor Dashboard -- Prescription}
+
+The doctor dashboard also provides functionality for creating
+structured prescriptions.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[
+        width=0.90\textwidth,
+        keepaspectratio
+    ]{doctor_dashboard_prescription.jpeg}
+    \caption{Doctor Dashboard -- Prescription}
+    \label{fig:doctor-prescription}
+\end{figure}
+
+\section{Backend Implementation}
+
+The backend is implemented using FastAPI and exposes REST APIs for
+communication between the frontend and application services.
+
+The backend is responsible for:
+
+\begin{itemize}
+    \item authentication and authorization;
+    \item user and role management;
+    \item student profile management;
+    \item student check-in;
+    \item visit creation;
+    \item doctor availability;
+    \item queue management;
+    \item medical-history access;
+    \item consultation recording;
+    \item prescription management;
+    \item dispensing records;
+    \item administrative operations;
+    \item audit information.
+\end{itemize}
+
+\section{Role-Based Access Control}
+
+Role-based access control separates the capabilities of students,
+doctors, receptionists, pharmacists and administrators.
+
+This ensures that users are given access only to the functions
+required for their responsibilities.
+
+
+% ============================================================
+% CHAPTER 5
+% PROJECT DEVELOPMENT AND MILESTONES
+% ============================================================
+
+\chapter{Project Development and Milestones}
+
+\section{Development Phases}
+
+The development of CampusCare can be organized into the following
+phases.
+
+\begin{longtable}{p{1.2cm}p{4.0cm}p{7.0cm}}
+\toprule
+\textbf{Phase} & \textbf{Area} & \textbf{Major Work} \\
+\midrule
+
+1 &
+Authentication and Profiles &
+Authentication, user roles and student profile management. \\
+
+2 &
+Check-in and Queue &
+Student check-in, doctor availability and queue management. \\
+
+3 &
+Consultation and Medical History &
+Medical-history access and consultation recording. \\
+
+4 &
+Prescription and Dispensing &
+Prescription creation and separate dispensing records. \\
+
+5 &
+Administration and Audit &
+Administrative controls, configuration and audit information. \\
+
+6 &
+Extensions &
+RFID/NFC support, advanced real-time functionality, reminders,
+analytics and additional reporting. \\
+
+\bottomrule
+\end{longtable}
+
+\section{Core System Workflow}
+
+The normal CampusCare workflow is:
+
+\begin{enumerate}
+
+    \item The user authenticates into the system.
+
+    \item The student's identity is verified.
+
+    \item The receptionist checks in the student.
+
+    \item A visit is created.
+
+    \item The student is added to the appropriate doctor's queue.
+
+    \item The doctor calls the next student.
+
+    \item The doctor accesses the student's authorized medical history.
+
+    \item The doctor conducts and records the consultation.
+
+    \item The doctor creates a prescription when required.
+
+    \item The pharmacist reviews the prescription.
+
+    \item The pharmacist records medicine dispensing.
+
+    \item The visit information remains available for future
+    authorized access.
+
+\end{enumerate}
+
+
+% ============================================================
+% CHAPTER 6
+% TESTING AND VALIDATION
+% ============================================================
+
+\chapter{Testing and Validation}
+
+\section{Testing Strategy}
+
+CampusCare is tested through functional, integration and
+role-based testing.
+
+The main areas considered during testing are:
+
+\begin{itemize}
+    \item authentication;
+    \item student check-in;
+    \item doctor availability;
+    \item queue management;
+    \item medical-history access;
+    \item consultation recording;
+    \item prescription creation;
+    \item medicine dispensing;
+    \item role authorization;
+    \item administrative auditing.
+\end{itemize}
+
+\section{Functional Test Cases}
+
+\begin{longtable}{p{1.2cm}p{4.0cm}p{5.5cm}p{1.8cm}}
+\toprule
+\textbf{ID} &
+\textbf{Test Case} &
+\textbf{Expected Result} &
+\textbf{Status} \\
+\midrule
+
+TC-01 &
+Valid Login &
+Valid credentials authenticate the user and provide the correct
+role-based interface. &
+To be recorded \\
+
+TC-02 &
+Invalid Login &
+Invalid credentials are rejected. &
+To be recorded \\
+
+TC-03 &
+Student Check-in &
+A valid student can be checked in by the receptionist. &
+To be recorded \\
+
+TC-04 &
+Queue Assignment &
+The student is added to the correct doctor's queue. &
+To be recorded \\
+
+TC-05 &
+Queue Status &
+The current queue position and status are displayed correctly. &
+To be recorded \\
+
+TC-06 &
+Doctor Availability &
+Doctor availability changes are reflected in queue operations. &
+To be recorded \\
+
+TC-07 &
+Medical History &
+An authorized doctor can access the relevant student medical
+history. &
+To be recorded \\
+
+TC-08 &
+Consultation &
+The doctor can record consultation information. &
+To be recorded \\
+
+TC-09 &
+Prescription &
+The doctor can create a structured prescription linked to the
+consultation. &
+To be recorded \\
+
+TC-10 &
+Dispensing &
+The pharmacist can record dispensing against a valid prescription. &
+To be recorded \\
+
+TC-11 &
+Role Authorization &
+Users cannot access functionality outside their assigned role. &
+To be recorded \\
+
+TC-12 &
+Audit &
+Important administrative actions are recorded correctly. &
+To be recorded \\
+
+\bottomrule
+\end{longtable}
+
+\section{Validation}
+
+The test cases provide a structured way to validate the major
+functional requirements of CampusCare.
+
+The status column is intentionally kept as ``To be recorded'' unless
+actual test results have been measured. This avoids presenting
+unverified testing results as completed results.
+
+
+% ============================================================
+% CHAPTER 7
+% RISKS, CHALLENGES AND MITIGATIONS
+% ============================================================
+
+\chapter{Risks, Challenges and Mitigations}
+
+\section{Security and Privacy}
+
+CampusCare handles student healthcare information, making controlled
+access important. Role-based authorization is used to limit access
+according to user responsibilities.
+
+\section{Queue Consistency}
+
+Queue information can become inconsistent if multiple users attempt
+to update the queue simultaneously.
+
+The backend therefore acts as the authoritative source for queue
+state and operations.
+
+\section{RFID/NFC Dependency}
+
+RFID/NFC functionality depends on suitable hardware and browser or
+device support.
+
+Staff-assisted identification remains available when RFID/NFC
+hardware is not available.
+
+\section{Data Integrity}
+
+Prescription and dispensing information are maintained separately.
+
+This preserves the doctor's original prescription while allowing the
+pharmacist to record the dispensing action.
+
+\section{System Availability}
+
+CampusCare may be required during health-center operating hours.
+Therefore, backend and database availability should be considered
+during deployment.
+
+
+% ============================================================
+% CHAPTER 8
+% PROJECT SCOPE AND DELIVERABLES
+% ============================================================
+
+\chapter{Project Scope and Deliverables}
+
+\section{Core Deliverables}
+
+The core CampusCare system includes:
+
+\begin{itemize}
+
+    \item Authentication and role-based access.
+    
+    \item Student profile management.
+    
+    \item Staff-assisted student identification and check-in.
+    
+    \item Doctor availability management.
+    
+    \item Doctor-specific queue management.
+    
+    \item Queue position and status management.
+    
+    \item Medical-history access for authorized doctors.
+    
+    \item Consultation recording.
+    
+    \item Structured prescription creation.
+    
+    \item Separate dispensing records.
+    
+    \item Administrative management.
+    
+    \item Audit information.
+
+\end{itemize}
+
+\section{Extended Functionality}
+
+The following features can extend the core system:
+
+\begin{itemize}
+    \item RFID/NFC-based student identification;
+    \item advanced real-time queue updates;
+    \item additional queue-management functionality;
+    \item additional operational reports.
+\end{itemize}
+
+\section{Stretch Functionality}
+
+Possible future enhancements include:
+
+\begin{itemize}
+    \item medication reminders;
+    \item aggregated and de-identified health trends;
+    \item advanced reporting and analytics;
+    \item integration with additional campus healthcare services.
+\end{itemize}
+
+\section{Out of Scope}
+
+The following functionality is outside the current project scope:
+
+\begin{itemize}
+    \item inventory management;
+    \item advanced healthcare analytics;
+    \item external healthcare-system integration.
+\end{itemize}
+
+
+% ============================================================
+% CHAPTER 9
+% DISCUSSION AND LIMITATIONS
+% ============================================================
+
+\chapter{Discussion and Limitations}
+
+\section{Discussion}
+
+CampusCare connects the major routine healthcare-center activities
+within a single digital platform.
+
+The system links student check-in and doctor queues with consultation
+records, prescriptions and dispensing. This creates a continuous
+workflow instead of treating each activity as an isolated process.
+
+A key design decision is the separation between prescriptions and
+dispensing records. The prescription represents the doctor's
+instruction, while the dispensing record represents the pharmacist's
+action.
+
+The DFD models describe how information moves through the system,
+while the UML diagrams provide different views of functionality,
+workflow, structure and interaction.
+
+\section{Limitations}
+
+The current project has several limitations:
+
+\begin{itemize}
+
+    \item RFID/NFC functionality depends on available hardware and
+    browser capabilities.
+
+    \item Advanced real-time synchronization may require additional
+    infrastructure.
+
+    \item Quantitative performance measurements require controlled
+    testing under realistic workloads.
+
+    \item Advanced analytics are outside the current core scope.
+
+    \item Inventory management is not included.
+
+\end{itemize}
+
+
+% ============================================================
+% CHAPTER 10
+% CONCLUSION AND FUTURE WORK
+% ============================================================
+
+\chapter{Conclusion and Future Work}
+
+\section{Conclusion}
+
+CampusCare provides a centralized approach to managing routine
+healthcare activities within a campus health center.
+
+The system brings together authentication, student profiles,
+check-in, doctor availability, queue management, consultation,
+medical history, prescriptions, dispensing, administration and
+auditing.
+
+Role-based access separates the responsibilities of students,
+doctors, receptionists, pharmacists and administrators.
+
+The separation of prescriptions and dispensing records helps
+preserve the integrity of doctor-created medical instructions while
+maintaining a clear dispensing history.
+
+The system is represented using Context and Data Flow Diagrams as well
+as UML Use Case, Activity, Class and Sequence Diagrams. Together,
+these models connect the requirements of CampusCare with its system
+design and implementation.
+
+\section{Future Work}
+
+Future development can include:
+
+\begin{itemize}
+    \item broader RFID/NFC integration;
+    \item improved real-time queue updates;
+    \item medication reminders;
+    \item aggregated and de-identified health analytics;
+    \item advanced reporting;
+    \item improved deployment and monitoring;
+    \item integration with additional campus healthcare services.
+\end{itemize}
+
+
+% ============================================================
+% REFERENCES
+% ============================================================
+
+\nocite{*}
+
+\printbibliography[
+    heading=bibintoc,
+    title={References}
+]
+
+% ============================================================
+% END OF DOCUMENT
+% ============================================================
+
+\end{document}
