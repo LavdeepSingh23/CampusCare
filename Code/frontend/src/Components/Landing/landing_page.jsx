@@ -1,6 +1,8 @@
-import React, { useState, useRef } from 'react'
+import React, { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence, useScroll, useMotionValueEvent } from 'framer-motion'
+import Lenis from 'lenis'
+import 'lenis/dist/lenis.css'
 import {
   Activity,
   Calendar,
@@ -24,7 +26,11 @@ import {
   Menu,
 } from 'lucide-react'
 import tiMark from '../../assets/ti-mark.png'
-import { GlassFilter, GlassEffect, GlassButton, GlassDock } from '@/components/ui/liquid-glass'
+import { Timeline } from '@/Components/ui/timeline'
+import { BentoGrid, BentoCard } from '@/Components/ui/bento-grid'
+import { SpotlightCard } from '@/Components/ui/spotlight-card'
+import { BorderBeam } from '@/Components/ui/border-beam'
+import { BlurText } from '@/Components/ui/blur-text'
 
 function cn(...classes) {
   return classes.filter(Boolean).join(' ')
@@ -104,7 +110,7 @@ const INITIAL_QUEUE = [
   },
   {
     id: 2,
-    name: 'Nahar Tharron',
+    name: 'Kriti',
     initials: 'NT',
     rollNo: '102403112',
     waitTime: '7 min',
@@ -119,7 +125,7 @@ const INITIAL_QUEUE = [
   },
   {
     id: 3,
-    name: 'Natha Thparin',
+    name: 'Daman',
     initials: 'NP',
     rollNo: '102403205',
     waitTime: '14 min',
@@ -151,6 +157,48 @@ const INITIAL_QUEUE = [
 
 export default function LandingPage() {
   const navigate = useNavigate()
+  const lenisRef = useRef(null)
+
+  // Initialize Lenis physics-based smooth momentum scrolling
+  useEffect(() => {
+    const lenis = new Lenis({
+      duration: 1.25,
+      easing: (t) => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
+      orientation: 'vertical',
+      gestureOrientation: 'vertical',
+      smoothWheel: true,
+      wheelMultiplier: 1.05,
+      touchMultiplier: 1.8,
+      infinite: false,
+    })
+
+    lenisRef.current = lenis
+
+    function raf(time) {
+      lenis.raf(time)
+      requestAnimationFrame(raf)
+    }
+
+    const rafId = requestAnimationFrame(raf)
+
+    return () => {
+      cancelAnimationFrame(rafId)
+      lenis.destroy()
+      lenisRef.current = null
+    }
+  }, [])
+
+  function scrollToElement(targetId) {
+    if (lenisRef.current) {
+      lenisRef.current.scrollTo(targetId, {
+        offset: -90,
+        duration: 1.2,
+      })
+    } else {
+      const el = document.querySelector(targetId)
+      if (el) el.scrollIntoView({ behavior: 'smooth' })
+    }
+  }
 
   // Animated Navbar scroll and collapse state
   const [isNavExpanded, setIsNavExpanded] = useState(true)
@@ -263,10 +311,7 @@ export default function LandingPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0c2827] text-white selection:bg-teal-400 selection:text-slate-900 overflow-x-hidden relative flex flex-col justify-between">
-      {/* ── Liquid Glass SVG Turbulence & Refraction Filter ── */}
-      <GlassFilter />
-
+    <div className="min-h-screen bg-[#0c2827] text-white selection:bg-teal-400 selection:text-slate-900 overflow-x-hidden relative flex flex-col justify-between scroll-snap-container">
       {/* ── Background: Signature Medical Teal Gradient + 115° Diagonal Pattern ── */}
       <div
         className="fixed inset-0 pointer-events-none z-0"
@@ -299,33 +344,26 @@ export default function LandingPage() {
         }}
       />
 
-      {/* ── Fixed Top-Left: TI Logo ── */}
-      <motion.div
-        whileHover={{ scale: 1.06 }}
-        whileTap={{ scale: 0.96 }}
-        transition={{ type: 'spring', stiffness: 400, damping: 25 }}
-        onClick={() => navigate('/')}
-        className="fixed top-5 sm:top-6 left-5 sm:left-8 z-40 cursor-pointer group flex items-center"
-      >
+      {/* ── Fixed Top-Left: TI Logo (Non-Clickable) ── */}
+      <div className="fixed top-5 sm:top-6 left-5 sm:left-8 z-40 select-none flex items-center pointer-events-none">
         <img
           src={tiMark}
           alt="TI Logo"
-          className="h-9 sm:h-10 w-auto object-contain drop-shadow-md transition-opacity duration-300 group-hover:opacity-90"
+          className="h-9 sm:h-10 w-auto object-contain drop-shadow-md"
         />
-      </motion.div>
+      </div>
 
-      {/* ── Fixed Top-Right: CampusCare Branding ── */}
-      <motion.div
-        whileHover={{ scale: 1.04 }}
-        whileTap={{ scale: 0.96 }}
+      {/* ── Fixed Top-Right: Sign In Action ── */}
+      <motion.button
+        type="button"
+        whileHover={{ scale: 1.05 }}
+        whileTap={{ scale: 0.95 }}
         transition={{ type: 'spring', stiffness: 400, damping: 25 }}
-        onClick={() => navigate('/')}
-        className="fixed top-5 sm:top-6 right-5 sm:right-8 z-40 cursor-pointer group flex items-center gap-2 select-none"
+        onClick={() => navigate('/user_login')}
+        className="fixed top-5 sm:top-6 right-5 sm:right-8 z-50 px-5 py-2 rounded-full text-xs sm:text-sm font-semibold text-slate-950 bg-white hover:bg-slate-100 shadow-[0_4px_18px_rgba(0,0,0,0.25)] hover:shadow-[0_6px_22px_rgba(20,184,166,0.3)] transition-all duration-200 cursor-pointer select-none"
       >
-        <span className="text-base sm:text-lg font-bold tracking-tight text-white/90 group-hover:text-white transition-colors duration-300">
-          CampusCare
-        </span>
-      </motion.div>
+        Sign in
+      </motion.button>
 
       {/* ── Animated Floating Navbar (21st.dev AnimatedNavFramer) ── */}
       <div className="fixed top-6 left-1/2 -translate-x-1/2 z-50">
@@ -352,7 +390,7 @@ export default function LandingPage() {
           {/* Navigation Items */}
           <motion.div
             className={cn(
-              'flex items-center gap-1 sm:gap-2 pr-2.5',
+              'flex items-center gap-1 sm:gap-2 pr-3.5',
               !isNavExpanded && 'pointer-events-none'
             )}
           >
@@ -363,7 +401,7 @@ export default function LandingPage() {
               onClick={(e) => {
                 e.stopPropagation()
                 setActiveWindowTab('queue')
-                document.getElementById('browser-showcase')?.scrollIntoView({ behavior: 'smooth' })
+                scrollToElement('#browser-showcase')
               }}
               className="text-xs font-medium text-teal-100/80 hover:text-white transition-colors duration-200 px-2.5 py-1.5 rounded-full hover:bg-white/10 cursor-pointer"
             >
@@ -377,7 +415,7 @@ export default function LandingPage() {
               onClick={(e) => {
                 e.stopPropagation()
                 setActiveWindowTab('doctor')
-                document.getElementById('browser-showcase')?.scrollIntoView({ behavior: 'smooth' })
+                scrollToElement('#browser-showcase')
               }}
               className="text-xs font-medium text-teal-100/80 hover:text-white transition-colors duration-200 px-2.5 py-1.5 rounded-full hover:bg-white/10 cursor-pointer"
             >
@@ -391,7 +429,7 @@ export default function LandingPage() {
               onClick={(e) => {
                 e.stopPropagation()
                 setActiveWindowTab('rfid')
-                document.getElementById('browser-showcase')?.scrollIntoView({ behavior: 'smooth' })
+                scrollToElement('#browser-showcase')
               }}
               className="text-xs font-medium text-teal-100/80 hover:text-white transition-colors duration-200 px-2.5 py-1.5 rounded-full hover:bg-white/10 cursor-pointer"
             >
@@ -411,20 +449,6 @@ export default function LandingPage() {
             >
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
               <span>Emergency</span>
-            </motion.button>
-
-            {/* Sign In Action Button */}
-            <motion.button
-              variants={itemVariants}
-              whileHover={{ scale: 1.06 }}
-              whileTap={{ scale: 0.94 }}
-              onClick={(e) => {
-                e.stopPropagation()
-                navigate('/user_login')
-              }}
-              className="ml-1 px-3.5 py-1.5 rounded-full text-xs font-semibold text-slate-950 bg-white hover:bg-slate-100 shadow-sm transition-all duration-200 cursor-pointer"
-            >
-              Sign in
             </motion.button>
           </motion.div>
 
@@ -458,7 +482,7 @@ export default function LandingPage() {
       </AnimatePresence>
 
       {/* ── Hero Section (with top padding for floating nav) ── */}
-      <main className="relative z-10 w-full max-w-7xl mx-auto px-4 sm:px-6 pt-24 sm:pt-28 pb-12 flex flex-col items-center">
+      <main className="snap-hero relative z-10 w-full max-w-7xl mx-auto px-4 sm:px-6 pt-24 sm:pt-28 pb-12 flex flex-col items-center">
         {/* Institutional Pill Badge (Strictly NO emojis) */}
         <motion.div
           initial={{ opacity: 0, y: -10 }}
@@ -475,9 +499,9 @@ export default function LandingPage() {
           initial={{ opacity: 0, y: 14 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.1, ease: [0.16, 1, 0.3, 1] }}
-          className="text-3xl sm:text-5xl lg:text-6xl font-bold tracking-tight text-center text-white max-w-4xl leading-[1.12]"
+          className="text-5xl sm:text-7xl lg:text-8xl font-extrabold tracking-tight text-center text-white max-w-4xl leading-[1.05]"
         >
-          One queue. Every patient's full picture.
+          CampusCare
         </motion.h1>
 
         {/* Subtitle */}
@@ -487,32 +511,49 @@ export default function LandingPage() {
           transition={{ duration: 0.6, delay: 0.2, ease: [0.16, 1, 0.3, 1] }}
           className="mt-4 text-base sm:text-lg text-teal-100/80 text-center max-w-2xl font-normal leading-relaxed"
         >
-          Smart campus healthcare — appointments, prescriptions, emergency services, all digitized.
+          Your complete campus health companion — appointments, prescriptions, emergency services, and student wellness, all in one place.
         </motion.p>
 
-        {/* ── Liquid Glass Action Prompt ── */}
+        {/* ── Liquid Glass Action Button ── */}
+        {/* ── Action Prompt Button ── */}
         <motion.div
           initial={{ opacity: 0, y: 14 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.3, ease: [0.16, 1, 0.3, 1] }}
-          className="mt-7 sm:mt-8 w-full max-w-md flex justify-center"
+          className="mt-8 flex flex-col items-center justify-center w-full max-w-lg"
         >
-          <GlassButton
-            onClick={() => navigate('/user_login')}
-            className="border border-white/25 bg-white/10 hover:bg-white/15 shadow-2xl"
+          <motion.button
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+            onClick={() => scrollToElement('#browser-showcase')}
+            className="w-full py-4 px-8 rounded-full border border-teal-500/30 bg-[#0e3b38]/90 hover:bg-[#124d49] text-white shadow-[0_10px_35px_rgba(0,0,0,0.35)] hover:shadow-[0_12px_40px_rgba(20,184,166,0.3)] backdrop-blur-xl transition-all duration-300 cursor-pointer flex items-center justify-center gap-3 text-base sm:text-lg font-medium"
           >
-            <div className="flex items-center gap-3 text-xs sm:text-sm font-medium text-white tracking-wide">
-              <span className="h-2 w-2 rounded-full bg-teal-300 animate-pulse" />
-              <span>How can CampusCare help you today?</span>
-              <ArrowRight className="w-3.5 h-3.5 text-teal-300 ml-1" />
-            </div>
-          </GlassButton>
+            <span className="h-2.5 w-2.5 rounded-full bg-teal-300 animate-pulse" />
+            <span>How can CampusCare help you today?</span>
+            <ArrowRight className="w-4 h-4 text-teal-300 ml-1" />
+          </motion.button>
+
+          {/* Subtle Floating Scroll Hint */}
+          <motion.button
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 0.75, y: [0, 4, 0] }}
+            whileHover={{ opacity: 1, scale: 1.05 }}
+            transition={{
+              opacity: { delay: 0.8, duration: 0.5 },
+              y: { repeat: Infinity, duration: 2.2, ease: 'easeInOut' },
+            }}
+            onClick={() => scrollToElement('#browser-showcase')}
+            className="mt-1 flex flex-col items-center gap-1 text-teal-200/60 hover:text-teal-200 text-[11px] font-medium transition-colors cursor-pointer group"
+          >
+            <span className="tracking-wider uppercase text-[10px]">Scroll to Explore Console</span>
+            <ChevronDown className="w-4 h-4 text-teal-300 group-hover:translate-y-0.5 transition-transform" />
+          </motion.button>
         </motion.div>
 
         {/* ── Elevated Safari/macOS Window Showcase (Front-Facing, Smooth & Crisp) ── */}
         <div
           id="browser-showcase"
-          className="relative w-full max-w-5xl mt-12 mb-8 flex flex-col items-center"
+          className="snap-showcase relative w-full max-w-5xl mt-10 mb-8 flex flex-col items-center"
         >
           {/* Ambient Diffuse Teal Aura behind window */}
           <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-5/6 h-5/6 bg-teal-400/25 blur-[120px] rounded-full pointer-events-none" />
@@ -1032,6 +1073,263 @@ export default function LandingPage() {
         </div>
       </main>
 
+      {/* ── SECTION 1: HOW IT WORKS TIMELINE (Aceternity UI + ReactBits) ── */}
+      <section className="snap-section relative z-10 w-full py-20 px-4 sm:px-6">
+        <div className="max-w-4xl mx-auto text-center mb-6">
+          <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-teal-500/10 border border-teal-500/20 text-xs font-semibold text-teal-300 mb-4">
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>Seamless Student Care Journey</span>
+          </div>
+          <div className="flex justify-center">
+            <BlurText
+              text="How CampusCare Works"
+              className="text-3xl sm:text-5xl font-extrabold text-white tracking-tight"
+            />
+          </div>
+          <p className="mt-4 text-sm sm:text-base text-teal-100/70 max-w-xl mx-auto">
+            From tapping your university card to receiving digital follow-up care in three synchronized steps.
+          </p>
+        </div>
+
+        <Timeline
+          data={[
+            {
+              title: "Tap TIET RFID Smart Card",
+              content: (
+                <SpotlightCard className="p-5 sm:p-6 bg-white/[0.04]">
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="p-2.5 rounded-xl bg-teal-500/20 text-teal-300 border border-teal-500/30">
+                      <CreditCard className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h4 className="text-base font-bold text-white">Instant Kiosk Check-In</h4>
+                      <p className="text-xs text-teal-300/80 font-medium">Under 1.2 seconds token generation</p>
+                    </div>
+                  </div>
+                  <p className="text-xs sm:text-sm text-teal-100/75 leading-relaxed">
+                    Walk up to any TIET Health Centre turnstile or kiosk and tap your physical student ID card. CampusCare auto-reads your roll number, verifies enrolled student status, and issues your live OPD token.
+                  </p>
+                  <div className="mt-4 pt-3 border-t border-white/10 flex items-center justify-between text-xs text-teal-200/80">
+                    <span className="inline-flex items-center gap-1.5">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>Zero paper slips</span>
+                    </span>
+                    <span className="text-teal-400/80 font-mono text-[11px]">RFID MIFARE 13.56 MHz</span>
+                  </div>
+                </SpotlightCard>
+              ),
+            },
+            {
+              title: "Real-Time Queue & Consultation",
+              content: (
+                <SpotlightCard className="p-5 sm:p-6 bg-white/[0.04]">
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="p-2.5 rounded-xl bg-teal-500/20 text-teal-300 border border-teal-500/30">
+                      <Stethoscope className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h4 className="text-base font-bold text-white">Live OPD Room Assignment</h4>
+                      <p className="text-xs text-teal-300/80 font-medium">Synchronized patient dispatch</p>
+                    </div>
+                  </div>
+                  <p className="text-xs sm:text-sm text-teal-100/75 leading-relaxed">
+                    Track your exact queue position from your phone or lobby displays. When your token is summoned, step into the consultation suite where the on-duty physician has your medical vitals and diagnosis ready.
+                  </p>
+                  <div className="mt-4 pt-3 border-t border-white/10 flex items-center justify-between text-xs text-teal-200/80">
+                    <span className="inline-flex items-center gap-1.5">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>Live lobby display sync</span>
+                    </span>
+                    <span className="text-teal-400/80 font-mono text-[11px]">Room 101 - 104</span>
+                  </div>
+                </SpotlightCard>
+              ),
+            },
+            {
+              title: "Digital E-Prescription & Pharmacy",
+              content: (
+                <SpotlightCard className="p-5 sm:p-6 bg-white/[0.04]">
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="p-2.5 rounded-xl bg-teal-500/20 text-teal-300 border border-teal-500/30">
+                      <FileText className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h4 className="text-base font-bold text-white">Encrypted Cloud Prescription</h4>
+                      <p className="text-xs text-teal-300/80 font-medium">Automatic pharmacy dispatch</p>
+                    </div>
+                  </div>
+                  <p className="text-xs sm:text-sm text-teal-100/75 leading-relaxed">
+                    Doctor notes and dosage guidelines appear on your student dashboard immediately. The university pharmacy receives medication orders in real-time, allowing quick, error-free medicine dispensing.
+                  </p>
+                  <div className="mt-4 pt-3 border-t border-white/10 flex items-center justify-between text-xs text-teal-200/80">
+                    <span className="inline-flex items-center gap-1.5">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>Instant mobile access</span>
+                    </span>
+                    <span className="text-teal-400/80 font-mono text-[11px]">TIET Verified E-Rx</span>
+                  </div>
+                </SpotlightCard>
+              ),
+            },
+          ]}
+        />
+      </section>
+
+      {/* ── SECTION 3: FEATURE BENTO GRID (Magic UI + ReactBits) ── */}
+      <section className="snap-section relative z-10 w-full py-20 px-4 sm:px-6">
+        <div className="max-w-4xl mx-auto text-center mb-12">
+          <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-teal-500/10 border border-teal-500/20 text-xs font-semibold text-teal-300 mb-4">
+            <Shield className="w-3.5 h-3.5" />
+            <span>Integrated Healthcare Suite</span>
+          </div>
+          <div className="flex justify-center">
+            <BlurText
+              text="Everything Your Campus Health Centre Needs"
+              className="text-3xl sm:text-5xl font-extrabold text-white tracking-tight"
+            />
+          </div>
+          <p className="mt-4 text-sm sm:text-base text-teal-100/70 max-w-xl mx-auto">
+            High-availability digital infrastructure uniting students, doctors, kiosks, and dispensary teams.
+          </p>
+        </div>
+
+        <BentoGrid>
+          <BentoCard
+            name="Smart OPD Queue & Patient Telemetry"
+            description="Real-time multi-room queuing system with live token calling, estimated consultation times, and patient vitals telemetry directly visible on the doctor console."
+            Icon={Activity}
+            className="md:col-span-2"
+            cta="Explore Live Queue"
+            onCtaClick={() => {
+              setActiveWindowTab('queue')
+              scrollToElement('#browser-showcase')
+            }}
+            background={
+              <div className="absolute inset-0 bg-gradient-to-br from-teal-500/15 via-transparent to-teal-900/30" />
+            }
+          />
+
+          <BentoCard
+            name="Contactless RFID Kiosk"
+            description="Tap your TIET university smart card at the health centre entrance for automatic queue registration with zero manual paperwork."
+            Icon={CreditCard}
+            className="md:col-span-1"
+            cta="Simulate RFID Tap"
+            onCtaClick={() => {
+              setActiveWindowTab('rfid')
+              scrollToElement('#browser-showcase')
+            }}
+            background={
+              <div className="absolute inset-0 bg-gradient-to-b from-emerald-500/15 via-transparent to-transparent" />
+            }
+          />
+
+          <BentoCard
+            name="Google Workspace SSO"
+            description="Secure student sign-in with institutional @thapar.edu authentication, instant verified role issuance, and protected medical profile records."
+            Icon={Lock}
+            className="md:col-span-1"
+            cta="Sign In Now"
+            onCtaClick={() => navigate('/user_login')}
+            background={
+              <div className="absolute inset-0 bg-gradient-to-t from-sky-500/15 to-transparent" />
+            }
+          />
+
+          <BentoCard
+            name="Instant E-Prescription Desk"
+            description="Prescriptions generated during consultation sync straight to the campus dispensary with dosage frequencies (TID/HS) and doctor instructions."
+            Icon={FileText}
+            className="md:col-span-1"
+            cta="Doctor Console"
+            onCtaClick={() => {
+              setActiveWindowTab('doctor')
+              scrollToElement('#browser-showcase')
+            }}
+            background={
+              <div className="absolute inset-0 bg-gradient-to-tl from-amber-500/15 via-transparent to-transparent" />
+            }
+          />
+
+          <BentoCard
+            name="Student Health Dashboard"
+            description="Students view ongoing prescriptions, appointment history, verified doctor notes, and clinical vital signs (BP, SpO2, pulse) in a clean personal portal."
+            Icon={Users}
+            className="md:col-span-1"
+            cta="Student Portal"
+            onCtaClick={() => navigate('/user_login')}
+            background={
+              <div className="absolute inset-0 bg-gradient-to-tr from-purple-500/15 via-transparent to-transparent" />
+            }
+          />
+        </BentoGrid>
+      </section>
+
+      {/* ── SECTION 4: CTA BANNER (Magic UI BorderBeam + Dual Actions) ── */}
+      <section className="snap-section relative z-10 w-full py-20 px-4 sm:px-6">
+        <div className="relative max-w-4xl mx-auto rounded-3xl overflow-hidden p-8 sm:p-14 text-center border border-teal-500/20 shadow-2xl bg-gradient-to-b from-teal-900/40 via-[#0c2827]/90 to-[#0c2827]">
+          {/* Luminous Neon Traveling Border Beam */}
+          <BorderBeam duration={8} colorFrom="#2dd4bf" colorTo="#0d9488" />
+
+          {/* Ambient Diffuse Background Glow */}
+          <div className="absolute -top-32 left-1/2 -translate-x-1/2 w-96 h-96 bg-teal-400/20 blur-[110px] rounded-full pointer-events-none" />
+
+          {/* Institutional Badge */}
+          <div className="relative z-10 inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/10 border border-white/20 backdrop-blur-md text-xs font-semibold text-teal-200 mb-6">
+            <Building2 className="w-3.5 h-3.5 text-teal-300" />
+            <span>Thapar Institute of Engineering & Technology</span>
+          </div>
+
+          {/* Headline */}
+          <h2 className="relative z-10 text-3xl sm:text-5xl font-extrabold tracking-tight text-white max-w-2xl mx-auto leading-tight">
+            Ready to Experience Smarter Campus Care?
+          </h2>
+
+          <p className="relative z-10 mt-4 text-sm sm:text-base text-teal-100/75 max-w-xl mx-auto leading-relaxed">
+            Sign in with your verified @thapar.edu Google Workspace student account, or launch the dedicated medical faculty consultation desk.
+          </p>
+
+          {/* Dual CTAs */}
+          <div className="relative z-10 mt-8 flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4">
+            <motion.button
+              whileHover={{ scale: 1.04 }}
+              whileTap={{ scale: 0.96 }}
+              onClick={() => navigate('/user_login')}
+              className="w-full sm:w-auto px-7 py-3.5 rounded-full text-xs sm:text-sm font-bold text-slate-950 bg-white hover:bg-slate-100 shadow-[0_4px_20px_rgba(255,255,255,0.25)] transition-all cursor-pointer flex items-center justify-center gap-2"
+            >
+              <span>Sign in with @thapar.edu</span>
+              <ArrowRight className="w-4 h-4" />
+            </motion.button>
+
+            <motion.button
+              whileHover={{ scale: 1.04 }}
+              whileTap={{ scale: 0.96 }}
+              onClick={() => navigate('/user_login')}
+              className="w-full sm:w-auto px-7 py-3.5 rounded-full text-xs sm:text-sm font-semibold text-teal-100 border border-teal-500/40 bg-teal-500/10 hover:bg-teal-500/20 backdrop-blur-md transition-all cursor-pointer flex items-center justify-center gap-2"
+            >
+              <Stethoscope className="w-4 h-4 text-teal-300" />
+              <span>Doctor Consultation Portal</span>
+            </motion.button>
+          </div>
+
+          {/* Trust Subtext */}
+          <div className="relative z-10 mt-8 pt-6 border-t border-white/10 flex flex-wrap items-center justify-center gap-6 text-xs text-teal-200/60 font-medium">
+            <span className="flex items-center gap-1.5">
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+              <span>Institutional Single Sign-On</span>
+            </span>
+            <span className="flex items-center gap-1.5">
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+              <span>RFID Kiosk Enabled</span>
+            </span>
+            <span className="flex items-center gap-1.5">
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+              <span>HIPAA-Inspired Security</span>
+            </span>
+          </div>
+        </div>
+      </section>
+
       {/* ── Bottom Trust & Institutional Bar (Strictly NO emojis) ── */}
       <footer className="relative z-10 w-full border-t border-white/10 bg-black/20 backdrop-blur-md py-4 px-6">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4 text-xs font-medium text-teal-100/70">
@@ -1043,15 +1341,15 @@ export default function LandingPage() {
           <div className="flex flex-wrap items-center justify-center gap-6">
             <span className="flex items-center gap-1.5">
               <span className="h-1.5 w-1.5 rounded-full bg-teal-400" />
-              Trusted by 500+ Thapar students
+              Verified @thapar.edu authentication
             </span>
             <span className="flex items-center gap-1.5">
               <span className="h-1.5 w-1.5 rounded-full bg-teal-400" />
-              4 specialist doctors
+              Contactless RFID smart check-in
             </span>
             <span className="flex items-center gap-1.5">
               <span className="h-1.5 w-1.5 rounded-full bg-teal-400" />
-              RFID-enabled check-in
+              Instant digital e-prescriptions
             </span>
           </div>
 
