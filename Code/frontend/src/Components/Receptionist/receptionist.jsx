@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useQueue, DOCTORS, DIRECTORY, checkInStudent, dispense, logAction, resetDemo } from "../../context/queueStore";
 import { useAuth } from "../../context/AuthContext";
 import { Sidebar, SidebarBody, SidebarLink } from "../ui/sidebar";
+import campusCareLogo from "../../assets/campuscare-logo.png";
 import {
   Users,
   Stethoscope,
@@ -108,9 +109,11 @@ export default function ReceptionDashboard({ onLogout, initialPage = "reception"
           <div className="flex flex-col flex-1 overflow-y-auto overflow-x-hidden">
             {/* Top Brand Logo matching Acet Labs in screenshot */}
             <div className="flex items-center gap-2.5 px-1 py-1 mb-6">
-              <div className="h-6 w-6 bg-slate-900 rounded-lg flex items-center justify-center text-white shrink-0 shadow-xs">
-                <Icon name="dispensing" size={14} />
-              </div>
+              <img
+                src={campusCareLogo}
+                alt="CampusCare"
+                className="h-7 w-7 rounded-lg object-contain shadow-xs shrink-0"
+              />
               <motion.div
                 animate={{
                   display: sidebarOpen ? "block" : "none",

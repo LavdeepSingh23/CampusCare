@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { useParams } from 'react-router-dom'
+import campusCareLogo from '../../assets/campuscare-logo.png'
 import {
   Sun,
   Sunset,
@@ -672,11 +673,12 @@ function Sidebar({ tab, onChange, profile, logout }) {
       aria-label="Sidebar"
       className="group hidden lg:flex fixed inset-y-0 left-0 z-40 flex-col overflow-hidden bg-white border-r border-slate-200 p-3 w-[76px] hover:w-64 focus-within:w-64 hover:shadow-2xl focus-within:shadow-2xl cc-anim transition-[width,box-shadow] duration-300 ease-out"
     >
-      {/* Brand — icon stays put */}
       <div className="flex items-center gap-2.5 pt-1 px-[6px]">
-        <div className="w-10 h-10 rounded-xl bg-teal-800 text-white flex items-center justify-center shrink-0">
-          <Stethoscope className="w-[18px] h-[18px]" aria-hidden="true" />
-        </div>
+        <img
+          src={campusCareLogo}
+          alt="CampusCare"
+          className="w-10 h-10 rounded-xl object-contain shadow-sm shrink-0"
+        />
         <span className={'cc-display text-lg font-semibold text-slate-900 ' + label}>CampusCare</span>
       </div>
 

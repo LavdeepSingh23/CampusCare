@@ -40,6 +40,7 @@ import {
   ChevronRight,
 } from 'lucide-react'
 import tiMark from '../../assets/ti-mark.png'
+import campusCareLogo from '../../assets/campuscare-logo.png'
 import { LiquidGlassCard, LiquidGlassFilter } from '../ui/liquid-glass'
 
 function cn(...classes) {
@@ -558,13 +559,25 @@ export default function LandingPage() {
         }}
       />
 
-      {/* ── Fixed Top-Left: TI Logo (Non-Clickable) ── */}
-      <div className="fixed top-5 sm:top-6 left-5 sm:left-8 z-40 select-none flex items-center pointer-events-none">
-        <img
-          src={tiMark}
-          alt="TI Logo"
-          className="h-9 sm:h-10 w-auto object-contain drop-shadow-md"
-        />
+      {/* ── Fixed Top-Left: CampusCare Brand Logo (Click to scroll top) ── */}
+      <div className="fixed top-5 sm:top-6 left-5 sm:left-8 z-40 select-none flex items-center gap-3">
+        <div
+          onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+          className="p-1 rounded-2xl bg-white/10 backdrop-blur-md border border-white/20 shadow-md flex items-center justify-center cursor-pointer transition-transform hover:scale-105"
+          style={{
+            boxShadow: 'inset 1.5px 1.5px 1.5px 0 rgba(255,255,255,0.35), 0 8px 20px rgba(0,0,0,0.3)',
+          }}
+        >
+          <img
+            src={campusCareLogo}
+            alt="CampusCare Logo"
+            className="h-8 w-8 sm:h-9 sm:w-9 rounded-xl object-contain drop-shadow"
+          />
+        </div>
+        <div className="hidden sm:flex flex-col">
+          <span className="text-xs font-bold tracking-tight text-white leading-tight">CampusCare</span>
+          <span className="text-[10px] text-teal-100/70 font-medium leading-tight">TIET Health Centre</span>
+        </div>
       </div>
 
       {/* ── Fixed Top-Right: Sign In Action ── */}
@@ -596,12 +609,16 @@ export default function LandingPage() {
             boxShadow: 'inset 1.5px 1.5px 2px 0 rgba(255,255,255,0.35), inset -1.5px -1.5px 2px 0 rgba(255,255,255,0.2), 0 12px 36px rgba(0,0,0,0.4)',
           }}
         >
-          {/* Left Icon in Expanded Navbar */}
+          {/* Left Brand Logo in Expanded Navbar */}
           <motion.div
             variants={logoVariants}
-            className="flex-shrink-0 flex items-center font-semibold pl-3.5 pr-1 text-white/90"
+            className="flex-shrink-0 flex items-center pl-3 pr-1"
           >
-            <Stethoscope className="h-4 w-4" />
+            <img
+              src={campusCareLogo}
+              alt="CampusCare"
+              className="h-5 w-5 rounded-md object-contain shadow-sm"
+            />
           </motion.div>
 
           {/* Navigation Items */}
@@ -709,14 +726,21 @@ export default function LandingPage() {
 
       {/* ── HERO SECTION: PRESERVED 100% UNCHANGED AS CONFIRMED ── */}
       <main className="snap-hero relative z-10 w-full max-w-7xl mx-auto px-4 sm:px-6 pt-24 sm:pt-28 pb-8 flex flex-col items-center">
-        {/* Institutional Pill Badge */}
+        {/* Official CampusCare Logo + Institutional Pill Badge */}
         <motion.div
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
           className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/10 border border-white/20 backdrop-blur-md text-xs font-medium text-teal-100 mb-5 shadow-sm hover:bg-white/15 transition-colors duration-300"
+          style={{
+            boxShadow: 'inset 1px 1px 1px 0 rgba(255,255,255,0.3), inset -1px -1px 1px 0 rgba(255,255,255,0.15)',
+          }}
         >
-          <Building2 className="w-3.5 h-3.5 text-white/80" />
+          <img
+            src={campusCareLogo}
+            alt="CampusCare Emblem"
+            className="w-4 h-4 rounded-full object-contain"
+          />
           <span>Thapar Institute of Engineering & Technology</span>
         </motion.div>
 
@@ -1442,8 +1466,12 @@ export default function LandingPage() {
       {/* ── FOOTER: OFFICIAL INSTITUTIONAL BRANDING ── */}
       <footer className="relative z-10 w-full border-t border-white/10 bg-black/30 backdrop-blur-md py-6 px-6">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4 text-xs font-medium text-white/70">
-          <div className="flex items-center gap-2 text-white">
-            <Shield className="w-4 h-4 text-white" />
+          <div className="flex items-center gap-2.5 text-white">
+            <img
+              src={campusCareLogo}
+              alt="CampusCare"
+              className="h-5 w-5 rounded-md object-contain shadow-sm"
+            />
             <span>Official TIET Campus Health Centre Portal • CampusCare</span>
           </div>
 

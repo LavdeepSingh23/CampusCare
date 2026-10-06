@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { Eye, EyeOff, Stethoscope, Building2, ArrowLeft, CheckCircle2, AlertCircle, GraduationCap, X, Loader2, UserCheck } from 'lucide-react'
 import tiMark from '../../assets/ti-mark.png'
+import campusCareLogo from '../../assets/campuscare-logo.png'
 
 // --- HELPER COMPONENTS (ICONS) ---
 
@@ -229,9 +230,9 @@ export default function Login() {
             className="flex items-center gap-2.5 cursor-pointer group"
           >
             <img
-              src={tiMark}
-              alt="TI Logo"
-              className="h-8 w-auto object-contain transition-transform group-hover:scale-105"
+              src={campusCareLogo}
+              alt="CampusCare Logo"
+              className="h-8 w-8 rounded-xl object-contain transition-transform group-hover:scale-105 shadow-sm"
             />
             <span className="text-lg font-bold tracking-tight text-slate-900">
               CampusCare
