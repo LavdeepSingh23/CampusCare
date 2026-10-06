@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
-import { Eye, EyeOff, Stethoscope, Building2, ArrowLeft, CheckCircle2, AlertCircle, GraduationCap, X, Loader2 } from 'lucide-react'
+import { Eye, EyeOff, Stethoscope, Building2, ArrowLeft, CheckCircle2, AlertCircle, GraduationCap, X, Loader2, UserCheck } from 'lucide-react'
 import tiMark from '../../assets/ti-mark.png'
 
 // --- HELPER COMPONENTS (ICONS) ---
@@ -56,14 +56,20 @@ const TestimonialCard = ({ avatarText, name, handle, text, isSpecial }) => (
 // --- MAIN LOGIN COMPONENT ---
 
 export default function Login() {
-  const { login, loginStudentGoogle, error, setError, loading } = useAuth()
+  const { login, loginReceptionist, loginStudentGoogle, error, setError, loading } = useAuth()
   const navigate = useNavigate()
 
-  const [mode, setMode] = useState('doctor') // 'doctor' | 'student'
+  const [mode, setMode] = useState('doctor') // 'doctor' | 'student' | 'receptionist'
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [keepSignedIn, setKeepSignedIn] = useState(false)
+
+  // Receptionist Portal State
+  const [receptionEmail, setReceptionEmail] = useState('reception@thapar.edu')
+  const [receptionPassword, setReceptionPassword] = useState('reception123')
+  const [showReceptionPassword, setShowReceptionPassword] = useState(false)
+  const [receptionKeepSignedIn, setReceptionKeepSignedIn] = useState(false)
 
   const [rollNumber, setRollNumber] = useState('')
   const [rollError, setRollError] = useState('')
@@ -135,6 +141,21 @@ export default function Login() {
     login(email, password).then((success) => {
       if (success) navigate('/doctor_dashboard')
     })
+  }
+
+  async function handleReceptionistSubmit(e) {
+    e.preventDefault()
+    setError('')
+    const success = await loginReceptionist(receptionEmail, receptionPassword)
+    if (success) {
+      navigate('/reception_dashboard')
+    }
+  }
+
+  function handleAutoFillReceptionist() {
+    setReceptionEmail('reception@thapar.edu')
+    setReceptionPassword('reception123')
+    setError('')
   }
 
   async function handleGoogleCredentialResponse(response) {
@@ -238,16 +259,21 @@ export default function Login() {
               <p className="mt-1 text-sm text-slate-500">
                 {mode === 'doctor'
                   ? "Sign in to CampusCare's Doctor & Medical Staff Console"
+                  : mode === 'receptionist'
+                  ? "Sign in to CampusCare's Front Desk & Reception Console"
                   : 'Look up your live prescriptions and medical history'}
               </p>
             </div>
 
-            {/* Mode Toggle (Doctor / Student) */}
-            <div className="inline-flex bg-slate-100 rounded-full p-1 self-start border border-slate-200/80">
+            {/* Mode Toggle (Doctor / Student / Receptionist) */}
+            <div className="inline-flex bg-slate-100 rounded-full p-1 self-start border border-slate-200/80 flex-wrap gap-1 sm:gap-0">
               <button
                 type="button"
-                onClick={() => setMode('doctor')}
-                className={`px-5 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer ${
+                onClick={() => {
+                  setMode('doctor')
+                  setError('')
+                }}
+                className={`px-4 sm:px-5 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer ${
                   mode === 'doctor'
                     ? 'bg-white text-slate-900 shadow-sm'
                     : 'text-slate-500 hover:text-slate-800'
@@ -257,8 +283,11 @@ export default function Login() {
               </button>
               <button
                 type="button"
-                onClick={() => setMode('student')}
-                className={`px-5 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer ${
+                onClick={() => {
+                  setMode('student')
+                  setError('')
+                }}
+                className={`px-4 sm:px-5 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer ${
                   mode === 'student'
                     ? 'bg-white text-slate-900 shadow-sm'
                     : 'text-slate-500 hover:text-slate-800'
@@ -266,13 +295,140 @@ export default function Login() {
               >
                 Student Portal
               </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setMode('receptionist')
+                  setError('')
+                }}
+                className={`px-4 sm:px-5 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer ${
+                  mode === 'receptionist'
+                    ? 'bg-white text-slate-900 shadow-sm'
+                    : 'text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                Receptionist Portal
+              </button>
             </div>
 
             {/* Error Message */}
-            {mode === 'doctor' && error && (
+            {(mode === 'doctor' || mode === 'receptionist') && error && (
               <div className="bg-red-50 border border-red-200 rounded-2xl px-4 py-3 text-xs text-red-700 font-medium">
                 {error}
               </div>
+            )}
+
+            {/* ── RECEPTIONIST FORM ── */}
+            {mode === 'receptionist' && (
+              <form className="space-y-4" onSubmit={handleReceptionistSubmit}>
+                {/* Institutional Badge */}
+                <div className="rounded-2xl border border-teal-500/25 bg-teal-50/70 p-3.5 flex items-start gap-3">
+                  <div className="p-2 rounded-xl bg-teal-800 text-white shrink-0 mt-0.5">
+                    <UserCheck className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-xs font-semibold text-teal-950">
+                      Front Desk & Dispensary Terminal
+                    </h3>
+                    <p className="text-[11px] text-teal-800/80 leading-relaxed mt-0.5">
+                      TIET Health Centre patient intake, live OPD queue management, and RFID dispensing.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Dummy Credential Quick Pill */}
+                <div className="flex items-center justify-between p-3 rounded-2xl bg-slate-50 border border-slate-200 text-xs">
+                  <div className="leading-tight">
+                    <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">Dummy Credentials</span>
+                    <span className="font-mono text-slate-700 text-xs font-semibold">reception@thapar.edu • reception123</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleAutoFillReceptionist}
+                    className="px-3 py-1.5 text-xs font-semibold rounded-xl bg-teal-50 text-teal-700 hover:bg-teal-100 border border-teal-200/70 transition-colors cursor-pointer shadow-xs"
+                  >
+                    Auto-fill
+                  </button>
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-slate-600 mb-1.5 block">
+                    Receptionist / Front Desk Email
+                  </label>
+                  <GlassInputWrapper>
+                    <input
+                      name="receptionEmail"
+                      type="email"
+                      required
+                      autoFocus
+                      value={receptionEmail}
+                      onChange={(e) => setReceptionEmail(e.target.value)}
+                      placeholder="reception@thapar.edu"
+                      className="w-full bg-transparent text-sm p-4 rounded-2xl focus:outline-none text-slate-900 placeholder:text-slate-400"
+                    />
+                  </GlassInputWrapper>
+                  <p className="text-[11px] text-slate-400 mt-1">
+                    Front desk console for student intake and dispensary management.
+                  </p>
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-slate-600 mb-1.5 block">
+                    Password
+                  </label>
+                  <GlassInputWrapper>
+                    <div className="relative">
+                      <input
+                        name="receptionPassword"
+                        type={showReceptionPassword ? 'text' : 'password'}
+                        required
+                        value={receptionPassword}
+                        onChange={(e) => setReceptionPassword(e.target.value)}
+                        placeholder="Enter reception security password"
+                        className="w-full bg-transparent text-sm p-4 pr-12 rounded-2xl focus:outline-none text-slate-900 placeholder:text-slate-400"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowReceptionPassword(!showReceptionPassword)}
+                        className="absolute inset-y-0 right-3.5 flex items-center text-slate-400 hover:text-slate-700 transition-colors"
+                      >
+                        {showReceptionPassword ? (
+                          <EyeOff className="w-4 h-4" />
+                        ) : (
+                          <Eye className="w-4 h-4" />
+                        )}
+                      </button>
+                    </div>
+                  </GlassInputWrapper>
+                </div>
+
+                <div className="flex items-center justify-between text-xs pt-1">
+                  <label className="flex items-center gap-2 text-slate-600 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={receptionKeepSignedIn}
+                      onChange={(e) => setReceptionKeepSignedIn(e.target.checked)}
+                      className="rounded accent-teal-700"
+                    />
+                    <span>Keep me signed in</span>
+                  </label>
+                  <button
+                    type="button"
+                    title="Contact administrator"
+                    className="hover:underline text-teal-700 font-medium transition-colors cursor-not-allowed opacity-80"
+                  >
+                    Reset password
+                  </button>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full rounded-2xl bg-teal-800 py-3.5 font-semibold text-white hover:bg-teal-900 disabled:bg-slate-400 transition-all cursor-pointer shadow-md hover:scale-[1.01] active:scale-[0.99] text-sm mt-2"
+                >
+                  {loading ? 'Authenticating…' : 'Sign In as Receptionist'}
+                </button>
+              </form>
             )}
 
             {/* ── DOCTOR FORM ── */}
@@ -505,6 +661,8 @@ export default function Login() {
         <div className="text-center text-[11px] text-slate-400 mt-6">
           {mode === 'doctor'
             ? 'Doctor access is restricted to verified medical faculty.'
+            : mode === 'receptionist'
+            ? 'Front desk access is restricted to authorized dispensary and reception staff.'
             : 'Your medical telemetry is encrypted under TIET student health privacy guidelines.'}
         </div>
 
@@ -713,23 +871,45 @@ export default function Login() {
 
           {/* Bottom: Testimonials (Matching user layout specifications) */}
           <div className="relative z-10 flex flex-col xl:flex-row gap-3.5 w-full">
-            <TestimonialCard
-              avatarText="NK"
-              name="Dr. Neha Kapoor"
-              handle="General Physician • Room 104"
-              text="I stopped juggling paper charts between patients — everything's already pulled up before they sit down."
-              isSpecial={true}
-            />
-
-            <div className="hidden xl:block">
-              <TestimonialCard
-                avatarText="SS"
-                name="Simar Singh"
-                handle="Roll #102403499 • B.Tech CSE"
-                text="Tapping my RFID card at the dispensary kiosk saves 20 minutes between lectures."
-                isSpecial={false}
-              />
-            </div>
+            {mode === 'receptionist' ? (
+              <>
+                <TestimonialCard
+                  avatarText="RK"
+                  name="Rajesh Kumar"
+                  handle="Front Desk • Counter 1"
+                  text="Tapping a student's RFID card pulls up their active queue position instantly. Zero paper files."
+                  isSpecial={true}
+                />
+                <div className="hidden xl:block">
+                  <TestimonialCard
+                    avatarText="NK"
+                    name="Dr. Neha Kapoor"
+                    handle="General Physician • Room 104"
+                    text="Patients are triaged before they even step into the clinic."
+                    isSpecial={false}
+                  />
+                </div>
+              </>
+            ) : (
+              <>
+                <TestimonialCard
+                  avatarText="NK"
+                  name="Dr. Neha Kapoor"
+                  handle="General Physician • Room 104"
+                  text="I stopped juggling paper charts between patients — everything's already pulled up before they sit down."
+                  isSpecial={true}
+                />
+                <div className="hidden xl:block">
+                  <TestimonialCard
+                    avatarText="SS"
+                    name="Simar Singh"
+                    handle="Roll #102403499 • B.Tech CSE"
+                    text="Tapping my RFID card at the dispensary kiosk saves 20 minutes between lectures."
+                    isSpecial={false}
+                  />
+                </div>
+              </>
+            )}
           </div>
         </div>
       </section>

@@ -25,7 +25,14 @@ function AppRoutes() {
         }
       />
       <Route path="/student_dashboard/:rollNumber" element={<Students_Dashboard />} />
-      <Route path="/reception_dashboard" element={<ReceptionDashboard />} />
+      <Route
+        path="/reception_dashboard"
+        element={
+          <ProtectedRoute>
+            <ReceptionDashboard />
+          </ProtectedRoute>
+        }
+      />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

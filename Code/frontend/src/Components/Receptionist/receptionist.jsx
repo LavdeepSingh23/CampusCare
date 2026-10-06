@@ -1,5 +1,39 @@
 import { useState, useEffect, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
+import { motion, AnimatePresence } from "framer-motion";
 import { useQueue, DOCTORS, DIRECTORY, checkInStudent, dispense, logAction, resetDemo } from "../../context/queueStore";
+import { useAuth } from "../../context/AuthContext";
+import { Sidebar, SidebarBody, SidebarLink } from "../ui/sidebar";
+import {
+  Users,
+  Stethoscope,
+  Pill,
+  CheckCircle2,
+  AlertCircle,
+  Clock,
+  Search,
+  ArrowRight,
+  UserCheck,
+  RefreshCw,
+  Printer,
+  FileText,
+  Activity as ActivityIcon,
+  Radio,
+  Sparkles,
+  ChevronRight,
+  X,
+  PhoneCall,
+  Calendar,
+  Building2,
+  ShieldAlert,
+  ChevronDown,
+  RotateCcw,
+  Check,
+  AlertTriangle,
+  HeartPulse,
+  CreditCard,
+  CheckCircle,
+} from "lucide-react";
 
 /* CampusCare – Receptionist Desk
    Sidebar pages: Reception · Student Check-in · Live OPD Queue · Students · Dispensing · Completed Visits · Activity
@@ -33,59 +67,151 @@ const NAV = [
   { id: "completed", label: "Completed Visits", icon: "completed" },
   { id: "activity", label: "Activity", icon: "activity" },
 ];
-const STATUS = { waiting: ["Waiting", "yellow"], cabin: ["In consultation", "green"], done: ["Awaiting medicine", "amber"], dispensed: ["Completed", "grey"] };
 const hhmm = (t) => (t ? new Date(t).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: false }) : "—");
 const dname = (id) => DOCTORS.find((d) => d.id === id)?.name || "—";
 const pad = (n) => String(n).padStart(2, "0");
-const Badge = ({ s }) => <span className={`rc-badge ${STATUS[s][1]}`}>{STATUS[s][0]}</span>;
 
 export default function ReceptionDashboard({ onLogout, initialPage = "reception" }) {
   const { visits, log } = useQueue();
+  const { receptionist, logout } = useAuth();
+  const navigate = useNavigate();
   const [page, setPage] = useState(initialPage);
   const [now, setNow] = useState(new Date());
   const [toast, setToast] = useState(null);
   useEffect(() => { const i = setInterval(() => setNow(new Date()), 1000); return () => clearInterval(i); }, []);
   const flash = (m) => { setToast(m); setTimeout(() => setToast(null), 2600); };
 
+  const handleLogout = () => {
+    if (onLogout) {
+      onLogout();
+    } else {
+      logout();
+      navigate("/user_login");
+    }
+  };
+
   const active = visits.filter((v) => v.status === "waiting" || v.status === "cabin");
   const waiting = visits.filter((v) => v.status === "waiting");
   const inConsult = visits.filter((v) => v.status === "cabin");
   const forMedicine = visits.filter((v) => v.status === "done").sort((a, b) => a.doneAt - b.doneAt);
   const completed = visits.filter((v) => v.status === "dispensed").sort((a, b) => b.dispensedAt - a.dispensedAt);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const counts = { queue: active.length, dispensing: forMedicine.length };
 
   return (
-    <div className="rc">
+    <div className="flex flex-col md:flex-row bg-[#f4f5f6] w-full min-h-screen text-slate-800 font-sans selection:bg-teal-500 selection:text-white">
       <style>{CSS}</style>
 
-      <header className="rc-top">
-        <div className="rc-brand">
-          <div className="rc-logo"><Icon name="dispensing" size={20} /></div>
-          <div><b>CampusCare</b><small>TIET Health Centre • OPD Live</small></div>
-        </div>
-        <div className="rc-top-r">
-          <div className="rc-clock"><b>{now.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}</b><small>{now.toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "short", year: "numeric" })}</small></div>
-          <div className="rc-user"><div className="rc-av">RK</div><div><b>Receptionist</b><small>Front Desk</small></div></div>
-        </div>
-      </header>
+      {/* ── ACETERNITY COLLAPSIBLE SIDEBAR (CAMPUSCARE BRANDED) ── */}
+      <Sidebar open={sidebarOpen} setOpen={setSidebarOpen}>
+        <SidebarBody className="justify-between gap-6 bg-[#f4f5f6]">
+          <div className="flex flex-col flex-1 overflow-y-auto overflow-x-hidden">
+            {/* Top Brand Logo matching Acet Labs in screenshot */}
+            <div className="flex items-center gap-2.5 px-1 py-1 mb-6">
+              <div className="h-6 w-6 bg-slate-900 rounded-lg flex items-center justify-center text-white shrink-0 shadow-xs">
+                <Icon name="dispensing" size={14} />
+              </div>
+              <motion.div
+                animate={{
+                  display: sidebarOpen ? "block" : "none",
+                  opacity: sidebarOpen ? 1 : 0,
+                }}
+                className="overflow-hidden whitespace-nowrap"
+              >
+                <span className="font-bold text-slate-900 tracking-tight text-sm leading-tight block">
+                  CampusCare
+                </span>
+                <span className="text-[10px] text-teal-700 font-semibold leading-tight block">
+                  TIET Health Centre
+                </span>
+              </motion.div>
+            </div>
 
-      <div className="rc-shell">
-        <aside className="rc-side">
-          <nav>
-            {NAV.map((n) => (
-              <button key={n.id} className={`rc-nav ${page === n.id ? "on" : ""}`} onClick={() => setPage(n.id)}>
-                <Icon name={n.icon} /><span>{n.label}</span>
-                {counts[n.id] > 0 && <i>{counts[n.id]}</i>}
-              </button>
-            ))}
-          </nav>
-          <div className="rc-side-bot">
-            <button className={`rc-nav ${page === "settings" ? "on" : ""}`} onClick={() => setPage("settings")}><Icon name="settings" /><span>Settings</span></button>
-            <button className="rc-nav" onClick={() => (onLogout ? onLogout() : (window.location.href = "/"))}><Icon name="logout" /><span>Logout</span></button>
+            {/* Navigation links matching screenshot layout */}
+            <div className="flex flex-col gap-1">
+              {NAV.map((n) => (
+                <SidebarLink
+                  key={n.id}
+                  link={{
+                    label: n.label,
+                    icon: <Icon name={n.icon} size={18} />,
+                  }}
+                  active={page === n.id}
+                  badge={counts[n.id] > 0 ? counts[n.id] : undefined}
+                  onClick={() => setPage(n.id)}
+                />
+              ))}
+            </div>
           </div>
-        </aside>
 
-        <main className="rc-content">
+          {/* Bottom user profile card matching Manu Arora in screenshot */}
+          <div className="border-t border-slate-200/80 pt-3 flex flex-col gap-1">
+            <SidebarLink
+              link={{
+                label: "Settings",
+                icon: <Icon name="settings" size={18} />,
+              }}
+              active={page === "settings"}
+              onClick={() => setPage("settings")}
+            />
+            <SidebarLink
+              link={{
+                label: "Logout",
+                icon: <Icon name="logout" size={18} />,
+              }}
+              onClick={handleLogout}
+            />
+
+            <div className="mt-2 pt-2 border-t border-slate-200/50 flex items-center gap-2.5 px-2 py-1.5 rounded-xl hover:bg-slate-200/50 transition-colors cursor-default">
+              <div className="h-8 w-8 rounded-full bg-teal-700 text-white font-bold text-xs flex items-center justify-center shrink-0 shadow-xs">
+                {receptionist?.name ? receptionist.name.slice(0, 2).toUpperCase() : "RK"}
+              </div>
+              <motion.div
+                animate={{
+                  display: sidebarOpen ? "block" : "none",
+                  opacity: sidebarOpen ? 1 : 0,
+                }}
+                className="overflow-hidden whitespace-nowrap"
+              >
+                <p className="text-xs font-bold text-slate-900 truncate">
+                  {receptionist?.name || "Reception Desk"}
+                </p>
+                <p className="text-[10px] text-slate-500 font-medium truncate">
+                  {receptionist?.email ? `${receptionist.email} • Counter 1` : "Counter 1 • TIET OPD"}
+                </p>
+              </motion.div>
+            </div>
+          </div>
+        </SidebarBody>
+      </Sidebar>
+
+      {/* ── RIGHT MAIN CONTAINER: ROUNDED-TL-3XL WHITE CANVAS MATCHING SCREENSHOT ── */}
+      <main className="flex-1 flex flex-col rounded-tl-3xl border-t border-l border-slate-200/90 bg-white shadow-xs p-6 md:p-8 min-h-screen overflow-y-auto">
+        {/* Top Header Strip inside the rounded canvas */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 mb-6 border-b border-slate-100">
+          <div>
+            <h1 className="text-xl font-bold text-slate-900 tracking-tight">
+              {page === "reception" ? "Receptionist Desk" : NAV.find((n) => n.id === page)?.label || "Dashboard"}
+            </h1>
+            <p className="text-xs text-slate-500 mt-0.5">
+              TIET Health Centre
+            </p>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <div className="text-right">
+              <p className="text-sm font-bold text-slate-800">
+                {now.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
+              </p>
+              <p className="text-[11px] text-slate-400 font-medium">
+                {now.toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "short", year: "numeric" })}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Dynamic Page Views */}
+        <div className="flex-1">
           {page === "reception" && <Home {...{ now, visits, active, waiting, inConsult, forMedicine, log, setPage }} />}
           {page === "checkin" && <CheckIn {...{ visits, flash, setPage }} />}
           {page === "queue" && <LiveQueue {...{ visits }} />}
@@ -94,78 +220,328 @@ export default function ReceptionDashboard({ onLogout, initialPage = "reception"
           {page === "completed" && <Completed {...{ completed }} />}
           {page === "activity" && <Activity {...{ log }} />}
           {page === "settings" && <Settings {...{ flash }} />}
-        </main>
-      </div>
+        </div>
+      </main>
 
-      {toast && <div className="rc-toast">{toast}</div>}
+      {toast && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-2xl bg-slate-900/95 text-white text-xs font-semibold shadow-2xl flex items-center gap-2 backdrop-blur-md border border-slate-800">
+          <Sparkles className="w-4 h-4 text-teal-400" />
+          <span>{toast}</span>
+        </div>
+      )}
     </div>
   );
 }
 
-/* ====================== shared bits ====================== */
-const PageHead = ({ title, sub, right }) => (
-  <div className="rc-ph"><div><h1>{title}</h1><p>{sub}</p></div>{right}</div>
+/* ====================== Shared UI Components ====================== */
+
+const Avatar = ({ name = "Student", size = "md", className = "" }) => {
+  const initials = name
+    ? name
+        .split(" ")
+        .map((w) => w[0])
+        .join("")
+        .slice(0, 2)
+        .toUpperCase()
+    : "ST";
+
+  const sizeClasses = {
+    sm: "h-7 w-7 text-[10px]",
+    md: "h-9 w-9 text-xs",
+    lg: "h-11 w-11 text-sm",
+    xl: "h-14 w-14 text-base",
+  };
+
+  return (
+    <div
+      className={`rounded-full bg-teal-700 text-white font-bold flex items-center justify-center shrink-0 shadow-2xs select-none ${sizeClasses[size] || sizeClasses.md} ${className}`}
+    >
+      {initials}
+    </div>
+  );
+};
+
+const STATUS_CONFIG = {
+  waiting: { label: "Waiting", color: "bg-amber-50 text-amber-700 border-amber-200/80" },
+  cabin: { label: "In Consultation", color: "bg-teal-50 text-teal-800 border-teal-200/80" },
+  done: { label: "Awaiting Medicine", color: "bg-orange-50 text-orange-700 border-orange-200/80" },
+  dispensed: { label: "Completed", color: "bg-emerald-50 text-emerald-800 border-emerald-200/80" },
+};
+
+const Badge = ({ s, size = "sm" }) => {
+  const conf = STATUS_CONFIG[s] || { label: s, color: "bg-slate-100 text-slate-700 border-slate-200" };
+  return (
+    <span
+      className={`inline-flex items-center gap-1.5 font-semibold rounded-full border ${conf.color} ${
+        size === "lg" ? "px-3 py-1 text-xs" : "px-2.5 py-0.5 text-[11px]"
+      }`}
+    >
+      <span className="w-1.5 h-1.5 rounded-full bg-current opacity-70" />
+      {conf.label}
+    </span>
+  );
+};
+
+const PageHead = ({ title, sub, badge, right }) => (
+  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6 pb-4 border-b border-slate-100">
+    <div>
+      <div className="flex items-center gap-2.5">
+        <h2 className="text-xl font-bold text-slate-900 tracking-tight">{title}</h2>
+        {badge && (
+          <span className="text-[11px] px-2.5 py-0.5 rounded-full font-semibold border bg-teal-50 text-teal-800 border-teal-200/70">
+            {badge}
+          </span>
+        )}
+      </div>
+      {sub && <p className="text-xs text-slate-500 mt-1 font-medium">{sub}</p>}
+    </div>
+    {right && <div className="flex items-center gap-2.5">{right}</div>}
+  </div>
 );
 
-/* ====================== 1. RECEPTION (home) ====================== */
+/* ====================== 1. RECEPTION (Home Overview) ====================== */
 function Home({ now, visits, waiting, inConsult, forMedicine, log, setPage }) {
   const h = now.getHours();
   const greet = h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening";
+  const completedToday = visits.filter((v) => v.status === "dispensed");
+
   return (
-    <>
-      <PageHead title="Reception" sub="Front Desk • TIET Health Centre • OPD Live" />
-      <div className="rc-hello">
-        <b>{greet}, Reception Desk</b>
-        <span>{now.toLocaleDateString("en-IN", { weekday: "long", day: "2-digit", month: "long" })} • OPD currently active</span>
+    <div className="space-y-6">
+      {/* ── Greeting Banner ── */}
+      <div className="bg-gradient-to-r from-teal-50/80 via-white to-slate-50/50 border border-teal-100/90 rounded-2xl p-5 sm:p-6 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <span className="relative flex h-2.5 w-2.5">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+            </span>
+            <span className="text-[11px] font-bold text-teal-800 tracking-wide uppercase">
+              TIET Health Centre • Front Desk Live
+            </span>
+          </div>
+          <h2 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
+            {greet}, Reception Desk
+          </h2>
+          <p className="text-xs text-slate-500 mt-1">
+            {now.toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric" })} • OPD Station 1 active
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2.5 flex-wrap">
+          <button
+            onClick={() => setPage("checkin")}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-teal-700 hover:bg-teal-800 text-white font-semibold text-xs shadow-xs hover:shadow-sm transition-all cursor-pointer"
+          >
+            <UserCheck className="w-4 h-4" />
+            <span>+ Student Check-in</span>
+          </button>
+          <button
+            onClick={() => setPage("dispensing")}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white hover:bg-slate-50 text-slate-700 border border-slate-200/90 font-semibold text-xs shadow-2xs transition-all cursor-pointer"
+          >
+            <Pill className="w-4 h-4 text-teal-700" />
+            <span>Dispensary Queue ({forMedicine.length})</span>
+          </button>
+        </div>
       </div>
 
-      <div className="rc-stats">
-        <div className="rc-stat"><small>Waiting</small><b>{waiting.length}</b></div>
-        <div className="rc-stat"><small>In consultation</small><b>{inConsult.length}</b></div>
-        <div className="rc-stat"><small>For medicine</small><b>{forMedicine.length}</b></div>
+      {/* ── 4 Metric Bento Cards ── */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="p-4 sm:p-5 bg-white rounded-2xl border border-slate-200/80 shadow-2xs hover:border-teal-300 transition-all flex flex-col justify-between">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-slate-500">Waiting in Lounge</span>
+            <div className="p-2 rounded-xl bg-amber-50 text-amber-700 border border-amber-100">
+              <Users className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="mt-3">
+            <span className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">{waiting.length}</span>
+            <span className="text-[11px] text-slate-400 block mt-0.5">~5 min avg wait time</span>
+          </div>
+        </div>
+
+        <div className="p-4 sm:p-5 bg-white rounded-2xl border border-slate-200/80 shadow-2xs hover:border-teal-300 transition-all flex flex-col justify-between">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-slate-500">In Consultation</span>
+            <div className="p-2 rounded-xl bg-teal-50 text-teal-700 border border-teal-100">
+              <Stethoscope className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="mt-3">
+            <span className="text-2xl sm:text-3xl font-extrabold text-teal-800 tracking-tight">{inConsult.length}</span>
+            <span className="text-[11px] text-slate-400 block mt-0.5">Across doctor cabins</span>
+          </div>
+        </div>
+
+        <div className="p-4 sm:p-5 bg-white rounded-2xl border border-slate-200/80 shadow-2xs hover:border-teal-300 transition-all flex flex-col justify-between">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-slate-500">For Medicine</span>
+            <div className="p-2 rounded-xl bg-orange-50 text-orange-700 border border-orange-100">
+              <Pill className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="mt-3">
+            <span className="text-2xl sm:text-3xl font-extrabold text-orange-600 tracking-tight">{forMedicine.length}</span>
+            <span className="text-[11px] text-slate-400 block mt-0.5">Ready for pharmacy</span>
+          </div>
+        </div>
+
+        <div className="p-4 sm:p-5 bg-white rounded-2xl border border-slate-200/80 shadow-2xs hover:border-teal-300 transition-all flex flex-col justify-between">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-slate-500">Completed Today</span>
+            <div className="p-2 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-100">
+              <CheckCircle2 className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="mt-3">
+            <span className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">{completedToday.length}</span>
+            <span className="text-[11px] text-slate-400 block mt-0.5">Discharged & dispensed</span>
+          </div>
+        </div>
       </div>
 
-      <div className="rc-two">
-        <section className="rc-card">
-          <h3>Doctor status</h3>
-          {DOCTORS.map((d) => {
-            const q = visits.filter((v) => v.doctorId === d.id && (v.status === "waiting" || v.status === "cabin")).length;
-            const busy = visits.some((v) => v.doctorId === d.id && v.status === "cabin");
-            return (
-              <div key={d.id} className="rc-doc">
-                <span className={`rc-dot ${busy ? "amber" : "green"}`} />
-                <div><b>{d.name}</b><small>{d.role} • {d.room}</small></div>
-                <div className="rc-doc-r"><b>Queue: {q}</b><small>{busy ? "With a student" : "Available"}</small></div>
+      {/* ── Two-Column Row: Doctor Status + Action Required ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        {/* Left: Doctor Status Mini-Cards (Span 7) */}
+        <div className="lg:col-span-7 bg-white rounded-2xl border border-slate-200/90 p-5 shadow-xs space-y-4">
+          <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+            <div>
+              <h3 className="text-sm font-bold text-slate-900">Doctor Cabins Live Status</h3>
+              <p className="text-xs text-slate-500">Real-time consultation queue & availability</p>
+            </div>
+            <button
+              onClick={() => setPage("queue")}
+              className="text-xs font-semibold text-teal-700 hover:text-teal-900 flex items-center gap-1 cursor-pointer transition-colors"
+            >
+              <span>View Full Queue</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+            {DOCTORS.map((d) => {
+              const q = visits.filter((v) => v.doctorId === d.id && (v.status === "waiting" || v.status === "cabin")).length;
+              const busy = visits.some((v) => v.doctorId === d.id && v.status === "cabin");
+
+              return (
+                <div
+                  key={d.id}
+                  className="p-4 rounded-xl border border-slate-200/80 bg-slate-50/60 hover:bg-white hover:border-teal-300 hover:shadow-xs transition-all flex flex-col justify-between gap-3"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-2.5">
+                      <Avatar name={d.name} size="sm" className="bg-slate-800 text-white" />
+                      <div>
+                        <h4 className="text-xs font-bold text-slate-900">{d.name}</h4>
+                        <p className="text-[11px] text-slate-500">{d.role} • {d.room}</p>
+                      </div>
+                    </div>
+                    <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${busy ? "bg-amber-50 text-amber-700 border-amber-200" : "bg-emerald-50 text-emerald-700 border-emerald-200"}`}>
+                      {busy ? "In Cabin" : "Available"}
+                    </span>
+                  </div>
+
+                  <div className="pt-2 border-t border-slate-200/60 flex items-center justify-between text-xs">
+                    <div>
+                      <span className="text-[11px] text-slate-500">Queue: </span>
+                      <span className="font-bold text-slate-900">{q} students</span>
+                    </div>
+                    <button
+                      onClick={() => setPage("queue")}
+                      className="text-xs font-semibold text-teal-700 hover:text-teal-900 hover:underline cursor-pointer flex items-center gap-1"
+                    >
+                      <span>Check Line</span>
+                      <ChevronRight className="w-3 h-3" />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Right: Action Required / Dispensary Queue (Span 5) */}
+        <div className="lg:col-span-5 bg-white rounded-2xl border border-slate-200/90 p-5 shadow-xs flex flex-col justify-between space-y-4">
+          <div>
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <h3 className="text-sm font-bold text-slate-900">Action Required</h3>
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 font-semibold text-slate-600">
+                Front Desk
+              </span>
+            </div>
+
+            <div className="mt-4">
+              {forMedicine.length > 0 ? (
+                <div className="p-4 rounded-xl bg-orange-50/80 border border-orange-200/80 text-orange-950 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Pill className="w-4 h-4 text-orange-600" />
+                    <span className="text-xs font-bold">
+                      {forMedicine.length} prescription{forMedicine.length > 1 ? "s" : ""} waiting for pickup
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-orange-800/90 leading-relaxed">
+                    Doctor consultations are completed. Students are waiting at the medicine counter.
+                  </p>
+                  <div className="pt-2">
+                    <button
+                      onClick={() => setPage("dispensing")}
+                      className="w-full py-2 px-3 rounded-lg bg-orange-600 hover:bg-orange-700 text-white font-semibold text-xs shadow-2xs transition-all cursor-pointer"
+                    >
+                      Open Dispensing Station ({forMedicine.length})
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="p-4 rounded-xl bg-slate-50 border border-slate-200/70 text-center py-6">
+                  <CheckCircle className="w-6 h-6 text-emerald-600 mx-auto mb-1.5" />
+                  <p className="text-xs font-bold text-slate-800">All Prescriptions Cleared</p>
+                  <p className="text-[11px] text-slate-400 mt-0.5">No students are currently waiting at the medicine desk.</p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+            <span>Counter 1 Shift:</span>
+            <span className="font-semibold text-slate-800">09:00 AM - 05:00 PM</span>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Recent Activity Section ── */}
+      <div className="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-xs">
+        <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-3">
+          <h3 className="text-sm font-bold text-slate-900">Recent Desk Activity</h3>
+          <span className="text-xs text-slate-400">Live operational log</span>
+        </div>
+
+        <div className="divide-y divide-slate-100">
+          {log.slice(0, 5).map((l, i) => (
+            <div key={i} className="py-2.5 flex items-center justify-between gap-4 text-xs">
+              <div className="flex items-center gap-3">
+                <span className="font-mono text-slate-400 text-[11px]">{hhmm(l.t)}</span>
+                <span className="font-semibold text-slate-800">{l.text}</span>
               </div>
-            );
-          })}
-        </section>
-
-        <section className="rc-card">
-          <h3>Action required</h3>
-          {forMedicine.length === 0 ? <p className="rc-muted">Nothing needs your attention right now.</p> : (
-            <div className="rc-action"><b>{forMedicine.length} prescription{forMedicine.length > 1 ? "s" : ""} ready</b><small>Students are waiting for their medicines.</small></div>
+              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200/60">
+                {l.kind}
+              </span>
+            </div>
+          ))}
+          {log.length === 0 && (
+            <p className="text-xs text-slate-400 text-center py-4">No recent activity recorded.</p>
           )}
-          <button className="rc-btn main" onClick={() => setPage("dispensing")}>View Dispensing</button>
-        </section>
+        </div>
       </div>
-
-      <section className="rc-card">
-        <h3>Recent activity</h3>
-        {log.slice(0, 5).map((l, i) => (
-          <div key={i} className="rc-line"><time>{hhmm(l.t)}</time><span>{l.kind.charAt(0) + l.kind.slice(1).toLowerCase()}</span><b>{l.text.split(" • ")[0]}</b></div>
-        ))}
-      </section>
-    </>
+    </div>
   );
 }
 
-/* ====================== 2. STUDENT CHECK-IN ====================== */
+/* ====================== 2. STUDENT CHECK-IN (Minimal Centered Card) ====================== */
 function CheckIn({ visits, flash, setPage }) {
   const [step, setStep] = useState("scan"); // scan | identified | done
   const [student, setStudent] = useState(null);
   const [via, setVia] = useState("RFID");
-  const [doctorId, setDoctorId] = useState(null);
+  const [doctorId, setDoctorId] = useState("kapoor");
   const [reason, setReason] = useState("");
   const [q, setQ] = useState("");
   const [result, setResult] = useState(null);
@@ -184,121 +560,431 @@ function CheckIn({ visits, flash, setPage }) {
     if (!r) return flash("This student already has an active visit");
     setResult(r); setStep("done");
   };
-  const reset = () => { setStep("scan"); setStudent(null); setDoctorId(null); setReason(""); setResult(null); };
+  const reset = () => { setStep("scan"); setStudent(null); setDoctorId("kapoor"); setReason(""); setResult(null); };
+
+  const QUICK_SYMPTOMS = ["Fever", "Cold & Cough", "Severe Headache", "Sports Injury", "Hostel Clearance", "Acidity"];
 
   return (
-    <>
-      <PageHead title="Student Check-in" sub="Identify the student and create today's OPD visit" />
+    <div className="max-w-xl mx-auto py-2">
+      <PageHead
+        title="Student Check-in"
+        sub="Identify student and assign to real-time doctor consultation queue"
+      />
 
+      {/* ── STEP 1: SCAN OR SEARCH ── */}
       {step === "scan" && (
-        <section className="rc-card rc-narrow">
-          <div className="rc-rfid">
-            <div className="rc-rfid-ring"><Icon name="checkin" size={34} /></div>
-            <b>Tap RFID card</b>
-            <small>Waiting for card…</small>
-            <button className="rc-btn ghost" onClick={simulateTap}>Simulate card tap (demo)</button>
-          </div>
-          <div className="rc-or"><span>or</span></div>
-          <label className="rc-field">Search roll number / student name
-            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="e.g. 102403112 or Kriti" />
-          </label>
-          {matches.map((s) => (
-            <button key={s.rollNo} className="rc-pick" onClick={() => identify(s, "Manual")}>
-              <b>{s.name}</b><small>Roll {s.rollNo} • {s.program} {s.dept}</small>
+        <div className="bg-white rounded-3xl border border-slate-200/90 p-6 sm:p-8 shadow-xs space-y-6">
+          {/* Animated RFID Radar Scanner */}
+          <div className="text-center py-3">
+            <div className="relative inline-flex items-center justify-center">
+              <div className="absolute w-28 h-28 rounded-full bg-teal-100/60 animate-ping opacity-40"></div>
+              <div className="h-24 w-24 rounded-full bg-teal-50 border-2 border-dashed border-teal-400/80 flex items-center justify-center text-teal-700 shadow-sm relative z-10 transition-transform hover:scale-105">
+                <Radio className="w-10 h-10" />
+              </div>
+            </div>
+
+            <h3 className="text-base font-bold text-slate-900 mt-4">
+              Tap Student RFID Card
+            </h3>
+            <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
+              Hold the university smart card near the sensor for contactless intake.
+            </p>
+
+            <button
+              type="button"
+              onClick={simulateTap}
+              className="mt-4 px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs shadow-xs hover:shadow-md transition-all cursor-pointer inline-flex items-center gap-2"
+            >
+              <CreditCard className="w-3.5 h-3.5 text-teal-300" />
+              <span>Simulate RFID Tap (Demo Student)</span>
             </button>
-          ))}
-          {q.trim().length >= 2 && matches.length === 0 && <p className="rc-muted">No student found.</p>}
-        </section>
+          </div>
+
+          {/* Divider */}
+          <div className="relative flex items-center justify-center">
+            <div className="border-t border-slate-200 w-full"></div>
+            <span className="bg-white px-3 text-[11px] font-semibold text-slate-400 uppercase tracking-wider absolute">
+              or search manually
+            </span>
+          </div>
+
+          {/* Search Input */}
+          <div className="space-y-3">
+            <label className="text-xs font-semibold text-slate-700 block">
+              Search by Roll Number or Name
+            </label>
+            <div className="relative">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder="e.g. 102403112 or Kriti"
+                className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 bg-slate-50/60 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-teal-500 focus:bg-white transition-all"
+              />
+            </div>
+
+            {/* Autocomplete Dropdown Matches */}
+            {matches.length > 0 && (
+              <div className="rounded-xl border border-slate-200 bg-white shadow-lg overflow-hidden divide-y divide-slate-100">
+                {matches.map((s) => (
+                  <button
+                    key={s.rollNo}
+                    type="button"
+                    onClick={() => identify(s, "Manual")}
+                    className="w-full p-3 text-left hover:bg-teal-50/50 transition-colors flex items-center justify-between cursor-pointer group"
+                  >
+                    <div className="flex items-center gap-3">
+                      <Avatar name={s.name} size="sm" />
+                      <div>
+                        <p className="text-xs font-bold text-slate-900 group-hover:text-teal-900">{s.name}</p>
+                        <p className="text-[11px] text-slate-500">{s.program} {s.dept} • Sem {s.semester}</p>
+                      </div>
+                    </div>
+                    <span className="font-mono text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">
+                      {s.rollNo}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {q.trim().length >= 2 && matches.length === 0 && (
+              <p className="text-xs text-slate-400 text-center py-2">No matching student found.</p>
+            )}
+          </div>
+        </div>
       )}
 
+      {/* ── STEP 2: STUDENT IDENTIFIED ── */}
       {step === "identified" && student && (
-        <section className="rc-card rc-narrow">
-          <div className="rc-ident"><span className="rc-tick"><Icon name="completed" size={16} /></span> Student identified</div>
-          <h2 className="rc-name">{student.name}</h2>
-          <p className="rc-muted">Roll No. {student.rollNo}<br />{student.program} {student.dept} • Semester {student.semester}</p>
-          {student.allergies !== "None known" && <div className="rc-warn">Allergies: {student.allergies}</div>}
-          {already(student) && <div className="rc-warn">This student already has an active visit today.</div>}
+        <div className="bg-white rounded-3xl border border-slate-200/90 p-6 sm:p-8 shadow-xs space-y-6">
+          {/* Header Verification Banner */}
+          <div className="flex items-center justify-between p-3.5 rounded-2xl bg-teal-50/80 border border-teal-200/80">
+            <div className="flex items-center gap-2.5">
+              <div className="h-6 w-6 rounded-full bg-teal-700 text-white flex items-center justify-center">
+                <Check className="w-3.5 h-3.5" />
+              </div>
+              <span className="text-xs font-bold text-teal-950">Student Identified & Verified</span>
+            </div>
+            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-teal-100 text-teal-800">
+              via {via}
+            </span>
+          </div>
 
-          <h4>Select doctor</h4>
-          <div className="rc-docs">
-            {DOCTORS.map((d) => {
-              const qn = visits.filter((v) => v.doctorId === d.id && (v.status === "waiting" || v.status === "cabin")).length;
-              return (
-                <button key={d.id} className={`rc-docpick ${doctorId === d.id ? "on" : ""}`} onClick={() => setDoctorId(d.id)}>
-                  <span className="rc-dot green" />
-                  <div><b>{d.name}</b><small>{d.role} • {d.room}</small></div>
-                  <em>Queue: {qn}</em>
+          {/* Student Profile Card */}
+          <div className="flex items-start gap-3.5 p-4 rounded-2xl border border-slate-200 bg-slate-50/60">
+            <Avatar name={student.name} size="lg" />
+            <div className="flex-1 min-w-0">
+              <h3 className="text-base font-bold text-slate-900 truncate">{student.name}</h3>
+              <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                <span className="font-mono text-xs font-bold text-teal-800 bg-teal-100/70 px-2 py-0.2 rounded-md">
+                  {student.rollNo}
+                </span>
+                <span className="text-xs text-slate-500">
+                  {student.program} {student.dept} • Semester {student.semester}
+                </span>
+                <span className="text-[10px] font-semibold px-1.5 py-0.2 rounded bg-slate-200 text-slate-700">
+                  {student.blood}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Allergy or Duplicate Visit Alerts */}
+          {student.allergies && student.allergies !== "None known" && (
+            <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-center gap-2">
+              <ShieldAlert className="w-4 h-4 text-rose-600 shrink-0" />
+              <span><strong>Medical Alert:</strong> Known allergies: {student.allergies}</span>
+            </div>
+          )}
+
+          {already(student) && (
+            <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+              <span>This student already has an active consultation visit in the queue.</span>
+            </div>
+          )}
+
+          {/* Doctor Selection Cards */}
+          <div className="space-y-2.5">
+            <label className="text-xs font-bold text-slate-800 block">
+              Assign to Doctor Cabin
+            </label>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {DOCTORS.map((d) => {
+                const qn = visits.filter((v) => v.doctorId === d.id && (v.status === "waiting" || v.status === "cabin")).length;
+                const selected = doctorId === d.id;
+
+                return (
+                  <button
+                    key={d.id}
+                    type="button"
+                    onClick={() => setDoctorId(d.id)}
+                    className={`p-3.5 rounded-xl border text-left transition-all cursor-pointer flex items-center justify-between ${
+                      selected
+                        ? "border-teal-600 bg-teal-50/50 ring-2 ring-teal-500/20"
+                        : "border-slate-200 bg-white hover:border-slate-300"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <Avatar name={d.name} size="sm" className={selected ? "bg-teal-700" : "bg-slate-700"} />
+                      <div>
+                        <p className="text-xs font-bold text-slate-900">{d.name}</p>
+                        <p className="text-[10px] text-slate-500">{d.room}</p>
+                      </div>
+                    </div>
+                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">
+                      Queue: {qn}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Chief Complaint / Symptoms Input with Quick Chips */}
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-slate-800 block">
+              Chief Complaint / Reason for Visit
+            </label>
+            <div className="flex flex-wrap gap-1.5 mb-2">
+              {QUICK_SYMPTOMS.map((symptom) => (
+                <button
+                  key={symptom}
+                  type="button"
+                  onClick={() => setReason(symptom)}
+                  className={`text-[11px] px-2.5 py-1 rounded-lg border transition-colors cursor-pointer ${
+                    reason === symptom
+                      ? "bg-teal-700 text-white border-teal-700"
+                      : "bg-slate-50 hover:bg-slate-100 text-slate-600 border-slate-200"
+                  }`}
+                >
+                  {symptom}
                 </button>
-              );
-            })}
+              ))}
+            </div>
+            <input
+              type="text"
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              placeholder="e.g. Fever, persistent cough, wrist sprain"
+              className="w-full p-3 rounded-xl border border-slate-200 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-teal-500"
+            />
           </div>
 
-          <label className="rc-field">Reason for visit (optional)
-            <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. fever, headache" />
-          </label>
-
-          <div className="rc-act">
-            <button className="rc-btn ghost" onClick={reset}>Cancel</button>
-            <button className="rc-btn main" disabled={!doctorId || already(student)} onClick={confirm}>Confirm check-in</button>
+          {/* Action Buttons */}
+          <div className="pt-2 flex items-center justify-end gap-3 border-t border-slate-100">
+            <button
+              type="button"
+              onClick={reset}
+              className="px-4 py-2.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-semibold transition-colors cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              disabled={!doctorId || already(student)}
+              onClick={confirm}
+              className="px-5 py-2.5 rounded-xl bg-teal-700 hover:bg-teal-800 disabled:bg-slate-300 text-white text-xs font-semibold transition-all shadow-xs cursor-pointer"
+            >
+              Confirm Check-in & Queue
+            </button>
           </div>
-        </section>
+        </div>
       )}
 
+      {/* ── STEP 3: CONFIRMED / TOKEN ISSUED ── */}
       {step === "done" && result && (
-        <section className="rc-card rc-narrow rc-done">
-          <div className="rc-ident"><span className="rc-tick"><Icon name="completed" size={16} /></span> Check-in complete</div>
-          <h2 className="rc-name">{student.name}</h2>
-          <p className="rc-muted">Roll: {student.rollNo}</p>
-          <div className="rc-kv"><span>Doctor</span><b>{dname(result.doctorId)}</b></div>
-          <div className="rc-kv"><span>Queue number</span><b>#{pad(result.queueNo)}</b></div>
-          <div className="rc-kv"><span>Position</span><b>{result.position}</b></div>
-          <p className="rc-ok">Student added to the OPD queue.</p>
-          <div className="rc-act">
-            <button className="rc-btn ghost" onClick={() => setPage("queue")}>View queue</button>
-            <button className="rc-btn main" onClick={reset}>Check in another student</button>
+        <div className="bg-white rounded-3xl border border-slate-200/90 p-6 sm:p-8 shadow-xs text-center space-y-6">
+          <div className="h-16 w-16 rounded-full bg-emerald-50 border-2 border-emerald-200 text-emerald-600 flex items-center justify-center mx-auto shadow-sm">
+            <CheckCircle2 className="w-8 h-8" />
           </div>
-        </section>
+
+          <div>
+            <h3 className="text-xl font-bold text-slate-900">Check-in Complete</h3>
+            <p className="text-xs text-slate-500 mt-1">Student has been registered in the live OPD queue.</p>
+          </div>
+
+          {/* Digital Token Card */}
+          <div className="p-5 rounded-2xl border border-teal-200 bg-teal-50/50 max-w-sm mx-auto space-y-3">
+            <div>
+              <span className="text-[10px] font-bold text-teal-700 uppercase tracking-wider block">OPD Token Number</span>
+              <span className="text-4xl font-extrabold text-teal-950 font-mono">#{pad(result.queueNo)}</span>
+            </div>
+            <div className="border-t border-teal-200/60 pt-3 text-xs space-y-1.5 text-slate-700">
+              <div className="flex justify-between">
+                <span className="text-slate-500">Student:</span>
+                <span className="font-bold">{student.name}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Roll No:</span>
+                <span className="font-mono">{student.rollNo}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Assigned Doctor:</span>
+                <span className="font-bold text-teal-900">{dname(result.doctorId)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Queue Position:</span>
+                <span className="font-semibold">{result.position} in line</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-center gap-3 pt-2">
+            <button
+              onClick={() => setPage("queue")}
+              className="px-4 py-2.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-semibold transition-colors cursor-pointer"
+            >
+              View Live Queue
+            </button>
+            <button
+              onClick={reset}
+              className="px-5 py-2.5 rounded-xl bg-teal-700 hover:bg-teal-800 text-white text-xs font-semibold transition-all shadow-xs cursor-pointer"
+            >
+              Check in Another Student
+            </button>
+          </div>
+        </div>
       )}
-    </>
+    </div>
   );
 }
 
-/* ====================== 3. LIVE OPD QUEUE (read-only) ====================== */
+/* ====================== 3. LIVE OPD QUEUE ====================== */
 function LiveQueue({ visits }) {
   const [, force] = useState(0);
+
   return (
-    <>
-      <PageHead title="Live OPD Queue" sub="All active doctor queues. View only, doctors control the queue."
-        right={<button className="rc-btn ghost" onClick={() => force((n) => n + 1)}><span className="rc-live" />Live • Refresh</button>} />
-      {DOCTORS.map((d) => {
-        const rows = visits.filter((v) => v.doctorId === d.id && (v.status === "waiting" || v.status === "cabin")).sort((a, b) => (a.status === "cabin" ? -1 : b.status === "cabin" ? 1 : a.checkedIn - b.checkedIn));
-        const busy = rows.some((r) => r.status === "cabin");
-        return (
-          <section key={d.id} className="rc-card">
-            <div className="rc-qh">
-              <div><b>{d.role.toUpperCase()} — {d.name}</b><small>{d.room}</small></div>
-              <span className={`rc-badge ${busy ? "amber" : "green"}`}>{busy ? "With a student" : "Available"}</span>
+    <div className="space-y-6">
+      <PageHead
+        title="Live OPD Queue"
+        sub="Real-time doctor queue line. Triage updates automatically as doctors call students."
+        right={
+          <button
+            onClick={() => force((n) => n + 1)}
+            className="flex items-center gap-2 px-3.5 py-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 font-semibold text-xs shadow-2xs transition-colors cursor-pointer"
+          >
+            <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+            <span>Live • Refresh</span>
+          </button>
+        }
+      />
+
+      <div className="space-y-6">
+        {DOCTORS.map((d) => {
+          const rows = visits
+            .filter((v) => v.doctorId === d.id && (v.status === "waiting" || v.status === "cabin"))
+            .sort((a, b) => (a.status === "cabin" ? -1 : b.status === "cabin" ? 1 : a.checkedIn - b.checkedIn));
+          const busy = rows.some((r) => r.status === "cabin");
+          const activeConsultation = rows.find((r) => r.status === "cabin");
+          const waitingStudents = rows.filter((r) => r.status === "waiting");
+
+          return (
+            <div key={d.id} className="bg-white rounded-2xl border border-slate-200/90 shadow-xs overflow-hidden">
+              {/* Doctor Cabin Header */}
+              <div className="p-4 sm:p-5 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-50/50">
+                <div className="flex items-center gap-3">
+                  <Avatar name={d.name} size="md" className="bg-slate-800 text-white" />
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-sm sm:text-base font-bold text-slate-900">{d.name}</h3>
+                      <span className="text-[11px] font-semibold px-2 py-0.2 rounded-md bg-white border border-slate-200 text-slate-600">
+                        {d.room}
+                      </span>
+                    </div>
+                    <p className="text-xs text-teal-800 font-medium">{d.role}</p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <span className={`text-xs font-semibold px-2.5 py-1 rounded-full border ${
+                    busy ? "bg-amber-50 text-amber-700 border-amber-200" : "bg-emerald-50 text-emerald-700 border-emerald-200"
+                  }`}>
+                    {busy ? "Cabin Busy • With Student" : "Cabin Available"}
+                  </span>
+                  <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-slate-100 text-slate-700 border border-slate-200">
+                    Queue: {waitingStudents.length} waiting
+                  </span>
+                </div>
+              </div>
+
+              {/* Active Consultation Spotlight Banner */}
+              {activeConsultation && (
+                <div className="px-5 py-3.5 bg-teal-50/60 border-b border-teal-100 flex items-center justify-between gap-3 text-xs">
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-1.5 rounded-lg bg-teal-700 text-white">
+                      <Stethoscope className="w-3.5 h-3.5" />
+                    </div>
+                    <div>
+                      <span className="text-teal-900 font-bold">Currently in consultation: </span>
+                      <span className="text-slate-900 font-semibold">{activeConsultation.name}</span>
+                      <span className="font-mono text-slate-500 ml-1.5 text-[11px]">({activeConsultation.rollNo})</span>
+                    </div>
+                  </div>
+                  <span className="text-[11px] text-teal-800 font-medium font-mono">
+                    Entered cabin at {hhmm(activeConsultation.cabinAt || activeConsultation.checkedIn)}
+                  </span>
+                </div>
+              )}
+
+              {/* Waiting Line Table */}
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="border-b border-slate-100 text-slate-400 font-semibold bg-slate-50/30">
+                      <th className="py-3 px-4 w-14">#</th>
+                      <th className="py-3 px-4">Student</th>
+                      <th className="py-3 px-4">Roll Number</th>
+                      <th className="py-3 px-4">Complaint</th>
+                      <th className="py-3 px-4">Check-in</th>
+                      <th className="py-3 px-4">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {rows.map((v, i) => (
+                      <tr
+                        key={v.id}
+                        className={`transition-colors ${
+                          v.status === "cabin" ? "bg-teal-50/20 font-medium" : "hover:bg-slate-50/60"
+                        }`}
+                      >
+                        <td className="py-3 px-4 font-mono font-bold text-slate-400">{pad(i + 1)}</td>
+                        <td className="py-3 px-4">
+                          <div className="flex items-center gap-2.5">
+                            <Avatar name={v.name} size="sm" />
+                            <span className="font-bold text-slate-800">{v.name}</span>
+                          </div>
+                        </td>
+                        <td className="py-3 px-4 font-mono text-slate-600">{v.rollNo}</td>
+                        <td className="py-3 px-4 text-slate-600 max-w-xs truncate">{v.complaint || "OPD Checkup"}</td>
+                        <td className="py-3 px-4 font-mono text-slate-500">{hhmm(v.checkedIn)}</td>
+                        <td className="py-3 px-4">
+                          <Badge s={v.status} />
+                        </td>
+                      </tr>
+                    ))}
+                    {rows.length === 0 && (
+                      <tr>
+                        <td colSpan="6" className="py-8 text-center text-slate-400 text-xs">
+                          No active students in this doctor's queue.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
-            <table className="rc-table">
-              <thead><tr><th>#</th><th>Student</th><th>Status</th><th>Check-in</th></tr></thead>
-              <tbody>
-                {rows.map((v, i) => (
-                  <tr key={v.id} className={v.status === "cabin" ? "hl" : ""}>
-                    <td>{pad(i + 1)}</td><td><b>{v.name}</b></td><td><Badge s={v.status} /></td><td>{hhmm(v.checkedIn)}</td>
-                  </tr>
-                ))}
-                {rows.length === 0 && <tr><td colSpan="4" className="rc-muted">No active students in this queue.</td></tr>}
-              </tbody>
-            </table>
-          </section>
-        );
-      })}
-    </>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 
-/* ====================== 4. STUDENTS ====================== */
-function Students({ visits }) {
+/* ====================== 4. STUDENTS DIRECTORY ====================== */
+function Students({ visits, setPage }) {
   const [q, setQ] = useState("");
   const [dept, setDept] = useState("");
   const [sem, setSem] = useState("");
@@ -312,58 +998,196 @@ function Students({ visits }) {
   const open = (roll) => { setOpenRoll(roll); logAction("STUDENT PROFILE VIEWED", DIRECTORY.find((x) => x.rollNo === roll).name); };
 
   return (
-    <>
-      <PageHead title="Students" sub="Search registered students" />
-      <section className="rc-card">
-        <div className="rc-filters">
-          <input className="rc-in grow" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search name / roll number" />
-          <select className="rc-in" value={dept} onChange={(e) => setDept(e.target.value)}><option value="">All departments</option>{depts.map((d) => <option key={d}>{d}</option>)}</select>
-          <select className="rc-in" value={sem} onChange={(e) => setSem(e.target.value)}><option value="">All semesters</option>{[1, 2, 3, 4, 5, 6, 7, 8].map((n) => <option key={n}>{n}</option>)}</select>
-        </div>
-        <table className="rc-table clickable">
-          <thead><tr><th>Roll No.</th><th>Student</th><th>Department</th><th>Semester</th><th>Status</th></tr></thead>
-          <tbody>
-            {list.map((x) => (
-              <tr key={x.rollNo} onClick={() => open(x.rollNo)}>
-                <td>{x.rollNo}</td><td><b>{x.name}</b></td><td>{x.dept}</td><td>{x.semester}</td><td><span className="rc-badge green">Active</span></td>
-              </tr>
+    <div className="space-y-6">
+      <PageHead
+        title="Students Directory"
+        sub="Search registered TIET students and view verified medical telemetry"
+        badge={`${list.length} students`}
+      />
+
+      <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs p-5 space-y-4">
+        {/* Filters */}
+        <div className="flex flex-col sm:flex-row gap-3">
+          <div className="relative flex-1">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Search by student name or roll number..."
+              className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 bg-slate-50/60 text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-teal-500 focus:bg-white"
+            />
+          </div>
+          <select
+            value={dept}
+            onChange={(e) => setDept(e.target.value)}
+            className="px-3 py-2.5 rounded-xl border border-slate-200 bg-slate-50/60 text-xs text-slate-700 focus:outline-none focus:border-teal-500"
+          >
+            <option value="">All Departments</option>
+            {depts.map((d) => (
+              <option key={d} value={d}>{d}</option>
             ))}
-            {list.length === 0 && <tr><td colSpan="5" className="rc-muted">No students match.</td></tr>}
-          </tbody>
-        </table>
-      </section>
+          </select>
+          <select
+            value={sem}
+            onChange={(e) => setSem(e.target.value)}
+            className="px-3 py-2.5 rounded-xl border border-slate-200 bg-slate-50/60 text-xs text-slate-700 focus:outline-none focus:border-teal-500"
+          >
+            <option value="">All Semesters</option>
+            {[1, 2, 3, 4, 5, 6, 7, 8].map((n) => (
+              <option key={n} value={n}>Semester {n}</option>
+            ))}
+          </select>
+        </div>
 
+        {/* Directory Table */}
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse text-xs">
+            <thead>
+              <tr className="border-b border-slate-100 text-slate-400 font-semibold bg-slate-50/30">
+                <th className="py-3 px-4">Student</th>
+                <th className="py-3 px-4">Roll Number</th>
+                <th className="py-3 px-4">Department</th>
+                <th className="py-3 px-4">Semester</th>
+                <th className="py-3 px-4">Blood Group</th>
+                <th className="py-3 px-4 text-right">Action</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {list.map((x) => (
+                <tr
+                  key={x.rollNo}
+                  onClick={() => open(x.rollNo)}
+                  className="hover:bg-teal-50/30 transition-colors cursor-pointer group"
+                >
+                  <td className="py-3 px-4">
+                    <div className="flex items-center gap-2.5">
+                      <Avatar name={x.name} size="sm" />
+                      <span className="font-bold text-slate-900 group-hover:text-teal-900">{x.name}</span>
+                    </div>
+                  </td>
+                  <td className="py-3 px-4 font-mono text-slate-600 font-semibold">{x.rollNo}</td>
+                  <td className="py-3 px-4 text-slate-600">{x.dept} ({x.program})</td>
+                  <td className="py-3 px-4 text-slate-600">Sem {x.semester}</td>
+                  <td className="py-3 px-4">
+                    <span className="px-2 py-0.5 rounded font-mono font-semibold text-[11px] bg-slate-100 text-slate-700">
+                      {x.blood}
+                    </span>
+                  </td>
+                  <td className="py-3 px-4 text-right">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        open(x.rollNo);
+                      }}
+                      className="px-2.5 py-1 rounded-lg border border-slate-200 hover:border-teal-500 hover:bg-teal-50 text-slate-600 hover:text-teal-800 text-[11px] font-semibold transition-colors"
+                    >
+                      View Profile
+                    </button>
+                  </td>
+                </tr>
+              ))}
+              {list.length === 0 && (
+                <tr>
+                  <td colSpan="6" className="py-8 text-center text-slate-400 text-xs">
+                    No students match the search filter.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* ── Student Profile Slide-over Drawer ── */}
       {s && (
-        <div className="rc-drawer-bg" onClick={() => setOpenRoll(null)}>
-          <aside className="rc-drawer" onClick={(e) => e.stopPropagation()}>
-            <div className="rc-dh"><div><h2>{s.name}</h2><small>Roll No: {s.rollNo}</small></div>
-              <button className="rc-x" onClick={() => setOpenRoll(null)} aria-label="Close"><Icon name="close" /></button></div>
+        <div className="fixed inset-0 z-50 flex justify-end bg-slate-900/50 backdrop-blur-xs" onClick={() => setOpenRoll(null)}>
+          <aside className="bg-white w-full max-w-md h-full shadow-2xl p-6 overflow-y-auto space-y-6" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-start justify-between pb-4 border-b border-slate-100">
+              <div className="flex items-center gap-3">
+                <Avatar name={s.name} size="lg" />
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">{s.name}</h3>
+                  <p className="font-mono text-xs font-semibold text-teal-800">{s.rollNo}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setOpenRoll(null)}
+                className="p-1.5 rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
 
-            <h4>Basic information</h4>
-            <div className="rc-kv"><span>Department</span><b>{s.program} {s.dept}</b></div>
-            <div className="rc-kv"><span>Semester</span><b>{s.semester}</b></div>
-            <div className="rc-kv"><span>Phone</span><b>{s.phone}</b></div>
-            <div className="rc-kv"><span>Email</span><b>{s.email}</b></div>
+            <div className="space-y-4">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">Basic Information</h4>
+              <div className="space-y-2 text-xs">
+                <div className="flex justify-between py-1.5 border-b border-slate-100">
+                  <span className="text-slate-500">Program / Branch:</span>
+                  <span className="font-semibold text-slate-800">{s.program} {s.dept}</span>
+                </div>
+                <div className="flex justify-between py-1.5 border-b border-slate-100">
+                  <span className="text-slate-500">Semester:</span>
+                  <span className="font-semibold text-slate-800">Semester {s.semester}</span>
+                </div>
+                <div className="flex justify-between py-1.5 border-b border-slate-100">
+                  <span className="text-slate-500">Email:</span>
+                  <span className="font-mono text-slate-800">{s.email}</span>
+                </div>
+                <div className="flex justify-between py-1.5 border-b border-slate-100">
+                  <span className="text-slate-500">Emergency Phone:</span>
+                  <span className="font-mono text-slate-800">{s.phone}</span>
+                </div>
+              </div>
 
-            <h4>Medical profile</h4>
-            <div className="rc-kv"><span>Blood group</span><b>{s.blood}</b></div>
-            <div className="rc-kv"><span>Allergies</span><b>{s.allergies}</b></div>
-            <div className="rc-kv"><span>Chronic conditions</span><b>{s.conditions}</b></div>
-            <div className="rc-kv"><span>Current medications</span><b>{s.meds}</b></div>
+              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 pt-2">Medical Profile</h4>
+              <div className="space-y-2 text-xs">
+                <div className="flex justify-between py-1.5 border-b border-slate-100">
+                  <span className="text-slate-500">Blood Group:</span>
+                  <span className="font-bold text-slate-900">{s.blood}</span>
+                </div>
+                <div className="flex justify-between py-1.5 border-b border-slate-100">
+                  <span className="text-slate-500">Known Allergies:</span>
+                  <span className={`font-semibold ${s.allergies !== "None known" ? "text-rose-600 font-bold" : "text-slate-800"}`}>
+                    {s.allergies}
+                  </span>
+                </div>
+                <div className="flex justify-between py-1.5 border-b border-slate-100">
+                  <span className="text-slate-500">Chronic Conditions:</span>
+                  <span className="font-semibold text-slate-800">{s.conditions}</span>
+                </div>
+                <div className="flex justify-between py-1.5 border-b border-slate-100">
+                  <span className="text-slate-500">Current Medications:</span>
+                  <span className="font-semibold text-slate-800">{s.meds}</span>
+                </div>
+              </div>
 
-            <h4>Recent visits</h4>
-            {past.length === 0 ? <p className="rc-muted">No visits recorded.</p> : (
-              <table className="rc-table"><thead><tr><th>Time</th><th>Doctor</th><th>Status</th></tr></thead>
-                <tbody>{past.map((v) => <tr key={v.id}><td>{hhmm(v.checkedIn)}</td><td>{dname(v.doctorId)}</td><td><Badge s={v.status} /></td></tr>)}</tbody></table>
-            )}
+              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 pt-2">Visit History</h4>
+              {past.length > 0 ? (
+                <div className="space-y-2">
+                  {past.map((v) => (
+                    <div key={v.id} className="p-3 rounded-xl border border-slate-200 bg-slate-50/50 flex items-center justify-between text-xs">
+                      <div>
+                        <p className="font-bold text-slate-800">{dname(v.doctorId)}</p>
+                        <p className="text-[11px] text-slate-500 font-mono">{hhmm(v.checkedIn)} • {v.complaint}</p>
+                      </div>
+                      <Badge s={v.status} />
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-slate-400 text-center py-3">No past OPD visits found today.</p>
+              )}
+            </div>
           </aside>
         </div>
       )}
-    </>
+    </div>
   );
 }
 
-/* ====================== 5. DISPENSING ====================== */
+/* ====================== 5. DISPENSING (Single-Column Structured Cards) ====================== */
 function Dispensing({ forMedicine, flash }) {
   const [openId, setOpenId] = useState(null);
   const [type, setType] = useState("Dispensed as prescribed");
@@ -380,50 +1204,203 @@ function Dispensing({ forMedicine, flash }) {
   };
 
   return (
-    <>
-      <PageHead title="Dispensing Desk" sub="Prescriptions waiting to be dispensed" right={<span className="rc-badge amber big">{forMedicine.length} ready</span>} />
-      {forMedicine.length === 0 && <section className="rc-card"><p className="rc-muted c">No prescriptions waiting. They appear here when a doctor completes a consultation.</p></section>}
-      {forMedicine.map((x) => (
-        <section key={x.id} className="rc-card rc-rxcard">
-          <div>
-            <h3>{x.name}</h3>
-            <small>Roll: {x.rollNo}</small>
-            <small>{dname(x.doctorId)} • Prescription #{x.rxNo}</small>
-            <p className="rc-meds-n">{x.rx?.length || 0} medicine{x.rx?.length === 1 ? "" : "s"}</p>
+    <div className="space-y-6">
+      <PageHead
+        title="Dispensing Desk"
+        sub="Fulfill completed doctor prescriptions and record dispensed medications"
+        badge={`${forMedicine.length} ready`}
+      />
+
+      {forMedicine.length === 0 && (
+        <div className="p-10 rounded-2xl border border-slate-200 bg-white text-center shadow-xs">
+          <CheckCircle className="w-10 h-10 text-emerald-600 mx-auto mb-2" />
+          <h3 className="text-base font-bold text-slate-800">All Prescriptions Dispensed</h3>
+          <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
+            New prescriptions will arrive here automatically when doctors complete consultations.
+          </p>
+        </div>
+      )}
+
+      {/* ── Single-Column Structured Prescription Cards ── */}
+      <div className="space-y-4">
+        {forMedicine.map((x) => (
+          <div
+            key={x.id}
+            className="p-5 rounded-2xl border border-slate-200/90 bg-white shadow-xs hover:border-teal-300 transition-all flex flex-col lg:flex-row lg:items-center justify-between gap-5"
+          >
+            {/* Left: Student & Prescriber Details */}
+            <div className="flex items-start gap-3.5 min-w-[260px]">
+              <Avatar name={x.name} size="md" />
+              <div>
+                <h3 className="text-base font-bold text-slate-900">{x.name}</h3>
+                <div className="flex items-center gap-2 mt-1">
+                  <span className="font-mono text-xs font-bold px-2 py-0.2 rounded bg-slate-100 text-slate-700">
+                    {x.rollNo}
+                  </span>
+                  <span className="text-xs text-slate-500">
+                    {dname(x.doctorId)}
+                  </span>
+                </div>
+                <p className="text-[11px] text-teal-800 font-semibold mt-0.5">
+                  Prescription #{x.rxNo || "1042"}
+                </p>
+              </div>
+            </div>
+
+            {/* Middle: Medication Pills Preview & Alerts */}
+            <div className="flex-1 space-y-2">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block">
+                Prescribed Medicines ({x.rx?.length || 0})
+              </span>
+              <div className="flex flex-wrap gap-1.5">
+                {(x.rx || []).map((r, i) => (
+                  <span
+                    key={i}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-teal-50 border border-teal-200/70 text-teal-900 text-xs font-medium"
+                  >
+                    <Pill className="w-3 h-3 text-teal-700" />
+                    <span>{r.med}</span>
+                    <span className="text-[10px] text-teal-700 font-bold">({r.qty} units)</span>
+                  </span>
+                ))}
+              </div>
+
+              {x.allergy && x.allergy !== "None known" && (
+                <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-rose-50 border border-rose-200 text-rose-800 text-[11px] font-semibold">
+                  <ShieldAlert className="w-3 h-3 text-rose-600" />
+                  <span>Allergy flagged: {x.allergy}</span>
+                </div>
+              )}
+            </div>
+
+            {/* Right: Action Button */}
+            <div className="flex lg:flex-col items-center lg:items-end justify-between gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => start(x.id)}
+                className="px-5 py-2.5 rounded-xl bg-teal-700 hover:bg-teal-800 text-white font-semibold text-xs shadow-xs hover:shadow-md transition-all cursor-pointer flex items-center gap-2"
+              >
+                <Pill className="w-4 h-4" />
+                <span>Dispense Medication</span>
+              </button>
+            </div>
           </div>
-          <button className="rc-btn main" onClick={() => start(x.id)}>Dispense</button>
-        </section>
-      ))}
+        ))}
+      </div>
 
+      {/* ── Dispensing Modal Dialog ── */}
       {v && (
-        <div className="rc-modal" onClick={() => setOpenId(null)}>
-          <div className="rc-dialog" onClick={(e) => e.stopPropagation()}>
-            <div className="rc-dh"><h2>Dispense Prescription</h2><button className="rc-x" onClick={() => setOpenId(null)} aria-label="Close"><Icon name="close" /></button></div>
-            <h3 className="rc-name sm">{v.name}</h3>
-            <small>Roll: {v.rollNo}</small><small>Prescribed by: {dname(v.doctorId)}</small>
-            {v.allergy && v.allergy !== "None known" && <div className="rc-warn">Allergies: {v.allergy}</div>}
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm" onClick={() => setOpenId(null)}>
+          <div className="bg-white rounded-3xl shadow-2xl max-w-lg w-full p-6 border border-slate-100 relative space-y-5" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-xl bg-teal-50 text-teal-700 border border-teal-100">
+                  <Pill className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">Dispense Prescription</h3>
+                  <p className="text-xs text-slate-500">Prescription #{v.rxNo || "1042"} • {dname(v.doctorId)}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setOpenId(null)}
+                className="p-1.5 rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
 
-            <h4>Medicines</h4>
-            {(v.rx || []).map((r, i) => (
-              <div key={i} className="rc-med"><b>{r.med}</b><small>{r.freq} • {r.days} days • {r.qty} units{r.note ? ` • ${r.note}` : ""}</small></div>
-            ))}
-            {v.advice && <><h4>Doctor's advice</h4><p className="rc-muted">{v.advice}</p></>}
+            {/* Patient Header */}
+            <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80 flex items-center gap-3">
+              <Avatar name={v.name} size="md" />
+              <div>
+                <p className="text-sm font-bold text-slate-900">{v.name}</p>
+                <p className="text-xs text-slate-500">Roll No: {v.rollNo}</p>
+              </div>
+            </div>
 
-            <h4>Dispensing status</h4>
-            {["Dispensed as prescribed", "Partially dispensed", "Substituted"].map((t) => (
-              <label key={t} className="rc-radio"><input type="radio" name="dtype" checked={type === t} onChange={() => setType(t)} />{t}</label>
-            ))}
-            <label className="rc-field">Remarks{type !== "Dispensed as prescribed" ? " (required)" : ""}
-              <textarea rows="2" value={remarks} onChange={(e) => setRemarks(e.target.value)} placeholder="e.g. cetirizine out of stock, gave levocetirizine" />
-            </label>
-            <div className="rc-act">
-              <button className="rc-btn ghost" onClick={() => window.print()}>Print slip</button>
-              <button className="rc-btn main" onClick={confirm}>Confirm dispensing</button>
+            {/* Medicines List */}
+            <div className="space-y-2">
+              <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider">Medicines to Dispense</h4>
+              <div className="space-y-2">
+                {(v.rx || []).map((r, i) => (
+                  <div key={i} className="p-3 rounded-xl border border-slate-200 bg-white flex items-center justify-between text-xs">
+                    <div>
+                      <p className="font-bold text-slate-900">{r.med}</p>
+                      <p className="text-[11px] text-slate-500">{r.freq} • {r.days} days{r.note ? ` • ${r.note}` : ""}</p>
+                    </div>
+                    <span className="font-mono font-bold text-teal-800 bg-teal-50 px-2.5 py-1 rounded-lg border border-teal-200/60">
+                      Qty: {r.qty}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {v.advice && (
+              <div className="p-3 rounded-xl bg-slate-50 text-xs text-slate-600 border border-slate-200/60">
+                <strong>Doctor's Advice: </strong>{v.advice}
+              </div>
+            )}
+
+            {/* Dispensing Status Selector */}
+            <div className="space-y-2">
+              <h4 className="text-xs font-bold text-slate-700">Dispensing Fulfillment Status</h4>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                {["Dispensed as prescribed", "Partially dispensed", "Substituted"].map((t) => (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => setType(t)}
+                    className={`p-2.5 rounded-xl border text-xs font-semibold transition-all cursor-pointer text-center ${
+                      type === t
+                        ? "bg-teal-700 text-white border-teal-700"
+                        : "bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200"
+                    }`}
+                  >
+                    {t}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Remarks Input */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-slate-700 block">
+                Pharmacist Remarks {type !== "Dispensed as prescribed" ? "(Required)" : "(Optional)"}
+              </label>
+              <textarea
+                rows="2"
+                value={remarks}
+                onChange={(e) => setRemarks(e.target.value)}
+                placeholder="e.g. Verified dosage with student, advised taking after meals."
+                className="w-full p-2.5 rounded-xl border border-slate-200 text-xs text-slate-900 focus:outline-none focus:border-teal-500"
+              />
+            </div>
+
+            {/* Actions */}
+            <div className="pt-2 flex items-center justify-end gap-2.5 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="px-3.5 py-2.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer"
+              >
+                <Printer className="w-3.5 h-3.5" />
+                <span>Print Slip</span>
+              </button>
+              <button
+                type="button"
+                onClick={confirm}
+                className="px-5 py-2.5 rounded-xl bg-teal-700 hover:bg-teal-800 text-white text-xs font-semibold transition-all shadow-xs cursor-pointer"
+              >
+                Confirm Dispensing
+              </button>
             </div>
           </div>
         </div>
       )}
-    </>
+    </div>
   );
 }
 
@@ -431,153 +1408,165 @@ function Dispensing({ forMedicine, flash }) {
 function Completed({ completed }) {
   const [q, setQ] = useState("");
   const rows = completed.filter((v) => (v.name + v.rollNo).toLowerCase().includes(q.toLowerCase()));
+
   return (
-    <>
-      <PageHead title="Completed Visits" sub="Today's completed OPD visits" />
-      <section className="rc-card">
-        <div className="rc-filters">
-          <input className="rc-in grow" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search student / roll" />
-          <select className="rc-in"><option>Today</option></select>
+    <div className="space-y-6">
+      <PageHead
+        title="Completed Visits"
+        sub="Today's completed and discharged OPD patient consultations"
+        badge={`${completed.length} completed`}
+      />
+
+      <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs p-5 space-y-4">
+        <div className="relative max-w-sm">
+          <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+          <input
+            type="text"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Search completed student by name or roll..."
+            className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 bg-slate-50/60 text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-teal-500 focus:bg-white"
+          />
         </div>
-        <table className="rc-table">
-          <thead><tr><th>Student</th><th>Doctor</th><th>Check-in</th><th>Completed</th><th>Dispensing</th></tr></thead>
-          <tbody>
-            {rows.map((v) => (
-              <tr key={v.id}><td><b>{v.name}</b><small>Roll {v.rollNo}</small></td><td>{dname(v.doctorId)}</td><td>{hhmm(v.checkedIn)}</td><td>{hhmm(v.dispensedAt)}</td><td>{v.dispensing?.type || "—"}</td></tr>
-            ))}
-            {rows.length === 0 && <tr><td colSpan="5" className="rc-muted">No completed visits yet.</td></tr>}
-          </tbody>
-        </table>
-      </section>
-    </>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse text-xs">
+            <thead>
+              <tr className="border-b border-slate-100 text-slate-400 font-semibold bg-slate-50/30">
+                <th className="py-3 px-4">Student</th>
+                <th className="py-3 px-4">Roll Number</th>
+                <th className="py-3 px-4">Doctor</th>
+                <th className="py-3 px-4">Check-in Time</th>
+                <th className="py-3 px-4">Discharged Time</th>
+                <th className="py-3 px-4">Dispensing Status</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {rows.map((v) => (
+                <tr key={v.id} className="hover:bg-slate-50/60 transition-colors">
+                  <td className="py-3 px-4">
+                    <div className="flex items-center gap-2.5">
+                      <Avatar name={v.name} size="sm" />
+                      <span className="font-bold text-slate-900">{v.name}</span>
+                    </div>
+                  </td>
+                  <td className="py-3 px-4 font-mono text-slate-600">{v.rollNo}</td>
+                  <td className="py-3 px-4 text-slate-700 font-medium">{dname(v.doctorId)}</td>
+                  <td className="py-3 px-4 font-mono text-slate-500">{hhmm(v.checkedIn)}</td>
+                  <td className="py-3 px-4 font-mono text-slate-500">{hhmm(v.dispensedAt)}</td>
+                  <td className="py-3 px-4">
+                    <span className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200/60">
+                      {v.dispensing?.type || "Dispensed"}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+              {rows.length === 0 && (
+                <tr>
+                  <td colSpan="6" className="py-8 text-center text-slate-400 text-xs">
+                    No completed visits recorded today yet.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
   );
 }
 
-/* ====================== 7. ACTIVITY ====================== */
+/* ====================== 7. ACTIVITY AUDIT LOG ====================== */
 function Activity({ log }) {
   return (
-    <>
-      <PageHead title="Activity" sub="Reception desk actions" />
-      <section className="rc-card">
-        {log.length === 0 && <p className="rc-muted c">No activity yet.</p>}
-        {log.map((l, i) => (
-          <div key={i} className="rc-log"><time>{hhmm(l.t)}</time><div><b>{l.kind}</b><small>{l.text}</small></div></div>
-        ))}
-      </section>
-    </>
+    <div className="space-y-6">
+      <PageHead
+        title="Activity Log"
+        sub="Audit feed of front desk check-ins, cabin transitions, and dispensing events"
+        badge={`${log.length} events`}
+      />
+
+      <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs p-5">
+        <div className="divide-y divide-slate-100">
+          {log.map((l, i) => (
+            <div key={i} className="py-3 flex items-center justify-between gap-4 text-xs">
+              <div className="flex items-center gap-3">
+                <span className="font-mono text-slate-400 text-xs w-14 shrink-0">{hhmm(l.t)}</span>
+                <div>
+                  <span className="font-bold text-slate-900">{l.kind}</span>
+                  <p className="text-slate-500 text-[11px] mt-0.5">{l.text}</p>
+                </div>
+              </div>
+              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 shrink-0">
+                Logged
+              </span>
+            </div>
+          ))}
+          {log.length === 0 && (
+            <p className="text-center text-slate-400 text-xs py-8">No events logged yet.</p>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
 
-/* ====================== settings (small) ====================== */
+/* ====================== 8. SETTINGS ====================== */
 function Settings({ flash }) {
   return (
-    <>
-      <PageHead title="Settings" sub="Reception desk preferences" />
-      <section className="rc-card rc-narrow">
-        <div className="rc-kv"><span>Desk</span><b>Front Desk • Counter 1</b></div>
-        <div className="rc-kv"><span>Shift hours</span><b>09:00 AM - 05:00 PM</b></div>
-        <div className="rc-kv"><span>Account</span><b>reception@thapar.edu</b></div>
-        <button className="rc-btn ghost" style={{ marginTop: 16 }} onClick={() => { if (confirm("Reset all queue data to demo data?")) { resetDemo(); flash("Demo data reset"); } }}>Reset demo data</button>
-      </section>
-    </>
+    <div className="max-w-xl mx-auto py-2 space-y-6">
+      <PageHead
+        title="Settings"
+        sub="Front desk preferences and demonstration queue controls"
+      />
+
+      <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs p-6 space-y-4 text-xs">
+        <h3 className="text-sm font-bold text-slate-900 pb-2 border-b border-slate-100">
+          Terminal Information
+        </h3>
+
+        <div className="space-y-2.5">
+          <div className="flex justify-between py-1 border-b border-slate-100">
+            <span className="text-slate-500">Desk Station:</span>
+            <span className="font-semibold text-slate-900">Front Desk • Counter 1</span>
+          </div>
+          <div className="flex justify-between py-1 border-b border-slate-100">
+            <span className="text-slate-500">Operational Hours:</span>
+            <span className="font-semibold text-slate-900">09:00 AM - 05:00 PM</span>
+          </div>
+          <div className="flex justify-between py-1 border-b border-slate-100">
+            <span className="text-slate-500">Connected Account:</span>
+            <span className="font-mono text-slate-900">reception@thapar.edu</span>
+          </div>
+          <div className="flex justify-between py-1 border-b border-slate-100">
+            <span className="text-slate-500">RFID Scanner State:</span>
+            <span className="text-emerald-700 font-bold flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> Connected
+            </span>
+          </div>
+        </div>
+
+        <div className="pt-4 border-t border-slate-100">
+          <button
+            type="button"
+            onClick={() => {
+              if (confirm("Reset all queue data to default demo state?")) {
+                resetDemo();
+                flash("Demo queue data successfully reset");
+              }
+            }}
+            className="w-full py-2.5 px-4 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 font-semibold text-xs transition-colors cursor-pointer"
+          >
+            Reset Demo Data to Initial State
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
-/* ====================== styles ====================== */
 const CSS = `
-.rc{--teal:#0f766e;--teal-d:#115e59;--teal-l:#e8f5f2;--ink:#0f172a;--mut:#64748b;--line:#e6ebef;--bg:#f5f7f9;
- font-family:'Plus Jakarta Sans','Inter',system-ui,sans-serif;background:var(--bg);color:var(--ink);min-height:100vh;font-size:14.5px;display:flex;flex-direction:column}
-.rc *{box-sizing:border-box}.rc small{display:block;color:var(--mut);font-size:12.5px;margin-top:1px}.rc button{font-family:inherit;cursor:pointer}
-.rc button:focus-visible,.rc input:focus-visible,.rc select:focus-visible,.rc textarea:focus-visible{outline:3px solid #a5dad2;outline-offset:1px}
-.rc h1,.rc h2,.rc h3,.rc h4{margin:0}
-
-.rc-top{height:64px;display:flex;align-items:center;justify-content:space-between;padding:0 24px;background:#fff;border-bottom:1px solid var(--line);position:sticky;top:0;z-index:20}
-.rc-brand{display:flex;gap:10px;align-items:center}.rc-brand b{font-size:16px}
-.rc-logo{width:36px;height:36px;border-radius:10px;background:var(--teal);color:#fff;display:grid;place-items:center}
-.rc-top-r{display:flex;gap:22px;align-items:center}.rc-clock{text-align:right}.rc-clock b{font-size:18px;font-variant-numeric:tabular-nums}
-.rc-user{display:flex;gap:10px;align-items:center;border:1px solid var(--line);border-radius:12px;padding:5px 12px 5px 6px}
-.rc-av{width:32px;height:32px;border-radius:50%;background:var(--teal);color:#fff;font-weight:700;font-size:12px;display:grid;place-items:center}
-.rc-user b{font-size:13px}
-
-.rc-shell{display:flex;flex:1;min-height:0}
-.rc-side{width:236px;flex:none;background:#fff;border-right:1px solid var(--line);padding:16px 12px;display:flex;flex-direction:column;justify-content:space-between;position:sticky;top:64px;height:calc(100vh - 64px)}
-.rc-nav{display:flex;align-items:center;gap:12px;width:100%;border:0;background:transparent;border-radius:10px;padding:11px 12px;margin-bottom:2px;color:#475569;font-size:14px;font-weight:600;text-align:left;position:relative}
-.rc-nav:hover{background:#f3f6f8}
-.rc-nav.on{background:var(--teal-l);color:var(--teal)}
-.rc-nav.on::before{content:"";position:absolute;left:-12px;top:8px;bottom:8px;width:3px;border-radius:0 3px 3px 0;background:var(--teal)}
-.rc-nav i{margin-left:auto;font-style:normal;background:var(--teal);color:#fff;border-radius:99px;min-width:22px;text-align:center;padding:1px 7px;font-size:11.5px}
-.rc-side-bot{border-top:1px solid var(--line);padding-top:10px}
-
-.rc-content{flex:1;min-width:0;padding:28px 32px 48px;max-width:1100px}
-.rc-ph{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:20px}
-.rc-ph h1{font-size:24px}.rc-ph p{margin:4px 0 0;color:var(--mut)}
-.rc-card{background:#fff;border:1px solid var(--line);border-radius:12px;padding:20px;margin-bottom:16px}
-.rc-card h3{font-size:16px;margin-bottom:12px}
-.rc-narrow{max-width:560px}
-.rc-muted{color:var(--mut);margin:8px 0}.rc-muted.c{text-align:center;padding:16px 0}
-.rc-two{display:grid;grid-template-columns:1fr 1fr;gap:16px}.rc-two .rc-card{margin:0}.rc-two{margin-bottom:16px}
-@media(max-width:900px){.rc-two{grid-template-columns:1fr}.rc-side{width:70px}.rc-nav span,.rc-nav i{display:none}.rc-content{padding:20px 14px}.rc-clock{display:none}}
-
-.rc-hello{background:#fff;border:1px solid var(--line);border-left:4px solid var(--teal);border-radius:12px;padding:16px 20px;margin-bottom:16px}
-.rc-hello b{display:block;font-size:17px}.rc-hello span{color:var(--mut)}
-.rc-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:16px}
-.rc-stat{background:#fff;border:1px solid var(--line);border-radius:12px;padding:16px 20px}
-.rc-stat small{font-size:13px}.rc-stat b{font-size:32px;line-height:1.2}
-.rc-doc{display:flex;gap:12px;align-items:center;padding:12px 0;border-top:1px solid var(--line)}.rc-doc:first-of-type{border-top:0}
-.rc-doc-r{margin-left:auto;text-align:right}
-.rc-dot{width:10px;height:10px;border-radius:50%;flex:none}.rc-dot.green{background:#16a34a}.rc-dot.amber{background:#f59e0b}
-.rc-action{background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:12px 14px;margin-bottom:12px}
-.rc-line{display:flex;gap:16px;padding:10px 0;border-top:1px solid var(--line)}.rc-line time{color:var(--mut);width:46px;font-variant-numeric:tabular-nums}.rc-line span{width:150px;color:var(--mut)}
-
-.rc-btn{border:1px solid transparent;border-radius:10px;padding:10px 18px;font-weight:700;font-size:14px;display:inline-flex;align-items:center;gap:8px;justify-content:center}
-.rc-btn.main{background:var(--teal);color:#fff}.rc-btn.main:hover:not(:disabled){background:var(--teal-d)}
-.rc-btn.ghost{background:#fff;color:var(--ink);border-color:#d5dde3}.rc-btn.ghost:hover{background:#f5f8f9}
-.rc-btn:disabled{background:#cbd5e1;color:#fff;cursor:not-allowed}
-.rc-live{width:8px;height:8px;border-radius:50%;background:#16a34a}
-.rc-badge{display:inline-block;border-radius:99px;padding:3px 11px;font-size:12px;font-weight:700;white-space:nowrap}
-.rc-badge.green{background:#dcfce7;color:#166534}.rc-badge.yellow{background:#fef9c3;color:#854d0e}
-.rc-badge.amber{background:#ffedd5;color:#9a3412}.rc-badge.grey{background:#eef1f4;color:#475569}.rc-badge.big{font-size:13px;padding:6px 14px}
-
-.rc-table{width:100%;border-collapse:collapse}
-.rc-table th{text-align:left;font-size:12px;color:var(--mut);font-weight:600;padding:10px 12px;border-bottom:1px solid var(--line)}
-.rc-table td{padding:12px;border-bottom:1px solid var(--line);vertical-align:middle}
-.rc-table tr:last-child td{border-bottom:0}.rc-table tr.hl td{background:#f0fdf4}
-.rc-table.clickable tbody tr{cursor:pointer}.rc-table.clickable tbody tr:hover td{background:#f5faf9}
-.rc-qh{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
-.rc-filters{display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap}
-.rc-in{border:1px solid #d5dde3;border-radius:10px;padding:10px 12px;font-family:inherit;font-size:14px;background:#fff}.rc-in.grow{flex:1;min-width:200px}
-
-.rc-field{display:block;font-weight:600;margin-top:14px}
-.rc-field input,.rc-field textarea{display:block;width:100%;margin-top:6px;border:1px solid #d5dde3;border-radius:10px;padding:11px 12px;font-family:inherit;font-size:14.5px;font-weight:400;resize:vertical}
-.rc-rfid{text-align:center;padding:18px 0 8px}.rc-rfid b{display:block;font-size:18px;margin-top:14px;letter-spacing:.5px}.rc-rfid .rc-btn{margin-top:14px}
-.rc-rfid-ring{width:84px;height:84px;border-radius:50%;margin:0 auto;display:grid;place-items:center;color:var(--teal);background:var(--teal-l);border:2px dashed #8fd0c6}
-.rc-or{display:flex;align-items:center;gap:12px;color:var(--mut);margin:18px 0 2px}.rc-or::before,.rc-or::after{content:"";flex:1;height:1px;background:var(--line)}
-.rc-pick{display:block;width:100%;text-align:left;margin-top:8px;background:#fff;border:1px solid var(--line);border-radius:10px;padding:12px 14px}.rc-pick:hover{border-color:var(--teal);background:var(--teal-l)}
-.rc-ident{display:flex;align-items:center;gap:8px;color:#166534;font-weight:700}
-.rc-tick{width:22px;height:22px;border-radius:50%;background:#16a34a;color:#fff;display:grid;place-items:center}
-.rc-name{font-size:24px;margin:10px 0 4px}.rc-name.sm{font-size:19px;margin:12px 0 2px}
-.rc-warn{margin-top:12px;background:#fef2f2;border:1px solid #fecaca;color:#b91c1c;border-radius:10px;padding:10px 12px}
-.rc h4{margin:22px 0 8px;font-size:13px;color:var(--mut);font-weight:700}
-.rc-docs{display:flex;flex-direction:column;gap:10px}
-.rc-docpick{display:flex;align-items:center;gap:12px;width:100%;text-align:left;background:#fff;border:1.5px solid var(--line);border-radius:10px;padding:12px 14px}
-.rc-docpick em{margin-left:auto;font-style:normal;font-weight:700;color:var(--mut)}
-.rc-docpick.on{border-color:var(--teal);background:var(--teal-l)}
-.rc-act{display:flex;gap:10px;justify-content:flex-end;margin-top:22px;flex-wrap:wrap}
-.rc-kv{display:flex;justify-content:space-between;gap:16px;padding:9px 0;border-bottom:1px solid var(--line)}.rc-kv span{color:var(--mut)}.rc-kv b{text-align:right;font-weight:600}
-.rc-ok{color:#166534;font-weight:600;margin:14px 0 0}
-
-.rc-rxcard{display:flex;justify-content:space-between;align-items:center;gap:16px}.rc-rxcard h3{margin-bottom:4px}
-.rc-meds-n{margin:10px 0 0;font-weight:700;color:var(--teal)}
-.rc-modal,.rc-drawer-bg{position:fixed;inset:0;background:rgba(15,23,42,.45);z-index:50;display:grid;place-items:center;padding:16px}
-.rc-dialog{background:#fff;border-radius:14px;padding:24px;width:100%;max-width:520px;max-height:92vh;overflow:auto}
-.rc-dh{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}.rc-dh h2{font-size:20px}
-.rc-x{border:0;background:#f1f5f9;width:34px;height:34px;border-radius:50%;display:grid;place-items:center;color:var(--mut)}
-.rc-med{border:1px solid var(--line);border-radius:10px;padding:11px 14px;margin-bottom:8px}.rc-med b{display:block}
-.rc-radio{display:flex;align-items:center;gap:10px;padding:6px 0;font-weight:500}.rc-radio input{accent-color:var(--teal);width:17px;height:17px}
-.rc-drawer-bg{display:flex;justify-content:flex-end;padding:0}
-.rc-drawer{background:#fff;width:100%;max-width:440px;height:100%;padding:24px;overflow:auto}
-.rc-log{display:flex;gap:18px;padding:14px 0;border-top:1px solid var(--line)}.rc-log:first-of-type{border-top:0}
-.rc-log time{color:var(--mut);width:46px;font-variant-numeric:tabular-nums}.rc-log b{font-size:13px;letter-spacing:.3px}
-.rc-toast{position:fixed;bottom:26px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:13px 20px;border-radius:12px;font-weight:600;z-index:80}
-@media print{.rc-top,.rc-side,.rc-content>*:not(.rc-modal),.rc-toast,.rc-act,.rc-x{display:none!important}.rc-modal{position:static;background:none}.rc-dialog{max-height:none}}
+@media print {
+  aside, nav, button, .rc-toast { display: none !important; }
+}
 `;

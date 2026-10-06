@@ -5,6 +5,7 @@ const BASE = import.meta.env.VITE_API_URL ?? ''
 const TOKEN_KEY = 'campuscare_token'
 const DOCTOR_KEY = 'campuscare_doctor'
 const STUDENT_KEY = 'campuscare_student'
+const RECEPTIONIST_KEY = 'campuscare_receptionist'
 const ROLE_KEY = 'campuscare_role'
 
 export function saveSession({ token, doctorId, name, specialization }) {
@@ -12,6 +13,7 @@ export function saveSession({ token, doctorId, name, specialization }) {
   localStorage.setItem(ROLE_KEY, 'DOCTOR')
   localStorage.setItem(DOCTOR_KEY, JSON.stringify({ doctorId, name, specialization }))
   localStorage.removeItem(STUDENT_KEY)
+  localStorage.removeItem(RECEPTIONIST_KEY)
 }
 
 export function saveStudentSession({ token, rollNumber, name, email, userId }) {
@@ -19,6 +21,15 @@ export function saveStudentSession({ token, rollNumber, name, email, userId }) {
   localStorage.setItem(ROLE_KEY, 'STUDENT')
   localStorage.setItem(STUDENT_KEY, JSON.stringify({ rollNumber, name, email, userId }))
   localStorage.removeItem(DOCTOR_KEY)
+  localStorage.removeItem(RECEPTIONIST_KEY)
+}
+
+export function saveReceptionistSession({ token, name, email, staffId }) {
+  localStorage.setItem(TOKEN_KEY, token)
+  localStorage.setItem(ROLE_KEY, 'RECEPTIONIST')
+  localStorage.setItem(RECEPTIONIST_KEY, JSON.stringify({ name, email, staffId }))
+  localStorage.removeItem(DOCTOR_KEY)
+  localStorage.removeItem(STUDENT_KEY)
 }
 
 export function clearSession() {
@@ -26,6 +37,7 @@ export function clearSession() {
   localStorage.removeItem(ROLE_KEY)
   localStorage.removeItem(DOCTOR_KEY)
   localStorage.removeItem(STUDENT_KEY)
+  localStorage.removeItem(RECEPTIONIST_KEY)
 }
 
 export function getToken() {
@@ -43,6 +55,11 @@ export function getStoredDoctor() {
 
 export function getStoredStudent() {
   const raw = localStorage.getItem(STUDENT_KEY)
+  return raw ? JSON.parse(raw) : null
+}
+
+export function getStoredReceptionist() {
+  const raw = localStorage.getItem(RECEPTIONIST_KEY)
   return raw ? JSON.parse(raw) : null
 }
 

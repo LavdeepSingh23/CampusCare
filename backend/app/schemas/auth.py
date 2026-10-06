@@ -10,9 +10,10 @@ class LoginResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     expires_in_minutes: int
-    doctor_id: int
+    doctor_id: int | None = None
+    role: str = "DOCTOR"
     name: str
-    specialization: str
+    specialization: str | None = None
 
 
 class GoogleStudentLoginRequest(BaseModel):
