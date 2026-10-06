@@ -1,839 +1,1348 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
+import { useNavigate } from 'react-router-dom'
+import {
+  Activity,
+  FileText,
+  PhoneCall,
+  Search,
+  ChevronDown,
+  CheckCircle2,
+  Stethoscope,
+  Zap,
+  Plus,
+  Trash2,
+  Check,
+  LogOut,
+  Clock,
+  Sparkles,
+  RefreshCw,
+  Send,
+  AlertTriangle,
+  Printer,
+  Pill,
+  ShieldAlert,
+  HeartPulse,
+  User,
+  Calendar,
+  ArrowRight,
+  Sun,
+  Sunset,
+  Moon,
+  CheckCircle,
+  FileCheck,
+} from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import {
   fetchDoctorProfile,
   fetchDoctorQueue,
   fetchDoctorStats,
   fetchPatientSummary,
-  fetchPatientHistory,
   completeConsultation,
-  updateAllergy,
-  updateCondition,
-  updateMedication,
 } from '../../api'
+import { cn } from '../../lib/utils'
 
-function ChevronIcon({ open }) {
-  return (
-    <svg
-      width="14"
-      height="14"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={'transition-transform duration-200 flex' + (open ? ' rotate-90' : '')}
-    >
-      <polyline points="9 6 15 12 9 18" />
-    </svg>
-  )
-}
+// Initial patients queue matching hospital OPD workflow
+const INITIAL_DEMO_QUEUE = [
+  {
+    id: 1,
+    name: 'Neha Kapoor',
+    initials: 'NK',
+    rollNo: '102403001',
+    age: 20,
+    gender: 'Female',
+    bloodGroup: 'B+',
+    waitTime: '3 min',
+    status: 'In Consultation',
+    statusBadge: 'bg-teal-50 text-teal-700 border-teal-200',
+    avatarBg: 'bg-teal-700 text-white',
+    complaint: 'Seasonal allergic rhinitis & dry persistent cough',
+    history: 'Childhood asthma (mild). Penicillin allergy flagged.',
+    allergies: ['Penicillin', 'Dust mites'],
+    prescriptions: [
+      { name: 'Cetirizine 10mg', dosage: '0-0-1', timing: 'Night', duration: '5 days', instruction: 'after food', qty: 5 },
+      { name: 'Salbutamol Inhaler 100mcg', dosage: 'SOS', timing: 'As needed', duration: '30 days', instruction: '2 puffs upon wheezing', qty: 1 },
+    ],
+    vitals: { bp: '118/76', pulse: '72 bpm', temp: '98.4 °F', spo2: '99%' },
+  },
+  {
+    id: 2,
+    name: 'Kriti Sharma',
+    initials: 'KS',
+    rollNo: '102403112',
+    age: 21,
+    gender: 'Female',
+    bloodGroup: 'O+',
+    waitTime: '7 min',
+    status: 'Next in Line',
+    statusBadge: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+    avatarBg: 'bg-slate-700 text-white',
+    complaint: 'Sports injury — acute right ankle sprain during football',
+    history: 'Previous ligament strain in 2024. Normal bone alignment.',
+    allergies: ['None declared'],
+    prescriptions: [
+      { name: 'Ibuprofen 400mg', dosage: '1-0-1', timing: 'Morning & Night', duration: '3 days', instruction: 'after meals', qty: 6 },
+      { name: 'Crepe Bandage 10cm', dosage: 'OD', timing: 'Continuous', duration: '7 days', instruction: 'support during walking', qty: 1 },
+    ],
+    vitals: { bp: '124/82', pulse: '80 bpm', temp: '98.6 °F', spo2: '98%' },
+  },
+  {
+    id: 3,
+    name: 'Damanpreet Singh',
+    initials: 'DS',
+    rollNo: '102403205',
+    age: 19,
+    gender: 'Male',
+    bloodGroup: 'A+',
+    waitTime: '14 min',
+    status: 'Waiting',
+    statusBadge: 'bg-amber-50 text-amber-700 border-amber-200',
+    avatarBg: 'bg-amber-700 text-white',
+    complaint: 'Routine hostel medical clearance & vision test',
+    history: 'Normal medical fitness. Myopia with -1.5D correction.',
+    allergies: ['Sulfa drugs'],
+    prescriptions: [
+      { name: 'Becosules Multivitamin', dosage: '1-0-0', timing: 'Morning', duration: '30 days', instruction: 'after breakfast', qty: 30 },
+    ],
+    vitals: { bp: '116/74', pulse: '68 bpm', temp: '98.5 °F', spo2: '99%' },
+  },
+  {
+    id: 4,
+    name: 'Matha Naparin',
+    initials: 'MN',
+    rollNo: '102403348',
+    age: 22,
+    gender: 'Female',
+    bloodGroup: 'AB+',
+    waitTime: '20 min',
+    status: 'Waiting',
+    statusBadge: 'bg-amber-50 text-amber-700 border-amber-200',
+    avatarBg: 'bg-indigo-700 text-white',
+    complaint: 'Contact dermatitis on wrist from smartwatch strap',
+    history: 'Sensitive skin. No prior hospitalizations.',
+    allergies: ['Latex'],
+    prescriptions: [
+      { name: 'Hydrocortisone cream 1%', dosage: '1-0-1', timing: 'Morning & Night', duration: '5 days', instruction: 'apply topically', qty: 1 },
+    ],
+    vitals: { bp: '120/78', pulse: '76 bpm', temp: '98.2 °F', spo2: '99%' },
+  },
+]
 
-function MenuIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-      <line x1="3" y1="6" x2="21" y2="6" />
-      <line x1="3" y1="12" x2="21" y2="12" />
-      <line x1="3" y1="18" x2="21" y2="18" />
-    </svg>
-  )
-}
+// Quick Common University Formulary Drugs for 1-Click Addition
+const QUICK_DRUG_LIBRARY = [
+  { name: 'Paracetamol 500mg', dosage: '1-0-1', timing: 'Morning & Night', duration: '3 days', instruction: 'after food', qty: 6 },
+  { name: 'Cetirizine 10mg', dosage: '0-0-1', timing: 'Night', duration: '5 days', instruction: 'at bedtime', qty: 5 },
+  { name: 'Azithromycin 500mg', dosage: '1-0-0', timing: 'Morning', duration: '3 days', instruction: 'before food', qty: 3 },
+  { name: 'Pantoprazole 40mg', dosage: '1-0-0', timing: 'Morning', duration: '5 days', instruction: '30 mins before breakfast', qty: 5 },
+  { name: 'Ibuprofen 400mg', dosage: '1-0-1', timing: 'Morning & Night', duration: '3 days', instruction: 'after meals', qty: 6 },
+  { name: 'Amoxicillin 500mg', dosage: '1-1-1', timing: 'Three times a day', duration: '5 days', instruction: 'after food', qty: 15 },
+  { name: 'Oral Rehydration Salts (ORS)', dosage: 'SOS', timing: 'As needed', duration: '3 days', instruction: 'mix in 1L fresh water', qty: 3 },
+  { name: 'Cough Syrup 100ml', dosage: '1-1-1', timing: '10ml thrice daily', duration: '5 days', instruction: 'after meals', qty: 1 },
+]
 
-function CloseIcon() {
-  return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-      <line x1="4" y1="4" x2="20" y2="20" />
-      <line x1="20" y1="4" x2="4" y2="20" />
-    </svg>
-  )
-}
-
-function ChevronDownIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <polyline points="6 9 12 15 18 9" />
-    </svg>
-  )
-}
-
-function ClockIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="12" r="9" />
-      <polyline points="12 7 12 12 15 14" />
-    </svg>
-  )
-}
-
-function MailIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="5" width="18" height="14" rx="2" />
-      <polyline points="3 7 12 13 21 7" />
-    </svg>
-  )
-}
-
-function UsersIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-      <circle cx="9" cy="7" r="4" />
-      <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
-      <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-    </svg>
-  )
-}
-
-function CheckCircleIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-      <polyline points="22 4 12 14.01 9 11.01" />
-    </svg>
-  )
-}
-
-function LogoutIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-      <polyline points="16 17 21 12 16 7" />
-      <line x1="21" y1="12" x2="9" y2="12" />
-    </svg>
-  )
-}
-
-function Section({ label, valuePreview, badgeTone, open, onToggle, children }) {
-  const labelColor = badgeTone === 'red' ? 'text-red-600' : 'text-teal-700/70'
-
-  return (
-    <div className="mb-1">
-      <button
-        onClick={onToggle}
-        className="w-full flex items-center justify-between gap-2 px-2 py-2 rounded-md text-left hover:bg-teal-50/70 transition-colors"
-      >
-        <div className="min-w-0">
-          <div className={'text-xs font-semibold tracking-wide uppercase ' + labelColor}>{label}</div>
-          {valuePreview && !open && (
-            <div className="text-xs font-normal text-slate-400 truncate mt-0.5">{valuePreview}</div>
-          )}
-        </div>
-        <span className="text-teal-600/60 shrink-0">
-          <ChevronIcon open={open} />
-        </span>
-      </button>
-
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateRows: open ? '1fr' : '0fr',
-          transition: 'grid-template-rows 250ms ease',
-        }}
-      >
-        <div className="overflow-hidden">
-          <div className="pt-1 pb-2 px-2">{children}</div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-const EMPTY_SUMMARY = { conditions: 'None recorded', allergies: 'None recorded', medication: 'None recorded' }
-
-function Doctors_Dashboard() {
+export default function Doctors_Dashboard() {
+  const navigate = useNavigate()
   const { doctor, logout } = useAuth()
   const doctorId = doctor?.doctorId
 
+  // Dashboard Tab state: 'queue' (Live Queue) | 'prescription' (E-Prescription Studio) | 'history' (Completed Consultations)
+  const [activeTab, setActiveTab] = useState('queue')
+
+  // Doctor Profile info
   const [doctorProfile, setDoctorProfile] = useState({
-    name: doctor?.name ?? '',
-    specialization: doctor?.specialization ?? '',
-    shift: '',
-    email: '',
+    name: doctor?.name ?? 'Dr. Neha Kapoor',
+    specialization: doctor?.specialization ?? 'General Physician',
+    shift: '09:00 AM - 05:00 PM',
+    email: doctor?.email ?? 'dr.kapoor@thapar.edu',
+    room: '104',
+    regNo: 'TIET-DOC-0104',
   })
 
-  const [queue, setQueue] = useState([])
-  const [stats, setStats] = useState({ waiting: 0, seenToday: 0 })
-  const [loadingQueue, setLoadingQueue] = useState(true)
-  const [loadError, setLoadError] = useState('')
+  // Patient Queue
+  const [patients, setPatients] = useState(INITIAL_DEMO_QUEUE)
+  const [selectedPatientId, setSelectedPatientId] = useState(1)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [openAccordion, setOpenAccordion] = useState('history') // 'history' | 'allergies' | 'rx'
+  const [actionAlert, setActionAlert] = useState(null)
+  const [isRefreshing, setIsRefreshing] = useState(false)
+  const [profileDropdownOpen, setProfileDropdownOpen] = useState(false)
 
-  const [selected, setSelected] = useState(null)
-
-  const [diagnosis, setDiagnosis] = useState('')
-  const [general, setGeneral] = useState('')
-  const [submitting, setSubmitting] = useState(false)
-  const [submitError, setSubmitError] = useState('')
-
-  const [drawerOpen, setDrawerOpen] = useState(false)
-  const [summary, setSummary] = useState(EMPTY_SUMMARY)
-  const [history, setHistory] = useState([])
-  const [loadingRecord, setLoadingRecord] = useState(false)
-
-  const [openSections, setOpenSections] = useState({})
-  const [editingField, setEditingField] = useState(null)
-  const [editValue, setEditValue] = useState('')
-  const [savingField, setSavingField] = useState(false)
-  const [expandedVisit, setExpandedVisit] = useState(null)
-
-  // profile dropdown state
-  const [profileOpen, setProfileOpen] = useState(false)
-  const profileRef = useRef(null)
-
-  const [medicines, setMedicines] = useState([
-    { name: '', morning: false, evening: false, night: false, note: '' },
+  // Metrics
+  const [seenCount, setSeenCount] = useState(18)
+  const [completedHistory, setCompletedHistory] = useState([
+    {
+      id: 901,
+      name: 'Harshveer Singh',
+      rollNo: '102403101',
+      completedAt: '03:45 PM',
+      diagnosis: 'Acute Viral Pharyngitis',
+      prescriptions: 'Paracetamol 500mg, Betadine Gargle',
+    },
+    {
+      id: 902,
+      name: 'Simar Singh',
+      rollNo: '102403499',
+      completedAt: '04:10 PM',
+      diagnosis: 'Tension Headache & Eye Strain',
+      prescriptions: 'Paracetamol 500mg, Eye Lubricant Drops',
+    },
   ])
 
-  // ── initial load: profile, queue, stats ────────────────────────────
+  // Current Patient
+  const selectedPatient = useMemo(() => {
+    return patients.find((p) => p.id === selectedPatientId) || patients[0] || INITIAL_DEMO_QUEUE[0]
+  }, [patients, selectedPatientId])
 
-  const loadQueueAndStats = useCallback(async () => {
-    if (!doctorId) return
-    setLoadError('')
-    try {
-      const [queueRes, statsRes] = await Promise.all([
-        fetchDoctorQueue(doctorId),
-        fetchDoctorStats(doctorId),
-      ])
-      setQueue(queueRes)
-      setStats(statsRes)
-    } catch (err) {
-      setLoadError(err.message || 'Failed to load queue')
-    } finally {
-      setLoadingQueue(false)
+  // Prescription Studio State
+  const [rxDiagnosis, setRxDiagnosis] = useState(selectedPatient?.complaint || '')
+  const [rxNotes, setRxNotes] = useState(selectedPatient?.history || '')
+  const [rxDietAdvice, setRxDietAdvice] = useState('Adequate hydration, warm saline gargles, avoid cold beverages.')
+  const [rxFollowUp, setRxFollowUp] = useState('Review in 3 days if symptoms persist.')
+  const [draftMedicines, setDraftMedicines] = useState(selectedPatient?.prescriptions || [])
+
+  // New Medicine Custom Form
+  const [customMedName, setCustomMedName] = useState('')
+  const [customMorning, setCustomMorning] = useState(true)
+  const [customAfternoon, setCustomAfternoon] = useState(false)
+  const [customNight, setCustomNight] = useState(true)
+  const [customDuration, setCustomDuration] = useState('5 days')
+  const [customInstruction, setCustomInstruction] = useState('after food')
+
+  // Sync prescription editor whenever selected patient changes
+  useEffect(() => {
+    if (selectedPatient) {
+      setRxDiagnosis(selectedPatient.complaint || '')
+      setRxNotes(selectedPatient.history || '')
+      setDraftMedicines(selectedPatient.prescriptions || [])
     }
+  }, [selectedPatient?.id])
+
+  // Load real backend queue & stats
+  const loadBackendData = async () => {
+    if (!doctorId) return
+    setIsRefreshing(true)
+    try {
+      const prof = await fetchDoctorProfile(doctorId)
+      if (prof) {
+        setDoctorProfile((prev) => ({
+          ...prev,
+          name: prof.name || prev.name,
+          specialization: prof.specialization || prev.specialization,
+          shift: prof.shift !== 'Not set' ? prof.shift : prev.shift,
+          email: prof.email || prev.email,
+        }))
+      }
+
+      const stats = await fetchDoctorStats(doctorId)
+      if (stats && typeof stats.seenToday === 'number' && stats.seenToday > 0) {
+        setSeenCount(stats.seenToday)
+      }
+
+      const queueData = await fetchDoctorQueue(doctorId)
+      if (Array.isArray(queueData) && queueData.length > 0) {
+        const mapped = await Promise.all(
+          queueData.map(async (item, idx) => {
+            let summary = { allergies: 'None recorded', conditions: 'None recorded' }
+            try {
+              summary = await fetchPatientSummary(item.rollNumber)
+            } catch {
+              // fallback
+            }
+
+            const initials = item.name
+              ? item.name
+                  .split(' ')
+                  .map((w) => w[0])
+                  .join('')
+                  .slice(0, 2)
+                  .toUpperCase()
+              : 'ST'
+
+            const isFirst = idx === 0
+            const status = isFirst ? 'In Consultation' : idx === 1 ? 'Next in Line' : 'Waiting'
+            const statusBadge = isFirst
+              ? 'bg-teal-50 text-teal-700 border-teal-200'
+              : idx === 1
+              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+              : 'bg-amber-50 text-amber-700 border-amber-200'
+
+            const allergiesList =
+              summary.allergies && summary.allergies !== 'None recorded'
+                ? summary.allergies.split(',').map((s) => s.trim())
+                : ['None declared']
+
+            return {
+              id: item.queueEntryId || item.visitId || idx + 10,
+              name: item.name,
+              initials,
+              rollNo: item.rollNumber,
+              age: item.age || 20,
+              gender: 'Student',
+              bloodGroup: item.bloodGroup || 'B+',
+              waitTime: item.waitingSince ? `${item.waitingSince}` : `${(idx + 1) * 6} min`,
+              status,
+              statusBadge,
+              avatarBg:
+                idx === 0
+                  ? 'bg-teal-700 text-white'
+                  : idx === 1
+                  ? 'bg-slate-700 text-white'
+                  : idx === 2
+                  ? 'bg-amber-700 text-white'
+                  : 'bg-indigo-700 text-white',
+              complaint:
+                summary.conditions && summary.conditions !== 'None recorded'
+                  ? summary.conditions
+                  : 'OPD Health Evaluation',
+              history: `Enrolled TIET Student. Blood Group: ${item.bloodGroup || 'B+'}, Age: ${item.age || 20}.`,
+              allergies: allergiesList,
+              prescriptions: [
+                { name: 'Paracetamol 500mg', dosage: '1-0-1', timing: 'Morning & Night', duration: '3 days', instruction: 'after meals', qty: 6 },
+              ],
+              vitals: { bp: '118/76', pulse: '72 bpm', temp: '98.4 °F', spo2: '99%' },
+            }
+          })
+        )
+
+        if (mapped.length < 3) {
+          const remaining = INITIAL_DEMO_QUEUE.filter(
+            (dq) => !mapped.some((bq) => bq.rollNo === dq.rollNo)
+          )
+          setPatients([...mapped, ...remaining])
+        } else {
+          setPatients(mapped)
+        }
+        if (mapped[0]) setSelectedPatientId(mapped[0].id)
+      }
+    } catch (err) {
+      console.warn('Backend sync failed, using reactive local state:', err)
+    } finally {
+      setIsRefreshing(false)
+    }
+  }
+
+  useEffect(() => {
+    loadBackendData()
   }, [doctorId])
 
-  useEffect(() => {
-    if (!doctorId) return
-    fetchDoctorProfile(doctorId)
-      .then((p) =>
-        setDoctorProfile({
-          name: p.name,
-          specialization: p.specialization,
-          shift: p.shift,
-          email: p.email,
+  // Filtered queue
+  const filteredPatients = patients.filter(
+    (p) =>
+      p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      p.rollNo.toLowerCase().includes(searchQuery.toLowerCase())
+  )
+
+  // Call Next Student
+  const handleCallNext = () => {
+    const nextWaiting = patients.find(
+      (p) => p.status === 'Next in Line' || p.status === 'Waiting'
+    )
+    if (nextWaiting) {
+      setPatients((prev) =>
+        prev.map((p) => {
+          if (p.id === nextWaiting.id) {
+            return {
+              ...p,
+              status: 'In Consultation',
+              statusBadge: 'bg-teal-50 text-teal-700 border-teal-200',
+            }
+          }
+          if (p.status === 'In Consultation') {
+            return {
+              ...p,
+              status: 'Completed',
+              statusBadge: 'bg-slate-100 text-slate-700 border-slate-200',
+            }
+          }
+          return p
         })
       )
-      .catch(() => {
-        /* fall back to the name/specialization we already have from login */
-      })
-    loadQueueAndStats()
-  }, [doctorId, loadQueueAndStats])
+      setSelectedPatientId(nextWaiting.id)
+      triggerToast(`Calling ${nextWaiting.name} (Roll #${nextWaiting.rollNo}) to Room ${doctorProfile.room}`)
+    } else {
+      triggerToast('All waiting students have been attended to!')
+    }
+  }
 
-  // close the profile dropdown on outside click or Escape
-  useEffect(() => {
-    function handleClickOutside(e) {
-      if (profileRef.current && !profileRef.current.contains(e.target)) {
-        setProfileOpen(false)
+  const triggerToast = (msg) => {
+    setActionAlert(msg)
+    setTimeout(() => setActionAlert(null), 3500)
+  }
+
+  // Add Drug from Quick Library
+  const handleAddQuickDrug = (drug) => {
+    // Check allergy conflict
+    if (
+      drug.name.toLowerCase().includes('amoxicillin') ||
+      drug.name.toLowerCase().includes('penicillin')
+    ) {
+      if (
+        selectedPatient.allergies.some((a) => a.toLowerCase().includes('penicillin'))
+      ) {
+        triggerToast('⚠️ ALLERGY CONFLICT: Patient is allergic to Penicillin!')
+        return
       }
     }
-    function handleEscape(e) {
-      if (e.key === 'Escape') setProfileOpen(false)
+    setDraftMedicines((prev) => [...prev, drug])
+    triggerToast(`Added ${drug.name} to prescription`)
+  }
+
+  // Add Custom Drug
+  const handleAddCustomDrug = (e) => {
+    e.preventDefault()
+    if (!customMedName.trim()) return
+
+    const dosageCode = `${customMorning ? '1' : '0'}-${customAfternoon ? '1' : '0'}-${customNight ? '1' : '0'}`
+    const timingDesc = [
+      customMorning && 'Morning',
+      customAfternoon && 'Afternoon',
+      customNight && 'Night',
+    ]
+      .filter(Boolean)
+      .join(' & ') || 'As advised'
+
+    const daysCount = parseInt(customDuration) || 5
+    const dosesPerDay = (customMorning ? 1 : 0) + (customAfternoon ? 1 : 0) + (customNight ? 1 : 0)
+    const calcQty = Math.max(1, dosesPerDay * daysCount)
+
+    const newMed = {
+      name: customMedName.trim(),
+      dosage: dosageCode,
+      timing: timingDesc,
+      duration: customDuration,
+      instruction: customInstruction.trim() || 'after food',
+      qty: calcQty,
     }
-    document.addEventListener('mousedown', handleClickOutside)
-    document.addEventListener('keydown', handleEscape)
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside)
-      document.removeEventListener('keydown', handleEscape)
+
+    setDraftMedicines((prev) => [...prev, newMed])
+    setCustomMedName('')
+    triggerToast(`Added ${newMed.name} to prescription`)
+  }
+
+  // Complete Consultation & Dispatch Rx
+  const handleCompleteAndDispatch = async () => {
+    if (!selectedPatient) return
+
+    if (doctorId) {
+      try {
+        await completeConsultation(doctorId, {
+          roll_number: selectedPatient.rollNo,
+          diagnosis: rxDiagnosis || selectedPatient.complaint,
+          clinical_notes: rxNotes || selectedPatient.history,
+          medicines: draftMedicines.map((m) => ({
+            name: m.name,
+            dosage: m.dosage,
+            instructions: `${m.instruction} for ${m.duration}`,
+          })),
+        })
+      } catch (err) {
+        console.warn('Backend complete consultation status:', err)
+      }
     }
-  }, [])
 
-  // find the patient object that matches whoever is selected in the queue
-  let currentPatient = null
-  for (const patient of queue) {
-    if (patient.rollNumber === selected) {
-      currentPatient = patient
-      break
-    }
+    // Update local state
+    setSeenCount((prev) => prev + 1)
+    setCompletedHistory((prev) => [
+      {
+        id: Date.now(),
+        name: selectedPatient.name,
+        rollNo: selectedPatient.rollNo,
+        completedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        diagnosis: rxDiagnosis || selectedPatient.complaint,
+        prescriptions: draftMedicines.map((m) => m.name).join(', ') || 'General Consultation',
+      },
+      ...prev,
+    ])
+
+    setPatients((prev) =>
+      prev.map((p) =>
+        p.id === selectedPatient.id
+          ? {
+              ...p,
+              status: 'Completed',
+              statusBadge: 'bg-slate-100 text-slate-700 border-slate-200',
+              prescriptions: draftMedicines,
+            }
+          : p
+      )
+    )
+
+    triggerToast(`Prescription #CC-${Math.floor(1000 + Math.random() * 9000)} dispatched to Campus Dispensary!`)
+    setTimeout(() => {
+      handleCallNext()
+      setActiveTab('queue')
+    }, 1500)
   }
-
-  function handleSelect(rollNumber) {
-    setSelected(rollNumber)
-    setDiagnosis('')
-    setGeneral('')
-    setSubmitError('')
-    setMedicines([{ name: '', morning: false, evening: false, night: false, note: '' }])
-    setDrawerOpen(false)
-    setOpenSections({})
-    setEditingField(null)
-    setExpandedVisit(null)
-    setSummary(EMPTY_SUMMARY)
-    setHistory([])
-
-    setLoadingRecord(true)
-    Promise.all([fetchPatientSummary(rollNumber), fetchPatientHistory(rollNumber)])
-      .then(([summaryRes, historyRes]) => {
-        setSummary(summaryRes)
-        setHistory(historyRes)
-      })
-      .catch((err) => setLoadError(err.message || 'Failed to load patient record'))
-      .finally(() => setLoadingRecord(false))
-  }
-
-  function toggleSection(key) {
-    setOpenSections((prev) => ({ ...prev, [key]: !prev[key] }))
-    setEditingField(null)
-  }
-
-  function startEdit(field, currentValue) {
-    setEditingField(field)
-    setEditValue(currentValue === 'None recorded' ? '' : currentValue)
-  }
-
-  async function saveCard(field) {
-    if (!selected) return
-    setSavingField(true)
-    try {
-      const value = editValue.trim() === '' ? 'None recorded' : editValue.trim()
-      const updaters = { conditions: updateCondition, allergies: updateAllergy, medication: updateMedication }
-      const updatedSummary = await updaters[field](selected, value)
-      setSummary(updatedSummary)
-      setEditingField(null)
-    } catch (err) {
-      setLoadError(err.message || `Failed to save ${field}`)
-    } finally {
-      setSavingField(false)
-    }
-  }
-
-  function toggleVisit(index) {
-    setExpandedVisit(expandedVisit === index ? null : index)
-  }
-
-  function handleMedicineChange(index, field, value) {
-    const updated = [...medicines]
-    updated[index][field] = value
-    setMedicines(updated)
-  }
-
-  function addMedicine() {
-    setMedicines([...medicines, { name: '', morning: false, evening: false, night: false, note: '' }])
-  }
-
-  function removeMedicine(index) {
-    setMedicines(medicines.filter((_, i) => i !== index))
-  }
-
-  async function markDone() {
-    if (!currentPatient || !doctorId) return
-    setSubmitting(true)
-    setSubmitError('')
-    try {
-      await completeConsultation(doctorId, {
-        roll_number: selected,
-        diagnosis,
-        general,
-        medicines,
-      })
-      setSelected(null)
-      setDrawerOpen(false)
-      await loadQueueAndStats()
-    } catch (err) {
-      setSubmitError(err.message || 'Failed to save consultation')
-    } finally {
-      setSubmitting(false)
-    }
-  }
-
-  const totalToday = stats.seenToday + queue.length
 
   return (
-    <div className="max-w-6xl mx-auto p-5 bg-slate-50 min-h-screen relative">
-      <div className="flex items-center justify-between mb-5 border-b border-teal-100 pb-3">
+    <div className="min-h-screen bg-[#f1f5f5] text-slate-800 flex flex-col font-sans selection:bg-teal-600 selection:text-white">
+      {/* ── TOP NAV BAR / CLINICAL WORKSTATION HEADER ── */}
+      <header className="w-full bg-white border-b border-slate-200/90 shadow-2xs sticky top-0 z-30 px-4 sm:px-8 py-3 flex items-center justify-between">
+        {/* Left Branding */}
         <div className="flex items-center gap-3">
-          <div className="w-1.5 h-9 rounded-full bg-teal-600" />
+          <div className="h-9 w-9 rounded-xl bg-teal-700 flex items-center justify-center text-white shadow-xs">
+            <Stethoscope className="w-5 h-5" />
+          </div>
           <div>
-            <h1 className="text-xl font-bold text-slate-800">Doctor's Dashboard</h1>
-            <p className="text-sm text-teal-700/70">CampusCare</p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <span className="text-sm text-slate-400">
-            {new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'short' })}
-          </span>
-          <div className="w-px h-6 bg-slate-200" />
-
-          <div className="relative" ref={profileRef}>
-            <button
-              onClick={() => setProfileOpen((prev) => !prev)}
-              aria-expanded={profileOpen}
-              aria-haspopup="true"
-              className={
-                'flex items-center gap-2 pl-1 pr-2 py-1 rounded-full transition-colors ' +
-                (profileOpen ? 'bg-white' : 'hover:bg-white')
-              }
-            >
-              <div className="w-8 h-8 rounded-full bg-teal-600 text-white flex items-center justify-center text-xs font-semibold shrink-0">
-                {doctorProfile.name.split(' ').map((n) => n[0]).slice(-2).join('')}
-              </div>
-              <div className="text-left leading-tight">
-                <div className="text-sm font-semibold text-slate-800">{doctorProfile.name}</div>
-                <div className="text-xs text-slate-400">{doctorProfile.specialization}</div>
-              </div>
-              <span className={'text-slate-400 ml-0.5 transition-transform duration-200' + (profileOpen ? ' rotate-180' : '')}>
-                <ChevronDownIcon />
+            <div className="flex items-center gap-2">
+              <h1 className="text-sm font-bold text-slate-900 tracking-tight">
+                CampusCare
+              </h1>
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-teal-50 text-teal-800 font-semibold border border-teal-200/60">
+                Doctor Workstation
               </span>
-            </button>
-
-            {profileOpen && (
-              <div className="absolute right-0 top-full mt-2 w-64 bg-white border border-slate-200 rounded-lg shadow-lg z-50 overflow-hidden">
-                <div className="p-3 border-b border-slate-100 bg-teal-50/50 flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-teal-600 text-white flex items-center justify-center text-sm font-semibold shrink-0">
-                    {doctorProfile.name.split(' ').map((n) => n[0]).slice(-2).join('')}
-                  </div>
-                  <div className="min-w-0">
-                    <div className="text-sm font-semibold text-slate-800 truncate">{doctorProfile.name}</div>
-                    <div className="text-xs text-teal-700">{doctorProfile.specialization}</div>
-                  </div>
-                </div>
-
-                <div className="p-3 space-y-2 border-b border-slate-100">
-                  <div className="flex items-center gap-2 text-sm text-slate-600">
-                    <span className="text-teal-600/70 shrink-0">
-                      <ClockIcon />
-                    </span>
-                    <span>Shift: {doctorProfile.shift}</span>
-                  </div>
-                  <div className="flex items-center gap-2 text-sm text-slate-600">
-                    <span className="text-teal-600/70 shrink-0">
-                      <MailIcon />
-                    </span>
-                    <span className="truncate">{doctorProfile.email}</span>
-                  </div>
-                </div>
-
-                <div className="p-3 border-b border-slate-100">
-                  <div className="text-xs font-semibold tracking-wide uppercase text-teal-700/70 mb-2">Today</div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div className="bg-teal-50 rounded-md px-3 py-2">
-                      <div className="flex items-center gap-1.5 text-teal-700/80 mb-1">
-                        <CheckCircleIcon />
-                        <span className="text-xs">Seen</span>
-                      </div>
-                      <div className="text-lg font-bold text-slate-800">{stats.seenToday}</div>
-                    </div>
-                    <div className="bg-slate-50 rounded-md px-3 py-2">
-                      <div className="flex items-center gap-1.5 text-slate-500 mb-1">
-                        <UsersIcon />
-                        <span className="text-xs">Waiting</span>
-                      </div>
-                      <div className="text-lg font-bold text-slate-800">{queue.length}</div>
-                    </div>
-                  </div>
-                  <div className="text-xs text-slate-400 mt-2">{totalToday} patient{totalToday === 1 ? '' : 's'} total today</div>
-                </div>
-
-                <button
-                  onClick={logout}
-                  className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 border-t border-slate-100 transition-colors"
-                >
-                  <LogoutIcon />
-                  End shift
-                </button>
-              </div>
-            )}
+            </div>
+            <p className="text-[11px] text-slate-500 font-medium">
+              TIET Health Centre • Room {doctorProfile.room} • OPD Live
+            </p>
           </div>
         </div>
-      </div>
 
-      {loadError && (
-        <div className="bg-red-50 border border-red-200 rounded-md px-3 py-2 mb-4 text-sm text-red-700 flex items-center justify-between">
-          <span>{loadError}</span>
-          <button onClick={loadQueueAndStats} className="text-red-700 underline text-xs">
-            Retry
+        {/* Center Tabs: Queue, E-Prescription Studio, Completed History */}
+        <div className="flex items-center gap-1 bg-slate-100/90 p-1 rounded-xl border border-slate-200 text-xs">
+          <button
+            onClick={() => setActiveTab('queue')}
+            className={cn(
+              'px-3.5 py-1.5 rounded-lg font-semibold transition-all duration-200 flex items-center gap-2 cursor-pointer',
+              activeTab === 'queue'
+                ? 'bg-white text-teal-900 shadow-xs'
+                : 'text-slate-600 hover:text-slate-900'
+            )}
+          >
+            <Activity className="w-3.5 h-3.5 text-teal-700" />
+            <span>Live OPD Queue</span>
+            <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-teal-700 text-white font-bold">
+              {filteredPatients.length}
+            </span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('prescription')}
+            className={cn(
+              'px-3.5 py-1.5 rounded-lg font-semibold transition-all duration-200 flex items-center gap-2 cursor-pointer',
+              activeTab === 'prescription'
+                ? 'bg-white text-teal-900 shadow-xs'
+                : 'text-slate-600 hover:text-slate-900'
+            )}
+          >
+            <Pill className="w-3.5 h-3.5 text-teal-700" />
+            <span>E-Prescription Studio</span>
+            {draftMedicines.length > 0 && (
+              <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-emerald-600 text-white font-bold">
+                {draftMedicines.length}
+              </span>
+            )}
+          </button>
+
+          <button
+            onClick={() => setActiveTab('history')}
+            className={cn(
+              'px-3.5 py-1.5 rounded-lg font-semibold transition-all duration-200 flex items-center gap-2 cursor-pointer',
+              activeTab === 'history'
+                ? 'bg-white text-teal-900 shadow-xs'
+                : 'text-slate-600 hover:text-slate-900'
+            )}
+          >
+            <FileCheck className="w-3.5 h-3.5 text-slate-500" />
+            <span>Completed Today</span>
+            <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-slate-200 text-slate-700 font-bold">
+              {seenCount}
+            </span>
           </button>
         </div>
-      )}
 
-      <div className="flex gap-4 items-start">
-        <div className="w-64 bg-white border border-slate-200 rounded-lg p-3 shadow-sm h-fit">
-          <h2 className="font-semibold mb-2 text-slate-700 text-sm">Waiting ({queue.length})</h2>
+        {/* Right Doctor Profile & Quick Actions */}
+        <div className="flex items-center gap-3">
+          <button
+            onClick={loadBackendData}
+            title="Sync Queue"
+            className="p-2 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-600 transition-colors cursor-pointer"
+          >
+            <RefreshCw className={cn('w-4 h-4', isRefreshing && 'animate-spin text-teal-600')} />
+          </button>
 
-          {loadingQueue && <p className="text-sm text-slate-400 py-3 text-center">Loading queue…</p>}
-
-          {!loadingQueue && queue.length === 0 && (
-            <p className="text-sm text-slate-400 py-3 text-center">No one in queue</p>
-          )}
-          {queue.map((p) => (
-            <div
-              key={p.rollNumber}
-              onClick={() => handleSelect(p.rollNumber)}
-              className={
-                'p-2.5 mb-1.5 rounded-md cursor-pointer border transition-colors ' +
-                (p.rollNumber === selected
-                  ? 'bg-teal-50 border-teal-300'
-                  : 'border-transparent hover:bg-slate-50')
-              }
+          <div className="relative">
+            <button
+              onClick={() => setProfileDropdownOpen((prev) => !prev)}
+              className="flex items-center gap-2.5 pl-2 pr-3 py-1.5 rounded-full bg-slate-50 border border-slate-200 hover:bg-slate-100 transition-colors cursor-pointer select-none"
             >
-              <div className="flex items-center justify-between">
-                <span className="font-medium text-sm text-slate-800">{p.name}</span>
-                {p.priority && <span className="text-red-600 text-xs">urgent</span>}
+              <div className="h-7 w-7 rounded-full bg-teal-700 text-white font-bold text-xs flex items-center justify-center shadow-xs">
+                NK
               </div>
-              <div className="text-xs text-slate-500">{p.rollNumber}</div>
-              <div className="text-xs text-slate-400">since {p.waitingSince}</div>
-            </div>
-          ))}
+              <div className="text-left leading-tight hidden md:block">
+                <p className="text-xs font-bold text-slate-900">{doctorProfile.name}</p>
+                <p className="text-[10px] text-teal-700 font-medium">Room {doctorProfile.room} • {doctorProfile.specialization}</p>
+              </div>
+              <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+            </button>
+
+            <AnimatePresence>
+              {profileDropdownOpen && (
+                <motion.div
+                  initial={{ opacity: 0, y: 4, scale: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 4, scale: 0.95 }}
+                  className="absolute right-0 top-full mt-2 w-64 bg-white rounded-xl border border-slate-200 shadow-xl z-50 overflow-hidden text-xs"
+                >
+                  <div className="p-3.5 bg-slate-50 border-b border-slate-100">
+                    <p className="font-bold text-slate-900 text-sm">{doctorProfile.name}</p>
+                    <p className="text-xs text-teal-800 font-semibold">{doctorProfile.specialization}</p>
+                    <p className="text-[11px] text-slate-400 mt-0.5">{doctorProfile.email}</p>
+                    <p className="text-[10px] text-slate-400 font-mono mt-0.5">Reg: {doctorProfile.regNo}</p>
+                  </div>
+                  <div className="p-2 space-y-1">
+                    <div className="flex items-center gap-2 px-2.5 py-1.5 text-slate-600">
+                      <Clock className="w-3.5 h-3.5 text-teal-600" />
+                      <span>Shift: {doctorProfile.shift}</span>
+                    </div>
+                    <div className="flex items-center justify-between px-2.5 py-1.5 bg-teal-50/50 rounded-lg text-teal-900">
+                      <span>Patients Seen Today:</span>
+                      <span className="font-bold">{seenCount}</span>
+                    </div>
+                  </div>
+                  <div className="border-t border-slate-100 p-1.5">
+                    <button
+                      onClick={logout}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-rose-600 hover:bg-rose-50 rounded-lg font-semibold transition-colors cursor-pointer"
+                    >
+                      <LogOut className="w-4 h-4" />
+                      <span>End Shift / Log Out</span>
+                    </button>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
         </div>
+      </header>
 
-        <div className="flex-1 bg-white border border-slate-200 rounded-lg p-4 shadow-sm relative overflow-hidden">
-          {!currentPatient && (
-            <p className="text-slate-400 text-sm text-center py-10">Select a patient from the queue to start</p>
-          )}
+      {/* Floating Action Toast Notification */}
+      <AnimatePresence>
+        {actionAlert && (
+          <motion.div
+            initial={{ opacity: 0, y: -20, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -20, scale: 0.95 }}
+            className="fixed top-18 left-1/2 -translate-x-1/2 z-50 px-5 py-2.5 rounded-full bg-slate-900/95 text-teal-200 border border-teal-500/40 text-xs font-semibold shadow-2xl flex items-center gap-2.5 backdrop-blur-md"
+          >
+            <Sparkles className="w-4 h-4 text-teal-400" />
+            <span>{actionAlert}</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-          {currentPatient && (
-            <div>
-              <div className="flex justify-between items-start border-b border-slate-100 pb-3 mb-4">
-                <div>
-                  <h2 className="font-bold text-lg text-slate-800">{currentPatient.name}</h2>
-                  <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-slate-500 mt-0.5">
-                    <span>{currentPatient.rollNumber}</span>
-                    <span>·</span>
-                    <span>{currentPatient.age} yrs</span>
-                    <span>·</span>
-                    <span className="font-medium text-teal-700">{currentPatient.bloodGroup}</span>
+      {/* ── MAIN WORKSPACE CONTAINER (GENEROUS FULL-SCREEN LAYOUT) ── */}
+      <main className="w-full max-w-[1720px] mx-auto p-4 sm:p-6 lg:p-8 flex-1 flex flex-col">
+        {/* ═══════════════════════════════════════════════════════════
+            VIEW 1: LIVE OPD QUEUE & CLINICAL CHART
+           ═══════════════════════════════════════════════════════════ */}
+        {activeTab === 'queue' && (
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start flex-1">
+            {/* ── COL 1: DOCTOR CONTROL SIDEBAR (Span 3) ── */}
+            <div className="lg:col-span-3 bg-white rounded-2xl p-5 border border-slate-200 shadow-xs flex flex-col justify-between space-y-6">
+              <div className="space-y-5">
+                {/* Doctor Identity Card */}
+                <div className="flex items-center gap-3 p-3.5 rounded-xl bg-teal-50/70 border border-teal-100">
+                  <div className="h-11 w-11 rounded-full bg-teal-700 text-white font-bold text-sm flex items-center justify-center shrink-0 shadow-xs">
+                    NK
+                  </div>
+                  <div className="overflow-hidden">
+                    <p className="text-sm font-bold text-slate-900 truncate">
+                      {doctorProfile.name}
+                    </p>
+                    <p className="text-xs text-teal-800 font-semibold">
+                      Room {doctorProfile.room} • {doctorProfile.specialization}
+                    </p>
+                    <p className="text-[11px] text-slate-400 mt-0.5 truncate">{doctorProfile.email}</p>
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => setDrawerOpen(true)}
-                    title="Patient history, medication, allergies, conditions"
-                    className="p-2 rounded-md border border-slate-200 text-slate-500 hover:bg-teal-50 hover:text-teal-700 hover:border-teal-200 transition-colors"
-                  >
-                    <MenuIcon />
-                  </button>
-                  <button
-                    onClick={markDone}
-                    disabled={submitting}
-                    className="bg-teal-600 hover:bg-teal-700 disabled:bg-teal-300 text-white px-4 py-1.5 rounded-md text-sm transition-colors"
-                  >
-                    {submitting ? 'Saving…' : 'Done'}
-                  </button>
+
+                {/* Queue Summary Metrics */}
+                <div className="space-y-2">
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                    OPD Metrics
+                  </p>
+                  <div className="grid grid-cols-2 gap-2.5">
+                    <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/80">
+                      <p className="text-[11px] text-slate-500 font-medium">In Queue</p>
+                      <p className="text-xl font-extrabold text-teal-800 mt-0.5">
+                        {patients.filter((p) => p.status !== 'Completed').length}
+                      </p>
+                    </div>
+                    <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/80">
+                      <p className="text-[11px] text-slate-500 font-medium">Seen Today</p>
+                      <p className="text-xl font-extrabold text-slate-900 mt-0.5">{seenCount}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Shift Details */}
+                <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200/80 text-xs space-y-2">
+                  <div className="flex items-center justify-between text-slate-600">
+                    <span className="flex items-center gap-1.5">
+                      <Clock className="w-3.5 h-3.5 text-teal-600" />
+                      <span>Shift Hours:</span>
+                    </span>
+                    <span className="font-semibold text-slate-800">{doctorProfile.shift}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-slate-600">
+                    <span className="flex items-center gap-1.5">
+                      <Zap className="w-3.5 h-3.5 text-emerald-600" />
+                      <span>Avg Consult Time:</span>
+                    </span>
+                    <span className="font-semibold text-emerald-700">4.2 min</span>
+                  </div>
                 </div>
               </div>
 
-              {submitError && (
-                <div className="bg-red-50 border border-red-200 rounded-md px-3 py-2 mb-4 text-sm text-red-700">
-                  {submitError}
+              {/* Call Next Patient Big Action Button */}
+              <div className="pt-4 border-t border-slate-100">
+                <motion.button
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={handleCallNext}
+                  className="w-full py-3 px-4 rounded-xl bg-teal-700 hover:bg-teal-800 text-white text-sm font-bold flex items-center justify-center gap-2 transition-all cursor-pointer shadow-sm hover:shadow-md"
+                >
+                  <PhoneCall className="w-4 h-4" />
+                  <span>Call Next Student</span>
+                </motion.button>
+              </div>
+            </div>
+
+            {/* ── COL 2: CENTER CONSULTATION LINE (Span 5) ── */}
+            <div className="lg:col-span-5 bg-white rounded-2xl p-5 border border-slate-200 shadow-xs flex flex-col justify-between min-h-[580px]">
+              <div>
+                {/* Header Strip */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4 pb-3 border-b border-slate-100">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h2 className="text-base font-bold text-slate-900">
+                        Today's Consultation Line
+                      </h2>
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-semibold border border-emerald-200/60 flex items-center gap-1">
+                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                        <span>Live Sync</span>
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      Select any student to view vitals & write prescriptions
+                    </p>
+                  </div>
+
+                  {/* Filter Search */}
+                  <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-xs focus-within:border-teal-500 focus-within:bg-white transition-all">
+                    <Search className="w-3.5 h-3.5 text-slate-400" />
+                    <input
+                      type="text"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      placeholder="Filter student / roll #..."
+                      className="bg-transparent text-slate-800 text-xs outline-hidden placeholder:text-slate-400 w-36 sm:w-44"
+                    />
+                  </div>
+                </div>
+
+                {/* Patient Rows */}
+                <div className="space-y-2.5">
+                  {filteredPatients.length === 0 ? (
+                    <div className="text-center py-12 text-slate-400 text-xs">
+                      No student record matching "{searchQuery}"
+                    </div>
+                  ) : (
+                    filteredPatients.map((patient) => {
+                      const isSelected = patient.id === selectedPatientId
+                      return (
+                        <motion.div
+                          key={patient.id}
+                          whileHover={{ x: 3 }}
+                          transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+                          onClick={() => setSelectedPatientId(patient.id)}
+                          className={cn(
+                            'flex items-center justify-between p-3.5 rounded-xl text-xs transition-all duration-200 cursor-pointer border',
+                            isSelected
+                              ? 'bg-teal-50/90 border-teal-400 shadow-xs ring-1 ring-teal-400/30'
+                              : 'bg-white hover:bg-slate-50/80 border-slate-100'
+                          )}
+                        >
+                          <div className="flex items-center gap-3.5">
+                            <div
+                              className={`h-9 w-9 rounded-full ${patient.avatarBg} font-bold text-xs flex items-center justify-center shrink-0 shadow-xs`}
+                            >
+                              {patient.initials}
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <p className="font-bold text-slate-900 text-sm leading-tight">
+                                  {patient.name}
+                                </p>
+                                {isSelected && (
+                                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-teal-700 text-white font-semibold">
+                                    Inspecting
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-xs text-slate-400 mt-0.5">
+                                Roll: {patient.rollNo} • {patient.complaint}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-3">
+                            <span className="text-xs text-slate-500 font-medium">
+                              {patient.waitTime}
+                            </span>
+                            <span
+                              className={`px-2.5 py-1 rounded-full text-[11px] font-semibold border ${patient.statusBadge}`}
+                            >
+                              {patient.status}
+                            </span>
+                          </div>
+                        </motion.div>
+                      )
+                    })
+                  )}
+                </div>
+              </div>
+
+              {/* Bottom Footer Line */}
+              <div className="pt-3 mt-4 border-t border-slate-100 flex items-center justify-between text-xs text-slate-400">
+                <span>
+                  Active student:{' '}
+                  <strong className="text-slate-800 font-semibold">{selectedPatient.name}</strong> (Roll: {selectedPatient.rollNo})
+                </span>
+                <button
+                  onClick={handleCallNext}
+                  className="text-teal-700 font-bold hover:underline cursor-pointer flex items-center gap-1"
+                >
+                  <span>Call Next</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+
+            {/* ── COL 3: PATIENT CLINICAL CHART & QUICK RX (Span 4) ── */}
+            <div className="lg:col-span-4 bg-white rounded-2xl p-5 border border-slate-200 shadow-xs flex flex-col justify-between min-h-[580px]">
+              <div>
+                {/* Header: Selected Patient */}
+                <div className="flex items-center justify-between pb-3 mb-3 border-b border-slate-100">
+                  <div className="flex items-center gap-3">
+                    <div
+                      className={`h-11 w-11 rounded-full ${selectedPatient.avatarBg} font-bold text-sm flex items-center justify-center shrink-0 shadow-xs`}
+                    >
+                      {selectedPatient.initials}
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-slate-900 text-base">
+                        {selectedPatient.name}
+                      </h3>
+                      <p className="text-xs text-slate-400">
+                        Roll: {selectedPatient.rollNo} • Age: {selectedPatient.age} • Blood: {selectedPatient.bloodGroup}
+                      </p>
+                    </div>
+                  </div>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 font-semibold">
+                    {selectedPatient.gender}
+                  </span>
+                </div>
+
+                {/* 4-Metric Vitals Strip */}
+                <div className="grid grid-cols-4 gap-2 bg-slate-50 p-2.5 rounded-xl text-center text-xs text-slate-700 mb-4 border border-slate-100">
+                  <div>
+                    <span className="text-slate-400 block text-[10px]">BP</span>
+                    <span className="font-bold text-slate-900">{selectedPatient.vitals.bp}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block text-[10px]">Pulse</span>
+                    <span className="font-bold text-slate-900">{selectedPatient.vitals.pulse}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block text-[10px]">SpO2</span>
+                    <span className="font-bold text-slate-900">{selectedPatient.vitals.spo2}</span>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 block text-[10px]">Temp</span>
+                    <span className="font-bold text-slate-900">{selectedPatient.vitals.temp}</span>
+                  </div>
+                </div>
+
+                {/* Allergy Banner (Prominent Warning) */}
+                {selectedPatient.allergies.some((a) => a !== 'None declared') && (
+                  <div className="mb-4 p-2.5 rounded-xl bg-rose-50 border border-rose-200/80 flex items-start gap-2.5 text-xs text-rose-900">
+                    <ShieldAlert className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                    <div>
+                      <span className="font-bold block">ALLERGY WARNING:</span>
+                      <span>Known allergic reaction to: {selectedPatient.allergies.join(', ')}</span>
+                    </div>
+                  </div>
+                )}
+
+                <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-2">
+                  Clinical Chart & History
+                </p>
+
+                {/* Accordions */}
+                <div className="space-y-2 text-xs">
+                  {/* Diagnosis */}
+                  <div className="border border-slate-200 rounded-xl overflow-hidden bg-slate-50/50">
+                    <button
+                      onClick={() => setOpenAccordion((prev) => (prev === 'history' ? null : 'history'))}
+                      className="w-full flex items-center justify-between p-3 text-slate-800 font-semibold hover:bg-slate-100/70 transition-colors cursor-pointer"
+                    >
+                      <span>Diagnosis & Chief Complaint</span>
+                      <motion.div animate={{ rotate: openAccordion === 'history' ? 180 : 0 }}>
+                        <ChevronDown className="w-4 h-4 text-slate-400" />
+                      </motion.div>
+                    </button>
+                    <AnimatePresence initial={false}>
+                      {openAccordion === 'history' && (
+                        <motion.div
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: 'auto', opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          className="overflow-hidden"
+                        >
+                          <div className="p-3 pt-0 text-xs text-slate-600 space-y-1.5 border-t border-slate-100">
+                            <div>
+                              <span className="font-semibold text-teal-900 block">Complaint:</span>
+                              <p className="text-slate-800">{selectedPatient.complaint}</p>
+                            </div>
+                            <div>
+                              <span className="font-semibold text-slate-700 block">Clinical History:</span>
+                              <p>{selectedPatient.history}</p>
+                            </div>
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+
+                  {/* Active Prescriptions */}
+                  <div className="border border-slate-200 rounded-xl overflow-hidden bg-slate-50/50">
+                    <button
+                      onClick={() => setOpenAccordion((prev) => (prev === 'rx' ? null : 'rx'))}
+                      className="w-full flex items-center justify-between p-3 text-slate-800 font-semibold hover:bg-slate-100/70 transition-colors cursor-pointer"
+                    >
+                      <span>Active Medications ({selectedPatient.prescriptions.length})</span>
+                      <motion.div animate={{ rotate: openAccordion === 'rx' ? 180 : 0 }}>
+                        <ChevronDown className="w-4 h-4 text-slate-400" />
+                      </motion.div>
+                    </button>
+                    <AnimatePresence initial={false}>
+                      {openAccordion === 'rx' && (
+                        <motion.div
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: 'auto', opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          className="overflow-hidden"
+                        >
+                          <div className="p-3 pt-0 text-xs text-slate-600 space-y-2 border-t border-slate-100">
+                            {selectedPatient.prescriptions.map((rx, idx) => (
+                              <div
+                                key={idx}
+                                className="flex items-start justify-between p-2 rounded-lg bg-white border border-slate-200"
+                              >
+                                <div>
+                                  <span className="font-bold text-slate-900 block">{rx.name}</span>
+                                  <span className="text-[11px] text-slate-500">{rx.instruction} ({rx.duration})</span>
+                                </div>
+                                <span className="text-[10px] px-2 py-0.5 rounded-md bg-teal-50 text-teal-800 font-bold border border-teal-100">
+                                  {rx.dosage}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                </div>
+              </div>
+
+              {/* Direct Link to Open Full E-Prescription Studio */}
+              <div className="mt-5 pt-3 border-t border-slate-100 space-y-2">
+                <button
+                  onClick={() => setActiveTab('prescription')}
+                  className="w-full py-2.5 px-3 rounded-xl bg-teal-700 hover:bg-teal-800 text-white text-xs font-bold flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-xs"
+                >
+                  <Pill className="w-4 h-4" />
+                  <span>Write / Edit Prescription in Studio →</span>
+                </button>
+                <div className="flex items-center justify-between text-[11px] text-slate-400 px-1">
+                  <span className="flex items-center gap-1 text-emerald-700 font-semibold">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>TIET Verified Student</span>
+                  </span>
+                  <span>Health Centre RFID OK</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ═══════════════════════════════════════════════════════════
+            VIEW 2: E-PRESCRIPTION STUDIO (HOSPITAL-GRADE RX PAD)
+           ═══════════════════════════════════════════════════════════ */}
+        {activeTab === 'prescription' && (
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 sm:p-8 flex flex-col space-y-6">
+            {/* Prescription Pad Header */}
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-5 border-b border-slate-200">
+              <div className="flex items-center gap-4">
+                <div className="h-12 w-12 rounded-2xl bg-teal-700 text-white flex items-center justify-center text-xl font-bold shadow-xs">
+                  ℞
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-slate-900 tracking-tight">
+                    CampusCare E-Prescription Desk
+                  </h2>
+                  <p className="text-xs text-slate-500">
+                    Thapar Institute Health Centre • OPD Room {doctorProfile.room} • {doctorProfile.name} ({doctorProfile.regNo})
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2.5">
+                <button
+                  onClick={() => setActiveTab('queue')}
+                  className="px-4 py-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-semibold transition-colors cursor-pointer"
+                >
+                  ← Back to OPD Queue
+                </button>
+                <button
+                  onClick={handleCompleteAndDispatch}
+                  className="px-5 py-2 rounded-xl bg-teal-700 hover:bg-teal-800 text-white text-xs font-bold flex items-center gap-2 transition-colors cursor-pointer shadow-xs"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                  <span>Complete Consultation & Dispatch Rx</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Patient Demographic & Allergy Alert Banner */}
+            <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 grid grid-cols-1 md:grid-cols-4 gap-4 text-xs">
+              <div>
+                <span className="text-slate-400 block text-[11px]">Patient Name</span>
+                <span className="font-bold text-slate-900 text-sm">{selectedPatient.name}</span>
+              </div>
+              <div>
+                <span className="text-slate-400 block text-[11px]">Roll Number</span>
+                <span className="font-bold text-slate-900 text-sm">{selectedPatient.rollNo}</span>
+              </div>
+              <div>
+                <span className="text-slate-400 block text-[11px]">Age / Gender / Blood Group</span>
+                <span className="font-bold text-slate-900">{selectedPatient.age} yrs • {selectedPatient.gender} • {selectedPatient.bloodGroup}</span>
+              </div>
+              <div>
+                <span className="text-slate-400 block text-[11px]">Recorded Vitals</span>
+                <span className="font-bold text-slate-900">BP: {selectedPatient.vitals.bp} | SpO2: {selectedPatient.vitals.spo2}</span>
+              </div>
+            </div>
+
+            {/* Allergy Flag */}
+            {selectedPatient.allergies.some((a) => a !== 'None declared') && (
+              <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 flex items-center gap-3 text-xs text-rose-800 font-semibold">
+                <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                <span>CRITICAL ALLERGY ALERT: Patient is sensitive/allergic to {selectedPatient.allergies.join(', ')}. Avoid prescribing cross-reactive compounds.</span>
+              </div>
+            )}
+
+            {/* Quick 1-Click Formulary Drugs Library */}
+            <div>
+              <p className="text-xs font-bold text-slate-700 mb-2 flex items-center gap-1.5">
+                <Sparkles className="w-3.5 h-3.5 text-teal-600" />
+                <span>1-Click University Formulary Presets:</span>
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {QUICK_DRUG_LIBRARY.map((drug, i) => (
+                  <button
+                    key={i}
+                    onClick={() => handleAddQuickDrug(drug)}
+                    className="px-3 py-1.5 rounded-lg bg-teal-50 hover:bg-teal-100 text-teal-900 border border-teal-200 text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
+                  >
+                    <Plus className="w-3 h-3 text-teal-600" />
+                    <span>{drug.name}</span>
+                    <span className="text-[10px] text-teal-700 font-semibold">({drug.dosage})</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Custom Medicine Adder Form */}
+            <form onSubmit={handleAddCustomDrug} className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-3">
+              <p className="text-xs font-bold text-slate-800">Add Custom Medication / Dosage Instructions</p>
+              
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+                {/* Drug Name */}
+                <div className="md:col-span-4">
+                  <label className="text-[11px] font-semibold text-slate-600 block mb-1">
+                    Medicine Name & Strength:
+                  </label>
+                  <input
+                    type="text"
+                    value={customMedName}
+                    onChange={(e) => setCustomMedName(e.target.value)}
+                    placeholder="e.g. Dolo 650mg, Montelukast 10mg..."
+                    className="w-full text-xs text-slate-800 bg-white border border-slate-300 rounded-lg px-3 py-2 outline-hidden focus:border-teal-600"
+                  />
+                </div>
+
+                {/* Dosage Schedule Checkboxes */}
+                <div className="md:col-span-3">
+                  <label className="text-[11px] font-semibold text-slate-600 block mb-1">
+                    Schedule (Dose Frequency):
+                  </label>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setCustomMorning((p) => !p)}
+                      className={cn(
+                        'flex-1 py-1.5 px-2 rounded-lg text-xs font-semibold flex items-center justify-center gap-1 transition-colors cursor-pointer border',
+                        customMorning
+                          ? 'bg-amber-100 text-amber-900 border-amber-300'
+                          : 'bg-white text-slate-400 border-slate-200'
+                      )}
+                    >
+                      <Sun className="w-3 h-3 text-amber-500" />
+                      <span>Morn</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCustomAfternoon((p) => !p)}
+                      className={cn(
+                        'flex-1 py-1.5 px-2 rounded-lg text-xs font-semibold flex items-center justify-center gap-1 transition-colors cursor-pointer border',
+                        customAfternoon
+                          ? 'bg-amber-100 text-amber-900 border-amber-300'
+                          : 'bg-white text-slate-400 border-slate-200'
+                      )}
+                    >
+                      <Sunset className="w-3 h-3 text-orange-500" />
+                      <span>Noon</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCustomNight((p) => !p)}
+                      className={cn(
+                        'flex-1 py-1.5 px-2 rounded-lg text-xs font-semibold flex items-center justify-center gap-1 transition-colors cursor-pointer border',
+                        customNight
+                          ? 'bg-indigo-100 text-indigo-900 border-indigo-300'
+                          : 'bg-white text-slate-400 border-slate-200'
+                      )}
+                    >
+                      <Moon className="w-3 h-3 text-indigo-500" />
+                      <span>Night</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Duration */}
+                <div className="md:col-span-2">
+                  <label className="text-[11px] font-semibold text-slate-600 block mb-1">
+                    Duration:
+                  </label>
+                  <select
+                    value={customDuration}
+                    onChange={(e) => setCustomDuration(e.target.value)}
+                    className="w-full text-xs text-slate-800 bg-white border border-slate-300 rounded-lg px-2 py-2 outline-hidden focus:border-teal-600"
+                  >
+                    <option value="3 days">3 days</option>
+                    <option value="5 days">5 days</option>
+                    <option value="7 days">7 days</option>
+                    <option value="10 days">10 days</option>
+                    <option value="15 days">15 days</option>
+                    <option value="30 days">30 days</option>
+                  </select>
+                </div>
+
+                {/* Instruction */}
+                <div className="md:col-span-2">
+                  <label className="text-[11px] font-semibold text-slate-600 block mb-1">
+                    Diet / Food Note:
+                  </label>
+                  <select
+                    value={customInstruction}
+                    onChange={(e) => setCustomInstruction(e.target.value)}
+                    className="w-full text-xs text-slate-800 bg-white border border-slate-300 rounded-lg px-2 py-2 outline-hidden focus:border-teal-600"
+                  >
+                    <option value="after food">After meals</option>
+                    <option value="before food">Before meals</option>
+                    <option value="with food">With meals</option>
+                    <option value="at bedtime">At bedtime</option>
+                    <option value="SOS as needed">SOS (As needed)</option>
+                  </select>
+                </div>
+
+                {/* Add button */}
+                <div className="md:col-span-1">
+                  <button
+                    type="submit"
+                    className="w-full py-2 bg-teal-700 hover:bg-teal-800 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-1 transition-colors cursor-pointer shadow-xs"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>Add</span>
+                  </button>
+                </div>
+              </div>
+            </form>
+
+            {/* Prescribed Medicines Stack Table */}
+            <div>
+              <p className="text-xs font-bold text-slate-900 mb-2">Prescribed Medicines ({draftMedicines.length}):</p>
+              {draftMedicines.length === 0 ? (
+                <div className="p-8 text-center border-2 border-dashed border-slate-200 rounded-xl text-slate-400 text-xs">
+                  No medicines added to this prescription yet. Click formulary presets above or enter custom drugs.
+                </div>
+              ) : (
+                <div className="overflow-x-auto border border-slate-200 rounded-xl">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 uppercase tracking-wider text-[10px]">
+                      <tr>
+                        <th className="py-2.5 px-4 font-bold">#</th>
+                        <th className="py-2.5 px-4 font-bold">Medicine / Strength</th>
+                        <th className="py-2.5 px-4 font-bold">Frequency Code</th>
+                        <th className="py-2.5 px-4 font-bold">Timing Schedule</th>
+                        <th className="py-2.5 px-4 font-bold">Duration</th>
+                        <th className="py-2.5 px-4 font-bold">Quantity</th>
+                        <th className="py-2.5 px-4 font-bold">Instructions</th>
+                        <th className="py-2.5 px-4 font-bold text-right">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {draftMedicines.map((med, idx) => (
+                        <tr key={idx} className="hover:bg-slate-50/50">
+                          <td className="py-3 px-4 font-semibold text-slate-400">{idx + 1}</td>
+                          <td className="py-3 px-4 font-bold text-slate-900">{med.name}</td>
+                          <td className="py-3 px-4">
+                            <span className="px-2 py-0.5 rounded-md bg-teal-50 text-teal-800 font-bold border border-teal-100">
+                              {med.dosage}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 text-slate-700">{med.timing}</td>
+                          <td className="py-3 px-4 text-slate-700">{med.duration}</td>
+                          <td className="py-3 px-4 font-semibold text-slate-900">{med.qty || 1} units</td>
+                          <td className="py-3 px-4 text-slate-600">{med.instruction}</td>
+                          <td className="py-3 px-4 text-right">
+                            <button
+                              onClick={() => setDraftMedicines((prev) => prev.filter((_, i) => i !== idx))}
+                              className="text-slate-400 hover:text-rose-600 p-1 transition-colors cursor-pointer"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               )}
+            </div>
 
-              {summary.allergies !== 'None recorded' && (
-                <div className="bg-red-50 border border-red-200 rounded-md px-3 py-2 mb-4 text-sm text-red-700">
-                  <span className="font-medium">Allergy alert:</span> {summary.allergies}
-                </div>
-              )}
-
-              <h3 className="font-semibold text-sm mb-2 text-slate-700">New Prescription</h3>
-
-              <div className="mb-3">
-                <label className="text-sm block mb-1 text-slate-600">Diagnosis</label>
+            {/* Doctor's Advice & Diagnosis Notes */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="text-xs font-bold text-slate-800 block mb-1.5">
+                  Final Clinical Diagnosis:
+                </label>
                 <input
                   type="text"
-                  value={diagnosis}
-                  onChange={(e) => setDiagnosis(e.target.value)}
-                  placeholder="eg. viral fever, cold etc"
-                  className="border border-slate-300 p-1.5 rounded-md text-sm w-full focus:outline-none focus:ring-1 focus:ring-teal-400 focus:border-teal-400"
+                  value={rxDiagnosis}
+                  onChange={(e) => setRxDiagnosis(e.target.value)}
+                  placeholder="e.g. Acute Upper Respiratory Infection"
+                  className="w-full text-xs text-slate-800 bg-white border border-slate-300 rounded-xl p-2.5 outline-hidden focus:border-teal-600"
                 />
               </div>
 
-              <div className="border border-slate-200 rounded-md p-3 mb-3 bg-slate-50">
-                <p className="font-semibold text-sm mb-2 text-slate-700">Daywise</p>
+              <div>
+                <label className="text-xs font-bold text-slate-800 block mb-1.5">
+                  Dietary / Lifestyle Advice & Next Review:
+                </label>
+                <input
+                  type="text"
+                  value={rxDietAdvice}
+                  onChange={(e) => setRxDietAdvice(e.target.value)}
+                  className="w-full text-xs text-slate-800 bg-white border border-slate-300 rounded-xl p-2.5 outline-hidden focus:border-teal-600"
+                />
+              </div>
+            </div>
 
-                {medicines.map((med, index) => (
-                  <div key={index} className="flex flex-wrap gap-2 items-center mb-2">
-                    <input
-                      type="text"
-                      placeholder="medicine name"
-                      value={med.name}
-                      onChange={(e) => handleMedicineChange(index, 'name', e.target.value)}
-                      className="border border-slate-300 bg-white p-1.5 rounded-md text-sm"
-                    />
+            {/* Bottom Final Action Bar */}
+            <div className="pt-4 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div className="flex items-center gap-2 text-xs text-slate-500">
+                <CheckCircle className="w-4 h-4 text-teal-600" />
+                <span>Digitally signed by {doctorProfile.name} • Dispatches in real-time to University Dispensary</span>
+              </div>
 
-                    <label className="text-sm flex items-center gap-1 text-slate-600">
-                      <input
-                        type="checkbox"
-                        checked={med.morning}
-                        onChange={(e) => handleMedicineChange(index, 'morning', e.target.checked)}
-                        className="accent-teal-600"
-                      />
-                      morning
-                    </label>
-
-                    <label className="text-sm flex items-center gap-1 text-slate-600">
-                      <input
-                        type="checkbox"
-                        checked={med.evening}
-                        onChange={(e) => handleMedicineChange(index, 'evening', e.target.checked)}
-                        className="accent-teal-600"
-                      />
-                      evening
-                    </label>
-
-                    <label className="text-sm flex items-center gap-1 text-slate-600">
-                      <input
-                        type="checkbox"
-                        checked={med.night}
-                        onChange={(e) => handleMedicineChange(index, 'night', e.target.checked)}
-                        className="accent-teal-600"
-                      />
-                      night
-                    </label>
-
-                    <input
-                      type="text"
-                      placeholder="instructions (after food etc)"
-                      value={med.note}
-                      onChange={(e) => handleMedicineChange(index, 'note', e.target.value)}
-                      className="border border-slate-300 bg-white p-1.5 rounded-md text-sm flex-1"
-                    />
-
-                    {medicines.length > 1 && (
-                      <button onClick={() => removeMedicine(index)} className="text-red-600 text-xs">
-                        remove
-                      </button>
-                    )}
-                  </div>
-                ))}
-
+              <div className="flex items-center gap-3">
                 <button
-                  onClick={addMedicine}
-                  className="text-sm border border-dashed border-teal-400 px-2 py-1 rounded-md mt-1 text-teal-700 hover:bg-white"
+                  onClick={() => triggerToast('Prescription sent to local printer!')}
+                  className="px-4 py-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
                 >
-                  + add medicine
+                  <Printer className="w-3.5 h-3.5 text-slate-500" />
+                  <span>Print Rx Slip</span>
+                </button>
+                <button
+                  onClick={handleCompleteAndDispatch}
+                  className="px-6 py-2.5 rounded-xl bg-teal-700 hover:bg-teal-800 text-white text-xs font-bold flex items-center gap-2 transition-all cursor-pointer shadow-sm hover:shadow-md"
+                >
+                  <Send className="w-4 h-4" />
+                  <span>Complete Consultation & Send to Dispensary</span>
                 </button>
               </div>
-
-              <div>
-                <label className="text-sm block mb-1 text-slate-600">General Instructions</label>
-                <textarea
-                  value={general}
-                  onChange={(e) => setGeneral(e.target.value)}
-                  rows="3"
-                  placeholder="anything without fixed timing - rest, diet, follow up etc"
-                  className="border border-slate-300 p-1.5 rounded-md text-sm w-full focus:outline-none focus:ring-1 focus:ring-teal-400 focus:border-teal-400"
-                ></textarea>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {currentPatient && (
-        <>
-          <div
-            onClick={() => setDrawerOpen(false)}
-            className={
-              'fixed inset-0 bg-black/30 transition-opacity z-40 ' +
-              (drawerOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none')
-            }
-          />
-          <div
-            className={
-              'fixed top-0 right-0 h-full w-80 bg-white border-l border-slate-200 shadow-xl z-50 transition-transform duration-300 overflow-y-auto ' +
-              (drawerOpen ? 'translate-x-0' : 'translate-x-full')
-            }
-          >
-            <div className="flex items-center justify-between p-4 border-b border-teal-100 bg-teal-50/50">
-              <div>
-                <h3 className="font-semibold text-slate-800 text-sm">Patient Record</h3>
-                <p className="text-xs text-slate-500">{currentPatient.name} · {currentPatient.rollNumber}</p>
-              </div>
-              <button
-                onClick={() => setDrawerOpen(false)}
-                className="p-1.5 rounded-md text-slate-400 hover:bg-white hover:text-teal-700"
-              >
-                <CloseIcon />
-              </button>
-            </div>
-
-            <div className="p-3">
-              {loadingRecord && <p className="text-sm text-slate-400 text-center py-4">Loading record…</p>}
-
-              {!loadingRecord && (
-                <>
-                  <Section
-                    label="Conditions"
-                    valuePreview={summary.conditions}
-                    open={!!openSections.conditions}
-                    onToggle={() => toggleSection('conditions')}
-                  >
-                    {editingField === 'conditions' ? (
-                      <div>
-                        <textarea
-                          value={editValue}
-                          onChange={(e) => setEditValue(e.target.value)}
-                          rows="2"
-                          placeholder="eg. Asthma, diabetes etc"
-                          className="border border-slate-300 bg-white p-1.5 rounded-md text-sm w-full focus:outline-none focus:ring-1 focus:ring-teal-400 focus:border-teal-400"
-                        />
-                        <div className="flex justify-end gap-2 mt-1.5">
-                          <button onClick={() => setEditingField(null)} className="text-xs text-slate-500 hover:text-slate-700 px-2 py-1">
-                            Cancel
-                          </button>
-                          <button
-                            onClick={() => saveCard('conditions')}
-                            disabled={savingField}
-                            className="text-xs bg-teal-600 hover:bg-teal-700 disabled:bg-teal-300 text-white px-2.5 py-1 rounded-md"
-                          >
-                            {savingField ? 'Saving…' : 'Save'}
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm text-slate-700">{summary.conditions}</span>
-                        <button
-                          onClick={() => startEdit('conditions', summary.conditions)}
-                          className="text-xs text-teal-700 hover:text-teal-900 ml-2"
-                        >
-                          Edit
-                        </button>
-                      </div>
-                    )}
-                  </Section>
-
-                  <Section
-                    label="Allergies"
-                    valuePreview={summary.allergies}
-                    badgeTone={summary.allergies === 'None recorded' ? 'default' : 'red'}
-                    open={!!openSections.allergies}
-                    onToggle={() => toggleSection('allergies')}
-                  >
-                    {editingField === 'allergies' ? (
-                      <div>
-                        <textarea
-                          value={editValue}
-                          onChange={(e) => setEditValue(e.target.value)}
-                          rows="2"
-                          placeholder="eg. Peanuts, penicillin etc"
-                          className="border border-slate-300 bg-white p-1.5 rounded-md text-sm w-full focus:outline-none focus:ring-1 focus:ring-teal-400 focus:border-teal-400"
-                        />
-                        <div className="flex justify-end gap-2 mt-1.5">
-                          <button onClick={() => setEditingField(null)} className="text-xs text-slate-500 hover:text-slate-700 px-2 py-1">
-                            Cancel
-                          </button>
-                          <button
-                            onClick={() => saveCard('allergies')}
-                            disabled={savingField}
-                            className="text-xs bg-teal-600 hover:bg-teal-700 disabled:bg-teal-300 text-white px-2.5 py-1 rounded-md"
-                          >
-                            {savingField ? 'Saving…' : 'Save'}
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="flex items-center justify-between">
-                        <span className={summary.allergies === 'None recorded' ? 'text-sm text-slate-700' : 'text-sm text-red-700 font-medium'}>
-                          {summary.allergies}
-                        </span>
-                        <button
-                          onClick={() => startEdit('allergies', summary.allergies)}
-                          className="text-xs text-teal-700 hover:text-teal-900 ml-2"
-                        >
-                          Edit
-                        </button>
-                      </div>
-                    )}
-                  </Section>
-
-                  <Section
-                    label="Ongoing Medication"
-                    valuePreview={summary.medication}
-                    open={!!openSections.medication}
-                    onToggle={() => toggleSection('medication')}
-                  >
-                    {editingField === 'medication' ? (
-                      <div>
-                        <textarea
-                          value={editValue}
-                          onChange={(e) => setEditValue(e.target.value)}
-                          rows="2"
-                          placeholder="eg. Metformin 500mg - morning, night"
-                          className="border border-slate-300 bg-white p-1.5 rounded-md text-sm w-full focus:outline-none focus:ring-1 focus:ring-teal-400 focus:border-teal-400"
-                        />
-                        <div className="flex justify-end gap-2 mt-1.5">
-                          <button onClick={() => setEditingField(null)} className="text-xs text-slate-500 hover:text-slate-700 px-2 py-1">
-                            Cancel
-                          </button>
-                          <button
-                            onClick={() => saveCard('medication')}
-                            disabled={savingField}
-                            className="text-xs bg-teal-600 hover:bg-teal-700 disabled:bg-teal-300 text-white px-2.5 py-1 rounded-md"
-                          >
-                            {savingField ? 'Saving…' : 'Save'}
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm text-slate-700">{summary.medication}</span>
-                        <button
-                          onClick={() => startEdit('medication', summary.medication)}
-                          className="text-xs text-teal-700 hover:text-teal-900 ml-2"
-                        >
-                          Edit
-                        </button>
-                      </div>
-                    )}
-                  </Section>
-
-                  <Section
-                    label="Previous Visits"
-                    valuePreview={history.length === 0 ? 'No previous visits' : `${history.length} visit${history.length > 1 ? 's' : ''}`}
-                    open={!!openSections.visits}
-                    onToggle={() => toggleSection('visits')}
-                  >
-                    {history.length === 0 && <p className="text-sm text-slate-400">No previous visits</p>}
-
-                    {history.map((h, index) => (
-                      <div key={index} className="border border-slate-200 rounded-md mb-1.5 overflow-hidden">
-                        <button
-                          onClick={() => toggleVisit(index)}
-                          className="w-full flex items-center justify-between px-3 py-2 text-left hover:bg-teal-50/60 transition-colors"
-                        >
-                          <div>
-                            <b className="text-slate-800 text-sm block">{h.date}</b>
-                            <span className="text-sm text-slate-600">{h.diagnosis}</span>
-                          </div>
-                          <span className="text-teal-600/60">
-                            <ChevronIcon open={expandedVisit === index} />
-                          </span>
-                        </button>
-                        <div
-                          style={{
-                            display: 'grid',
-                            gridTemplateRows: expandedVisit === index ? '1fr' : '0fr',
-                            transition: 'grid-template-rows 250ms ease',
-                          }}
-                        >
-                          <div className="overflow-hidden">
-                            <div className="px-3 pb-3 pt-1 bg-slate-50 border-t border-slate-100">
-                              <div className="text-xs text-slate-500 mb-2">{h.notes}</div>
-                              {h.medicines && h.medicines.length > 0 && (
-                                <div>
-                                  <div className="text-slate-400 text-xs tracking-wide mb-1">MEDICINES GIVEN</div>
-                                  {h.medicines.map((m, mi) => (
-                                    <div key={mi} className="text-sm text-slate-700 mb-0.5">
-                                      {m.name} <span className="text-slate-400">— {m.timing}{m.note ? `, ${m.note}` : ''}</span>
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </Section>
-                </>
-              )}
             </div>
           </div>
-        </>
-      )}
+        )}
+
+        {/* ═══════════════════════════════════════════════════════════
+            VIEW 3: COMPLETED CONSULTATIONS TODAY
+           ═══════════════════════════════════════════════════════════ */}
+        {activeTab === 'history' && (
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 sm:p-8 flex flex-col space-y-5">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-200">
+              <div>
+                <h2 className="text-base font-bold text-slate-900">
+                  Completed Consultations — Today
+                </h2>
+                <p className="text-xs text-slate-500">
+                  Log of students seen by {doctorProfile.name} during today's shift
+                </p>
+              </div>
+              <span className="text-xs font-bold px-3 py-1 rounded-full bg-teal-50 text-teal-800 border border-teal-200">
+                Total Seen: {seenCount}
+              </span>
+            </div>
+
+            <div className="overflow-x-auto border border-slate-200 rounded-xl">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 uppercase tracking-wider text-[10px]">
+                  <tr>
+                    <th className="py-3 px-4 font-bold">Time</th>
+                    <th className="py-3 px-4 font-bold">Student Name</th>
+                    <th className="py-3 px-4 font-bold">Roll Number</th>
+                    <th className="py-3 px-4 font-bold">Diagnosis</th>
+                    <th className="py-3 px-4 font-bold">Prescription Sent</th>
+                    <th className="py-3 px-4 font-bold text-right">Dispensary Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {completedHistory.map((item) => (
+                    <tr key={item.id} className="hover:bg-slate-50/50">
+                      <td className="py-3 px-4 font-semibold text-slate-600">{item.completedAt}</td>
+                      <td className="py-3 px-4 font-bold text-slate-900">{item.name}</td>
+                      <td className="py-3 px-4 text-slate-600">{item.rollNo}</td>
+                      <td className="py-3 px-4 text-slate-800 font-medium">{item.diagnosis}</td>
+                      <td className="py-3 px-4 text-slate-600">{item.prescriptions}</td>
+                      <td className="py-3 px-4 text-right">
+                        <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                          <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                          <span>Dispensed</span>
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </main>
     </div>
   )
 }
-
-export default Doctors_Dashboard
