@@ -332,6 +332,45 @@ export default function Doctors_Dashboard() {
       p.rollNo.toLowerCase().includes(searchQuery.toLowerCase())
   )
 
+  // LumaBar Navigation Items (Futuristic Top Bar with Healthcare Teal/Emerald Theme)
+  const navItems = useMemo(
+    () => [
+      {
+        id: 0,
+        key: 'queue',
+        icon: <Activity className="w-4 h-4" />,
+        label: 'Live OPD Queue',
+        badge: filteredPatients.length,
+        badgeClass: 'bg-teal-700 text-white',
+        tooltip: 'Real-time Consultation Line & Vitals',
+      },
+      {
+        id: 1,
+        key: 'prescription',
+        icon: <Pill className="w-4 h-4" />,
+        label: 'E-Prescription Studio',
+        badge: draftMedicines.length > 0 ? draftMedicines.length : undefined,
+        badgeClass: 'bg-emerald-600 text-white',
+        tooltip: 'Hospital-Grade E-Prescription Desk',
+      },
+      {
+        id: 2,
+        key: 'history',
+        icon: <FileCheck className="w-4 h-4" />,
+        label: 'Completed Today',
+        badge: seenCount,
+        badgeClass: 'bg-slate-200 text-slate-700',
+        tooltip: 'Attended Students & Dispensed Medicines Log',
+      },
+    ],
+    [filteredPatients.length, draftMedicines.length, seenCount]
+  )
+
+  const activeNavIndex = useMemo(() => {
+    const idx = navItems.findIndex((item) => item.key === activeTab)
+    return idx >= 0 ? idx : 0
+  }, [navItems, activeTab])
+
   // Call Next Student
   const handleCallNext = () => {
     const nextWaiting = patients.find(
@@ -498,57 +537,76 @@ export default function Doctors_Dashboard() {
           </div>
         </div>
 
-        {/* Center Tabs: Queue, E-Prescription Studio, Completed History */}
-        <div className="flex items-center gap-1 bg-slate-100/90 p-1 rounded-xl border border-slate-200 text-xs">
-          <button
-            onClick={() => setActiveTab('queue')}
-            className={cn(
-              'px-3.5 py-1.5 rounded-lg font-semibold transition-all duration-200 flex items-center gap-2 cursor-pointer',
-              activeTab === 'queue'
-                ? 'bg-white text-teal-900 shadow-xs'
-                : 'text-slate-600 hover:text-slate-900'
-            )}
-          >
-            <Activity className="w-3.5 h-3.5 text-teal-700" />
-            <span>Live OPD Queue</span>
-            <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-teal-700 text-white font-bold">
-              {filteredPatients.length}
-            </span>
-          </button>
+        {/* Center: Futuristic LumaBar Navigation (Top-Docked, Healthcare Teal/Emerald Glow - Zero Purple) */}
+        <div className="relative">
+          <div className="relative flex items-center justify-center gap-1 sm:gap-2.5 bg-white/75 backdrop-blur-2xl rounded-full px-2.5 sm:px-4 py-1.5 shadow-lg shadow-teal-950/5 border border-teal-100/80 overflow-hidden">
+            {/* Active Indicator Glow - Teal/Emerald Healthcare Palette */}
+            <motion.div
+              layoutId="luma-active-glow"
+              className="absolute w-24 h-24 bg-gradient-to-r from-teal-400 via-emerald-400 to-teal-500 rounded-full blur-2xl -z-10 opacity-75 pointer-events-none"
+              animate={{
+                left: `calc(${activeNavIndex * (100 / navItems.length)}% + ${100 / navItems.length / 2}%)`,
+                translateX: '-50%',
+              }}
+              transition={{ type: 'spring', stiffness: 450, damping: 28 }}
+            />
 
-          <button
-            onClick={() => setActiveTab('prescription')}
-            className={cn(
-              'px-3.5 py-1.5 rounded-lg font-semibold transition-all duration-200 flex items-center gap-2 cursor-pointer',
-              activeTab === 'prescription'
-                ? 'bg-white text-teal-900 shadow-xs'
-                : 'text-slate-600 hover:text-slate-900'
-            )}
-          >
-            <Pill className="w-3.5 h-3.5 text-teal-700" />
-            <span>E-Prescription Studio</span>
-            {draftMedicines.length > 0 && (
-              <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-emerald-600 text-white font-bold">
-                {draftMedicines.length}
-              </span>
-            )}
-          </button>
+            {navItems.map((item, index) => {
+              const isActive = index === activeNavIndex
+              return (
+                <motion.div key={item.id} className="relative flex flex-col items-center group">
+                  {/* Button */}
+                  <motion.button
+                    onClick={() => setActiveTab(item.key)}
+                    whileHover={{ scale: 1.08 }}
+                    whileTap={{ scale: 0.95 }}
+                    className={cn(
+                      'relative z-10 flex items-center gap-2 px-3 sm:px-4 py-2 rounded-full text-xs font-semibold transition-colors duration-200 cursor-pointer select-none',
+                      isActive
+                        ? 'text-teal-950 font-bold'
+                        : 'text-slate-600 hover:text-teal-700'
+                    )}
+                  >
+                    {/* Active Pill backdrop */}
+                    {isActive && (
+                      <motion.div
+                        layoutId="luma-pill-active"
+                        className="absolute inset-0 bg-white/95 rounded-full shadow-xs -z-10 border border-teal-200/60"
+                        transition={{ type: 'spring', stiffness: 450, damping: 30 }}
+                      />
+                    )}
 
-          <button
-            onClick={() => setActiveTab('history')}
-            className={cn(
-              'px-3.5 py-1.5 rounded-lg font-semibold transition-all duration-200 flex items-center gap-2 cursor-pointer',
-              activeTab === 'history'
-                ? 'bg-white text-teal-900 shadow-xs'
-                : 'text-slate-600 hover:text-slate-900'
-            )}
-          >
-            <FileCheck className="w-3.5 h-3.5 text-slate-500" />
-            <span>Completed Today</span>
-            <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-slate-200 text-slate-700 font-bold">
-              {seenCount}
-            </span>
-          </button>
+                    <motion.span
+                      animate={{ scale: isActive ? 1.2 : 1 }}
+                      transition={{ type: 'spring', stiffness: 450, damping: 25 }}
+                      className={cn(
+                        'flex items-center',
+                        isActive ? 'text-teal-700' : 'text-slate-500 group-hover:text-teal-600'
+                      )}
+                    >
+                      {item.icon}
+                    </motion.span>
+                    <span className="hidden md:inline">{item.label}</span>
+                    {item.badge !== undefined && (
+                      <span
+                        className={cn(
+                          'text-[10px] px-1.5 py-0.2 rounded-full font-bold',
+                          item.badgeClass
+                        )}
+                      >
+                        {item.badge}
+                      </span>
+                    )}
+                  </motion.button>
+
+                  {/* Tooltip (Positioned below the top navbar) */}
+                  <span className="absolute top-full mt-2.5 px-2.5 py-1 text-xs rounded-md bg-slate-900 text-teal-200 opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap shadow-xl border border-teal-500/25 pointer-events-none z-50">
+                    {item.tooltip}
+                  </span>
+                </motion.div>
+              )
+            })}
+          </div>
         </div>
 
         {/* Right Doctor Profile & Quick Actions */}
