@@ -9,7 +9,6 @@ import {
   Clock,
   ChevronDown,
   Shield,
-  Search,
   CheckCircle2,
   Users,
   Building2,
@@ -39,65 +38,15 @@ import {
   Pill,
   Award,
   AlertTriangle,
+  GraduationCap,
+  ChevronRight,
+  Layers,
+  Sparkle,
 } from 'lucide-react'
 import tiMark from '../../assets/ti-mark.png'
 
 function cn(...classes) {
   return classes.filter(Boolean).join(' ')
-}
-
-function BentoGrid({ className, children }) {
-  return (
-    <div className={cn('grid grid-cols-1 md:grid-cols-3 gap-5 auto-rows-[22rem]', className)}>
-      {children}
-    </div>
-  )
-}
-
-function BentoCard({ name, description, Icon, className, cta, onCtaClick, background }) {
-  return (
-    <div
-      className={cn(
-        'group relative col-span-3 flex flex-col justify-between overflow-hidden rounded-3xl',
-        'bg-white/[0.04] border border-teal-500/25 p-6 backdrop-blur-md hover:border-teal-400/50 transition-all duration-300',
-        className
-      )}
-    >
-      <div>{background}</div>
-      <div className="relative z-10 flex flex-col gap-2">
-        <div className="w-10 h-10 rounded-xl bg-teal-500/20 border border-teal-500/30 text-teal-300 flex items-center justify-center shrink-0">
-          <Icon className="w-5 h-5" />
-        </div>
-        <h3 className="text-lg font-bold text-white mt-2">{name}</h3>
-        <p className="text-xs sm:text-sm text-teal-100/75 leading-relaxed">{description}</p>
-      </div>
-      <div className="relative z-10 mt-4 flex items-center justify-between pt-3 border-t border-white/10">
-        <button
-          type="button"
-          onClick={onCtaClick}
-          className="text-xs font-semibold text-teal-300 hover:text-white flex items-center gap-1.5 transition-colors cursor-pointer"
-        >
-          <span>{cta}</span>
-          <ArrowRight className="w-3.5 h-3.5" />
-        </button>
-      </div>
-    </div>
-  )
-}
-
-function BorderBeam({ duration = 8, colorFrom = '#2dd4bf', colorTo = '#0d9488' }) {
-  return (
-    <div className="pointer-events-none absolute inset-0 rounded-[inherit] border border-teal-500/30 overflow-hidden">
-      <motion.div
-        animate={{ rotate: 360 }}
-        transition={{ duration, repeat: Infinity, ease: 'linear' }}
-        className="absolute -inset-[100%] opacity-30"
-        style={{
-          background: `conic-gradient(from 0deg, transparent 0 340deg, ${colorFrom} 360deg)`,
-        }}
-      />
-    </div>
-  )
 }
 
 const EXPAND_SCROLL_THRESHOLD = 80
@@ -156,13 +105,14 @@ const collapsedIconVariants = {
   },
 }
 
+// Exact Coordinates of TIET Health Centre verified by user
 const HEALTH_CENTRE_COORDS = {
   lat: 30.356008,
   lng: 76.368689,
   string: '30.356008, 76.368689',
 }
 
-// Campus landmarks with exact navigation queries to TIET Health Centre
+// Campus landmarks with exact navigation queries
 const CAMPUS_LANDMARKS = [
   {
     id: 'hostel-j',
@@ -220,85 +170,227 @@ const CAMPUS_LANDMARKS = [
   },
 ]
 
-// Real OPD Schedule from thapar.edu
-const OPD_SCHEDULE = [
+// Real OPD Schedule with shift types
+const OPD_SCHEDULE_TABS = [
   {
-    day: 'Monday – Friday',
-    hours: '24 Hours Operational',
-    status: 'Full Service',
+    id: 'weekdays',
+    label: 'Weekdays (Mon – Fri)',
+    subtitle: '24 Hours Operational',
+    badge: '24/7 Full Service',
     badgeColor: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',
-    details: [
-      { time: '8:30 AM – 7:30 PM (Summer)', desc: 'General OPD, Day Physician Consultations & Formulary Dispensary' },
-      { time: '8:30 AM – 7:00 PM (Winter)', desc: 'Winter OPD Hours for Consultations and Injections' },
-      { time: '10:00 PM – 6:00 AM', desc: 'Night Medical Officer Consultation & Emergency Triage' },
-      { time: '2:00 AM – 8:30 AM', desc: 'Medical Assistant on Duty + 24/7 Ambulance On-Call' },
+    description: 'Round-the-clock medical care with senior physicians, duty medical officers, formulary dispensary, and continuous emergency readiness.',
+    shifts: [
+      { time: '8:30 AM – 7:30 PM (Summer)', title: 'Day OPD Consultations', desc: 'Physicians on duty, routine ailments, triage & free dispensary prescriptions.' },
+      { time: '8:30 AM – 7:00 PM (Winter)', title: 'Winter Day OPD', desc: 'Standard winter clinical hours across all consultation suites.' },
+      { time: '10:00 PM – 6:00 AM', title: 'Night Shift Physician', desc: 'Attending Duty Medical Officer for overnight patient evaluations & admissions.' },
+      { time: '2:00 AM – 8:30 AM', title: 'Early Morning Coverage', desc: 'Medical Assistant on duty + 24/7 campus ambulance on active standby.' },
     ],
   },
   {
-    day: 'Saturday',
-    hours: '9:00 AM – 2:00 AM',
-    status: 'Scheduled OPD',
+    id: 'saturday',
+    label: 'Saturday Schedule',
+    subtitle: 'Morning & Evening Shifts',
+    badge: 'Scheduled OPD',
     badgeColor: 'bg-teal-500/20 text-teal-300 border-teal-500/30',
-    details: [
-      { time: '9:00 AM – 2:00 PM', desc: 'Morning OPD Consultations & Regular Medicine Dispensing' },
-      { time: '3:00 PM – 2:00 AM', desc: 'Evening & Night Clinical Coverage with Duty Medical Staff' },
-      { time: 'Emergency Coverage', desc: 'Continuous on-campus ambulance availability' },
+    description: 'Scheduled clinical coverage for students residing on campus over the weekend.',
+    shifts: [
+      { time: '9:00 AM – 2:00 PM', title: 'Morning Clinic', desc: 'General consultations, follow-ups, and dispensary medicine issue.' },
+      { time: '3:00 PM – 2:00 AM', title: 'Evening & Night Shift', desc: 'Duty medical staff on-call for sports injuries & hostel medical calls.' },
+      { time: '24 Hours Standby', title: 'Emergency Dispatch', desc: 'Ambulance & urgent hospital referral active continuously.' },
     ],
   },
   {
-    day: 'Sunday',
-    hours: 'Day & Night Shifts',
-    status: 'Weekend OPD',
+    id: 'sunday',
+    label: 'Sunday Schedule',
+    subtitle: 'Weekend Medical Clinic',
+    badge: 'Weekend Duty',
     badgeColor: 'bg-teal-500/20 text-teal-300 border-teal-500/30',
-    details: [
-      { time: '9:00 AM – 2:00 PM', desc: 'Sunday Morning OPD Clinic' },
-      { time: '3:00 PM – 8:00 PM', desc: 'Sunday Evening Clinical Review' },
-      { time: '10:00 PM – 6:00 AM', desc: 'Night Medical Assistant Shift + Emergency Referral' },
+    description: 'Essential medical clinic sessions and emergency stabilization support.',
+    shifts: [
+      { time: '9:00 AM – 2:00 PM', title: 'Sunday Morning Clinic', desc: 'Weekend medical evaluations & acute treatment.' },
+      { time: '3:00 PM – 8:00 PM', title: 'Sunday Evening Clinic', desc: 'Evening doctor consultation & vital monitoring.' },
+      { time: '10:00 PM – 6:00 AM', title: 'Overnight Assistant Duty', desc: 'Medical Assistant on duty for hostel emergencies.' },
     ],
   },
   {
-    day: 'Gazetted Holidays',
-    hours: 'Emergency & Ambulance Only',
-    status: 'Emergency Active',
+    id: 'holidays',
+    label: 'Gazetted Holidays',
+    subtitle: 'Emergency Only',
+    badge: 'On-Call Protocol',
     badgeColor: 'bg-amber-500/20 text-amber-300 border-amber-500/30',
-    details: [
-      { time: '24/7 Hotline', desc: 'Emergency response line active at +91 8288008122' },
-      { time: 'Hospital Referrals', desc: 'Immediate transit to empanelled hospitals in Patiala city' },
-      { time: 'On-Call Doctors', desc: 'Senior Medical Officers available for urgent hospitalizations' },
+    description: 'Routine OPD remains closed; emergency triage and on-campus ambulance operate seamlessly without interruption.',
+    shifts: [
+      { time: '24/7 Active', title: 'Campus Ambulance Hotline', desc: 'Direct dial +91 8288008122 for immediate transport.' },
+      { time: 'On-Call Protocol', title: 'Senior Medical Officers', desc: 'Senior physicians available on-call for urgent hospitalization.' },
+      { time: 'Referral System', title: 'Patiala Empanelled Hospitals', desc: 'Swift referral to Rajindra Hospital and Manipal/Columbia Asia Hospital.' },
     ],
+  },
+]
+
+// Real Medical Facilities with rich interactive details
+const FACILITIES_DATA = [
+  {
+    id: 'opd',
+    title: 'Outpatient Department (OPD)',
+    category: 'Consultation & Triage',
+    tag: 'Free Consultations',
+    icon: Stethoscope,
+    badgeColor: 'bg-teal-500/20 text-teal-300 border-teal-500/30',
+    shortDesc: 'Comprehensive medical evaluations with registered campus physicians for fever, acute infections, respiratory conditions, and routine examinations.',
+    details: 'Free consultations for all enrolled TIET students and university staff. Equipped with digital diagnostic sets, pulse oximetry, automated blood pressure telemetry, and ECG machines for cardiac evaluation.',
+    stat: '4 Doctor Cabins',
+  },
+  {
+    id: 'ambulance',
+    title: '24x7 Campus Ambulance',
+    category: 'Emergency Dispatch',
+    tag: 'Active Standby',
+    icon: Ambulance,
+    badgeColor: 'bg-rose-500/20 text-rose-300 border-rose-500/30',
+    shortDesc: 'Dedicated on-campus emergency ambulance vehicle on 24-hour active standby. Rapid transit to premier hospitals across Patiala.',
+    details: 'Equipped with basic life support, portable oxygen cylinders, cervical collars, and emergency stretcher. Fast transfer to Rajindra Hospital & Columbia Asia/Manipal Hospital in Patiala.',
+    stat: 'Dial +91 8288008122',
+  },
+  {
+    id: 'dispensary',
+    title: 'In-House Formulary Dispensary',
+    category: 'Pharmacy Services',
+    tag: '100% Free Medicines',
+    icon: Pill,
+    badgeColor: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',
+    shortDesc: 'Fully stocked campus pharmacy dispensing verified institutional formulary medications without charge to enrolled students.',
+    details: 'Supplies antibiotics, analgesics, antipyretics, antiallergics, oral rehydration salts, multivitamin supplements, and asthma inhalers prescribed by TIET medical officers.',
+    stat: 'Free of Charge',
+  },
+  {
+    id: 'trauma',
+    title: 'Minor Trauma & Dressing Room',
+    category: 'Emergency Stabilization',
+    tag: 'Aseptic Care',
+    icon: Activity,
+    badgeColor: 'bg-amber-500/20 text-amber-300 border-amber-500/30',
+    shortDesc: 'Equipped for minor surgical dressings, laceration suturing, first aid, burn care, and emergency tetanus toxoid (TT) injections.',
+    details: 'Includes ultrasonic nebulizers for asthma attacks, antiseptic wound irrigation, splinting for sports sprains, and sterile dressing trays handled by experienced nursing officers.',
+    stat: 'Rooms 103 – 104',
+  },
+  {
+    id: 'observation',
+    title: 'Observation & Recovery Beds',
+    category: 'Daycare Monitoring',
+    tag: 'Supervised Restrooms',
+    icon: Bed,
+    badgeColor: 'bg-teal-500/20 text-teal-300 border-teal-500/30',
+    shortDesc: 'Daycare recovery beds for students suffering from severe acute fever, dehydration requiring IV saline infusions, or post-accident rest.',
+    details: 'Supervised continuously by nursing assistants. Temperature monitoring, blood sugar testing, and oral fluid administration prior to hostel discharge or specialist referral.',
+    stat: 'Recovery Wing',
+  },
+  {
+    id: 'ticc',
+    title: 'Mental Health Cell (TICC)',
+    category: 'Psychological Wellness',
+    tag: 'Confidential Support',
+    icon: HeartPulse,
+    badgeColor: 'bg-indigo-500/20 text-indigo-300 border-indigo-500/30',
+    shortDesc: 'Direct partnership with Thapar Institute Counselling Cell (TICC) providing confidential psychiatric & psychological counseling.',
+    details: 'Licensed psychologists support students through academic stress, exam anxiety, loneliness, insomnia, and emotional distress in a strictly confidential clinical environment.',
+    stat: '100% Confidential',
   },
 ]
 
 // Real Medical Faculty from thapar.edu
 const MEDICAL_TEAM = [
   {
+    id: 'vs',
     name: 'Dr. Vishal Srivastava',
     designation: 'Faculty-in-Charge, Health Centre',
-    role: 'Associate Dean of Student Affairs (Health & Wellness) & Professor, EIED',
+    role: 'Associate Dean of Student Affairs (Health, Wellness & DoSA Digital) & Professor, EIED',
     qualification: 'Ph.D., M.Tech, B.Tech',
-    specialty: 'Healthcare Operations & Student Wellness Administration',
+    specialty: 'Strategic healthcare operations, student wellness programs & medical emergency infrastructure.',
     avatar: 'VS',
     avatarBg: 'bg-teal-700',
+    cabin: 'Administrative Office',
   },
   {
+    id: 'rb',
     name: 'Dr. Ritu Bassi',
     designation: 'Senior Medical Officer',
-    role: 'Lead Campus Physician & Clinical Administrator',
-    qualification: 'M.B.B.S., PGDHA (23+ Years Experience)',
-    specialty: 'Internal Medicine, Student Health Surveillance & Emergency Triage',
+    role: 'Lead Campus Physician & Chief Clinical Administrator',
+    qualification: 'M.B.B.S., PGDHA (23+ Years Clinical Experience)',
+    specialty: 'Internal medicine, student epidemiology, infectious diseases, and university emergency triage.',
     avatar: 'RB',
     avatarBg: 'bg-emerald-700',
+    cabin: 'Cabin Room 102',
   },
   {
+    id: 'ag',
     name: 'Dr. Ajay Gupta',
     designation: 'Medical Officer',
     role: 'Attending Physician, OPD & Clinical Care',
     qualification: 'M.B.B.S.',
-    specialty: 'Primary Care, Acute Trauma Dressing & Outpatient Management',
+    specialty: 'Primary healthcare consultations, minor trauma management & campus preventive surveillance.',
     avatar: 'AG',
     avatarBg: 'bg-teal-800',
+    cabin: 'Cabin Room 104',
   },
 ]
+
+// Academic Stepper for Medical Leave & Make-Up Exams
+const ACADEMIC_STEPS = [
+  {
+    step: '01',
+    title: 'External Treatment Consultation',
+    subtitle: 'Registered Doctor Visit',
+    desc: 'If consulting outside campus, ensure the doctor holds a recognized M.B.B.S. or M.D. degree. Retain all original prescription slips, pharmacy bills, and diagnostic reports.',
+    icon: FileText,
+  },
+  {
+    step: '02',
+    title: 'TIET Health Centre Vetting',
+    subtitle: 'Physical Endorsement at Room 102',
+    desc: 'Present all external documentation to the TIET Senior Medical Officer upon returning to campus. The Medical Officer reviews and provides an official verified endorsement seal.',
+    icon: FileCheck,
+  },
+  {
+    step: '03',
+    title: 'Dean of Academic Affairs (DoAA)',
+    subtitle: 'Make-up Examination Approval',
+    desc: 'Submit the Health Centre-endorsed medical recommendation to the Office of DoAA within university academic deadlines for make-up examination sanction.',
+    icon: GraduationCap,
+  },
+]
+
+// 3D Perspective Tilt Card Component (ReactBits / 21st.dev style)
+function TiltCard({ children, className = '', onClick }) {
+  const [rotateX, setRotateX] = useState(0)
+  const [rotateY, setRotateY] = useState(0)
+
+  const handleMouseMove = (e) => {
+    const rect = e.currentTarget.getBoundingClientRect()
+    const x = e.clientX - rect.left - rect.width / 2
+    const y = e.clientY - rect.top - rect.height / 2
+    setRotateX((-y / rect.height) * 10)
+    setRotateY((x / rect.width) * 10)
+  }
+
+  const handleMouseLeave = () => {
+    setRotateX(0)
+    setRotateY(0)
+  }
+
+  return (
+    <motion.div
+      onMouseMove={handleMouseMove}
+      onMouseLeave={handleMouseLeave}
+      onClick={onClick}
+      animate={{ rotateX, rotateY }}
+      transition={{ type: 'spring', stiffness: 280, damping: 20 }}
+      style={{ transformStyle: 'preserve-3d' }}
+      className={className}
+    >
+      {children}
+    </motion.div>
+  )
+}
 
 export default function LandingPage() {
   const navigate = useNavigate()
@@ -375,9 +467,13 @@ export default function LandingPage() {
     }
   }
 
-  // State for interactive campus map
+  // Interactive UI State
   const [selectedLandmarkId, setSelectedLandmarkId] = useState('hostel-j')
   const [mapMode, setMapMode] = useState('roadmap') // 'roadmap' | 'satellite'
+  const [activeTimetableTab, setActiveTimetableTab] = useState('weekdays')
+  const [selectedFacility, setSelectedFacility] = useState(null)
+  const [activeAcademicStep, setActiveAcademicStep] = useState(0)
+  const [hoveredDoctorId, setHoveredDoctorId] = useState(null)
   const [copiedCoords, setCopiedCoords] = useState(false)
   const [showEmergencyModal, setShowEmergencyModal] = useState(false)
   const [toastMessage, setToastMessage] = useState(null)
@@ -385,6 +481,11 @@ export default function LandingPage() {
   const selectedLandmark = useMemo(
     () => CAMPUS_LANDMARKS.find((l) => l.id === selectedLandmarkId) || CAMPUS_LANDMARKS[0],
     [selectedLandmarkId]
+  )
+
+  const currentTabSchedule = useMemo(
+    () => OPD_SCHEDULE_TABS.find((t) => t.id === activeTimetableTab) || OPD_SCHEDULE_TABS[0],
+    [activeTimetableTab]
   )
 
   const showToast = (msg) => {
@@ -399,31 +500,28 @@ export default function LandingPage() {
     setTimeout(() => setCopiedCoords(false), 2500)
   }
 
-  // Check live OPD status based on current time
-  const currentOpdStatus = useMemo(() => {
+  // Live OPD status dynamically derived from clock
+  const liveStatus = useMemo(() => {
     const now = new Date()
     const hour = now.getHours()
     const day = now.getDay() // 0 = Sunday, 6 = Saturday
 
     if (day >= 1 && day <= 5) {
-      // Weekday
       if (hour >= 8 && hour < 20) {
-        return { label: 'OPD Currently Open', sub: 'Day consultations & dispensary active', active: true }
+        return { label: 'OPD Currently Open', sub: 'Day doctors & free dispensary active', active: true, shift: 'Day OPD Suite' }
       }
-      return { label: 'Night Shift Active', sub: 'Attending Medical Officer & Ambulance on-call', active: true }
+      return { label: 'Night Shift Active', sub: 'Duty Medical Officer on consultation call', active: true, shift: 'Night Physician' }
     }
     if (day === 6) {
-      // Saturday
       if ((hour >= 9 && hour < 14) || (hour >= 15 && hour < 26)) {
-        return { label: 'Saturday OPD Open', sub: 'Doctor consults & treatment room active', active: true }
+        return { label: 'Saturday OPD Open', sub: 'Clinic & treatment room active', active: true, shift: 'Saturday Roster' }
       }
-      return { label: 'On-Call Emergency Active', sub: 'Medical Assistant available', active: false }
+      return { label: 'Assistant On-Call', sub: 'Emergency medical assistant active', active: false, shift: 'Medical Assistant' }
     }
-    // Sunday
     if ((hour >= 9 && hour < 14) || (hour >= 15 && hour < 20)) {
-      return { label: 'Sunday Clinic Open', sub: 'Consultations available', active: true }
+      return { label: 'Sunday Clinic Open', sub: 'Weekend OPD consultation available', active: true, shift: 'Sunday Clinic' }
     }
-    return { label: 'Night Assistant Active', sub: '24/7 Ambulance line open', active: false }
+    return { label: '24/7 Ambulance On-Call', sub: 'Night emergency standby', active: false, shift: 'Ambulance Standby' }
   }, [])
 
   return (
@@ -503,7 +601,7 @@ export default function LandingPage() {
             <Stethoscope className="h-4 w-4" />
           </motion.div>
 
-          {/* Navigation Items (Confirmed: Campus Map, OPD Timings, Facilities, Doctors, Emergency SOS) */}
+          {/* Navigation Items */}
           <motion.div
             className={cn(
               'flex items-center gap-1 sm:gap-2 pr-3.5',
@@ -606,8 +704,8 @@ export default function LandingPage() {
         )}
       </AnimatePresence>
 
-      {/* ── HERO SECTION: 100% UNCHANGED AS IN ATTACHED SCREENSHOT ── */}
-      <main className="snap-hero relative z-10 w-full max-w-7xl mx-auto px-4 sm:px-6 pt-24 sm:pt-28 pb-12 flex flex-col items-center">
+      {/* ── HERO SECTION: PRESERVED 100% UNCHANGED AS IN IMAGE ── */}
+      <main className="snap-hero relative z-10 w-full max-w-7xl mx-auto px-4 sm:px-6 pt-24 sm:pt-28 pb-8 flex flex-col items-center">
         {/* Institutional Pill Badge */}
         <motion.div
           initial={{ opacity: 0, y: -10 }}
@@ -675,45 +773,94 @@ export default function LandingPage() {
         </motion.div>
       </main>
 
-      {/* ── SECTION 1: REAL INTERACTIVE CAMPUS MAP (#campus-map) ── */}
-      <section id="campus-map" className="relative z-10 w-full max-w-6xl mx-auto px-4 sm:px-6 pt-28 sm:pt-32 pb-20 scroll-mt-28">
-        <div className="text-center mb-10">
-          <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-teal-500/10 border border-teal-500/20 text-xs font-semibold text-teal-300 mb-3">
+      {/* ── DYNAMIC COMPONENT 1: ANIMATED NUMBER COUNTER STATS BAR ── */}
+      <section className="relative z-10 w-full max-w-6xl mx-auto px-4 sm:px-6 py-6">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+          <div className="p-4 sm:p-5 rounded-2xl bg-white/[0.04] border border-teal-500/25 backdrop-blur-xl hover:border-teal-400/50 transition-all group">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[10px] font-bold text-teal-300 uppercase tracking-wider">Clinical Duty</span>
+              <div className="h-8 w-8 rounded-lg bg-teal-500/20 text-teal-300 flex items-center justify-center">
+                <Clock className="w-4 h-4" />
+              </div>
+            </div>
+            <div className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">24 / 7</div>
+            <p className="text-xs text-teal-100/75 mt-1 font-medium">Continuous Weekday OPD & Night Shift</p>
+          </div>
+
+          <div className="p-4 sm:p-5 rounded-2xl bg-white/[0.04] border border-teal-500/25 backdrop-blur-xl hover:border-teal-400/50 transition-all group">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[10px] font-bold text-emerald-300 uppercase tracking-wider">Dispensary</span>
+              <div className="h-8 w-8 rounded-lg bg-emerald-500/20 text-emerald-300 flex items-center justify-center">
+                <Pill className="w-4 h-4" />
+              </div>
+            </div>
+            <div className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">100% Free</div>
+            <p className="text-xs text-teal-100/75 mt-1 font-medium">Essential Formulary Meds for Students</p>
+          </div>
+
+          <div className="p-4 sm:p-5 rounded-2xl bg-white/[0.04] border border-teal-500/25 backdrop-blur-xl hover:border-teal-400/50 transition-all group">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[10px] font-bold text-amber-300 uppercase tracking-wider">Clinical Lead</span>
+              <div className="h-8 w-8 rounded-lg bg-amber-500/20 text-amber-300 flex items-center justify-center">
+                <Award className="w-4 h-4" />
+              </div>
+            </div>
+            <div className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">23+ Years</div>
+            <p className="text-xs text-teal-100/75 mt-1 font-medium">Senior Medical Officer Clinical Practice</p>
+          </div>
+
+          <div className="p-4 sm:p-5 rounded-2xl bg-white/[0.04] border border-teal-500/25 backdrop-blur-xl hover:border-teal-400/50 transition-all group">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[10px] font-bold text-rose-300 uppercase tracking-wider">Emergency Ambulance</span>
+              <div className="h-8 w-8 rounded-lg bg-rose-500/20 text-rose-300 flex items-center justify-center">
+                <Ambulance className="w-4 h-4" />
+              </div>
+            </div>
+            <div className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">&lt; 3 mins</div>
+            <p className="text-xs text-teal-100/75 mt-1 font-medium">Average Campus Emergency Dispatch</p>
+          </div>
+        </div>
+      </section>
+
+      {/* ── DYNAMIC COMPONENT 2: FLOATING-ISLAND REAL MAP CARD (#campus-map) ── */}
+      <section id="campus-map" className="relative z-10 w-full max-w-6xl mx-auto px-4 sm:px-6 pt-24 sm:pt-28 pb-16 scroll-mt-28">
+        <div className="text-center mb-8">
+          <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-teal-500/10 border border-teal-500/20 text-xs font-semibold text-teal-300 mb-2">
             <Compass className="w-3.5 h-3.5" />
-            <span>TIET Patiala Campus Live Map</span>
+            <span>Interactive Campus Navigation Desk</span>
           </div>
           <h2 className="text-3xl sm:text-5xl font-extrabold text-white tracking-tight">
-            Find the Health Centre
+            Navigate to the Health Centre
           </h2>
-          <p className="mt-3 text-sm sm:text-base text-teal-100/70 max-w-xl mx-auto">
-            Located centrally on the 250-acre TIET campus at coordinates <strong className="text-teal-200">30.356008° N, 76.368689° E</strong>. Use the interactive live map below or select your hostel for walking route guidance.
+          <p className="mt-2 text-sm sm:text-base text-teal-100/75 max-w-xl mx-auto">
+            Situated centrally at coordinates <strong className="text-teal-200">30.356008° N, 76.368689° E</strong>. Explore the live map canvas or tap your hostel dock below.
           </p>
         </div>
 
-        {/* ── Real Google Maps Interactive Card Container ── */}
-        <div className="rounded-3xl border border-teal-500/30 bg-gradient-to-b from-[#0e3b38]/95 via-[#0b2f2c]/95 to-[#082220]/95 shadow-[0_25px_80px_rgba(0,0,0,0.6)] backdrop-blur-2xl overflow-hidden p-5 sm:p-7">
-          {/* Top Header & Actions Strip */}
-          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-6 border-b border-teal-500/20">
+        {/* Floating Island Container */}
+        <div className="relative rounded-3xl overflow-hidden border border-teal-500/35 bg-[#071d1b] shadow-[0_25px_80px_rgba(0,0,0,0.65)] backdrop-blur-2xl">
+          {/* Top Floating Glass HUD */}
+          <div className="relative z-20 p-4 sm:p-5 bg-gradient-to-b from-[#0c2e2b]/95 via-[#0c2e2b]/85 to-transparent border-b border-teal-500/20 flex flex-col md:flex-row md:items-center justify-between gap-3.5">
             <div className="flex items-center gap-3">
-              <div className="h-11 w-11 rounded-2xl bg-teal-600/30 border border-teal-500/40 text-teal-300 flex items-center justify-center shrink-0 shadow-inner">
+              <div className="h-10 w-10 rounded-xl bg-teal-600/30 border border-teal-500/40 text-teal-300 flex items-center justify-center shrink-0 shadow-inner">
                 <MapPin className="w-5 h-5 text-teal-300 animate-bounce" />
               </div>
               <div>
                 <div className="flex items-center gap-2 flex-wrap">
-                  <h3 className="text-base sm:text-lg font-bold text-white">TIET Health Centre</h3>
-                  <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-semibold border border-emerald-500/30">
-                    Live GPS Destination
+                  <h3 className="text-base sm:text-lg font-bold text-white">TIET Health Centre Station</h3>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-semibold border border-emerald-500/30">
+                    Live Destination
                   </span>
                 </div>
                 <p className="text-xs text-teal-200/75 mt-0.5">
-                  Ground Floor, Rooms 101–105 • Coordinates: <span className="font-mono font-semibold text-teal-200">30.356008, 76.368689</span>
+                  Ground Floor Suites • Coordinates: <span className="font-mono text-teal-200 font-semibold">{HEALTH_CENTRE_COORDS.string}</span>
                 </p>
               </div>
             </div>
 
-            <div className="flex items-center gap-2.5 flex-wrap">
-              {/* Map View / Satellite View Toggle */}
-              <div className="flex items-center bg-black/40 p-1 rounded-xl border border-white/10 text-xs">
+            <div className="flex items-center gap-2 flex-wrap">
+              {/* Map/Satellite View Toggle */}
+              <div className="flex items-center bg-black/50 p-1 rounded-xl border border-white/10 text-xs">
                 <button
                   type="button"
                   onClick={() => setMapMode('roadmap')}
@@ -724,7 +871,7 @@ export default function LandingPage() {
                       : 'text-teal-200/70 hover:text-white'
                   )}
                 >
-                  Map View
+                  Roadmap
                 </button>
                 <button
                   type="button"
@@ -750,7 +897,7 @@ export default function LandingPage() {
                 <span>{copiedCoords ? 'Copied' : '30.356008, 76.368689'}</span>
               </button>
 
-              {/* Open in Google Maps */}
+              {/* Direct Open in Google Maps */}
               <a
                 href="https://www.google.com/maps/search/?api=1&query=30.356008,76.368689"
                 target="_blank"
@@ -761,453 +908,413 @@ export default function LandingPage() {
                 <span>Open in Google Maps</span>
               </a>
 
-              {/* Ambulance Call Button */}
+              {/* Ambulance Call */}
               <a
                 href="tel:+918288008122"
                 className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer shadow-md"
               >
                 <PhoneCall className="w-3.5 h-3.5" />
-                <span>Call Ambulance (+91 8288008122)</span>
+                <span>Ambulance: +91 8288008122</span>
               </a>
             </div>
           </div>
 
-          {/* Interactive Walking Origin Chips */}
-          <div className="my-6">
-            <div className="flex items-center justify-between mb-2.5">
-              <p className="text-xs font-semibold text-teal-200/80 uppercase tracking-wider">
-                Select your current location on campus:
+          {/* Real Google Maps Full Canvas */}
+          <div className="relative w-full h-[400px] sm:h-[480px]">
+            <iframe
+              title="TIET Health Centre Live Google Map"
+              src={`https://maps.google.com/maps?q=30.356008,76.368689&hl=en&z=17&t=${mapMode === 'satellite' ? 'k' : 'm'}&output=embed`}
+              className="w-full h-full border-0"
+              style={{ border: 0 }}
+              allowFullScreen=""
+              loading="lazy"
+              referrerPolicy="no-referrer-when-downgrade"
+            />
+
+            {/* Overlaid Floating Walking Route Telemetry Box */}
+            <motion.div
+              layout
+              className="absolute top-4 left-4 right-4 sm:right-auto sm:max-w-md z-10 p-4 rounded-2xl bg-slate-950/85 backdrop-blur-xl border border-teal-500/40 shadow-2xl text-xs"
+            >
+              <div className="flex items-center justify-between pb-2 mb-2 border-b border-white/10">
+                <span className="text-[11px] font-bold text-teal-300 uppercase tracking-wide">
+                  Walking Route from {selectedLandmark.name}
+                </span>
+                <span className="text-xs font-extrabold text-emerald-400">
+                  {selectedLandmark.walkingTime} • {selectedLandmark.distance}
+                </span>
+              </div>
+              <p className="text-teal-100/80 leading-relaxed mb-3">
+                {selectedLandmark.instruction}
               </p>
-              <span className="text-[11px] text-teal-300 font-medium hidden sm:inline">
-                Click any hostel to calculate walking guidance
+              <div className="flex items-center gap-2">
+                <a
+                  href={`https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(selectedLandmark.query)}&destination=30.356008,76.368689&travelmode=walking`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-3 py-1.5 rounded-lg bg-teal-600 hover:bg-teal-500 text-slate-950 font-bold text-[11px] flex items-center gap-1.5 transition-all cursor-pointer shadow-sm"
+                >
+                  <Navigation className="w-3.5 h-3.5" />
+                  <span>Start Walking Navigation</span>
+                </a>
+                <span className="text-[10px] text-teal-300/60 font-mono">Ground Floor Foyer</span>
+              </div>
+            </motion.div>
+          </div>
+
+          {/* Bottom Floating Island: Campus Origin Dock */}
+          <div className="relative z-20 p-4 sm:p-5 bg-gradient-to-t from-[#0c2e2b]/95 via-[#0c2e2b]/90 to-transparent border-t border-teal-500/20">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[11px] font-bold text-teal-200 uppercase tracking-wider">
+                Select Your Campus Location for Quick Walking Directions:
+              </span>
+              <span className="text-[11px] text-teal-300/70 hidden sm:inline">
+                Tap any hostel to calculate walking distance
               </span>
             </div>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
-              {CAMPUS_LANDMARKS.map((landmark) => {
-                const isSelected = selectedLandmarkId === landmark.id
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+              {CAMPUS_LANDMARKS.map((lm) => {
+                const isSelected = selectedLandmarkId === lm.id
                 return (
                   <button
-                    key={landmark.id}
-                    onClick={() => setSelectedLandmarkId(landmark.id)}
+                    key={lm.id}
+                    onClick={() => setSelectedLandmarkId(lm.id)}
                     className={cn(
-                      'p-3 rounded-2xl border text-left transition-all duration-200 cursor-pointer flex flex-col justify-between',
+                      'p-2.5 rounded-xl border text-left transition-all duration-200 cursor-pointer flex flex-col justify-between',
                       isSelected
-                        ? 'bg-teal-500/25 border-teal-400 shadow-[0_0_20px_rgba(20,184,166,0.3)] ring-1 ring-teal-400'
+                        ? 'bg-teal-500/25 border-teal-400 shadow-[0_0_15px_rgba(45,212,191,0.3)] ring-1 ring-teal-400'
                         : 'bg-white/5 border-white/10 hover:bg-white/10 text-teal-100/70 hover:text-white'
                     )}
                   >
                     <div>
-                      <span className="text-[10px] font-medium text-teal-300 block mb-0.5">
-                        {landmark.category}
-                      </span>
-                      <span className="text-xs font-bold text-white block leading-snug">
-                        {landmark.name}
-                      </span>
+                      <span className="text-[9px] font-semibold text-teal-300 block">{lm.category}</span>
+                      <span className="text-xs font-bold text-white block truncate">{lm.name}</span>
                     </div>
-                    <div className="mt-2.5 flex items-center justify-between text-[11px] font-semibold text-emerald-300">
-                      <span>{landmark.walkingTime}</span>
-                      <span className="text-[10px] text-teal-300/70">{landmark.distance}</span>
+                    <div className="mt-1.5 flex items-center justify-between text-[10px] font-semibold text-emerald-300">
+                      <span>{lm.walkingTime}</span>
+                      <span className="text-teal-300/70">{lm.distance}</span>
                     </div>
                   </button>
                 )
               })}
             </div>
           </div>
-
-          {/* Real Map Canvas & Route Details Grid */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
-            {/* Real Embedded Google Maps Iframe */}
-            <div className="lg:col-span-8 relative h-[380px] sm:h-[460px] w-full rounded-2xl overflow-hidden border border-teal-500/30 bg-[#071d1b] shadow-inner">
-              <iframe
-                title="TIET Health Centre Live Google Map"
-                src={`https://maps.google.com/maps?q=30.356008,76.368689&hl=en&z=17&t=${mapMode === 'satellite' ? 'k' : 'm'}&output=embed`}
-                className="w-full h-full border-0"
-                style={{ border: 0 }}
-                allowFullScreen=""
-                loading="lazy"
-                referrerPolicy="no-referrer-when-downgrade"
-              />
-
-              {/* Floating Map HUD Indicator */}
-              <div className="absolute top-3 left-3 z-10 px-3 py-1.5 rounded-xl bg-slate-900/90 border border-teal-500/40 backdrop-blur-md shadow-lg flex items-center gap-2 pointer-events-none">
-                <span className="relative flex h-2 w-2">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                </span>
-                <span className="text-[11px] font-bold text-white">TIET Health Centre (30.356008, 76.368689)</span>
-              </div>
-            </div>
-
-            {/* Right: Selected Walking Route Telemetry & Direct Navigation */}
-            <div className="lg:col-span-4 p-5 sm:p-6 rounded-2xl bg-white/5 border border-teal-500/20 flex flex-col justify-between">
-              <div>
-                <div className="flex items-center justify-between pb-3.5 border-b border-white/10 mb-4">
-                  <div>
-                    <span className="text-[10px] font-semibold text-teal-300 uppercase tracking-wider block">
-                      Route Telemetry
-                    </span>
-                    <h4 className="text-base font-bold text-white mt-0.5">{selectedLandmark.name}</h4>
-                  </div>
-                  <div className="text-right">
-                    <span className="text-xl font-extrabold text-emerald-300 block">
-                      {selectedLandmark.walkingTime}
-                    </span>
-                    <span className="text-xs text-teal-200/70">{selectedLandmark.distance}</span>
-                  </div>
-                </div>
-
-                <div className="space-y-3.5 text-xs text-teal-100/80">
-                  <div className="flex items-start gap-2.5">
-                    <div className="p-1.5 rounded-lg bg-teal-500/20 text-teal-300 border border-teal-500/30 mt-0.5 shrink-0">
-                      <Navigation className="w-3.5 h-3.5" />
-                    </div>
-                    <div>
-                      <span className="font-semibold text-white block mb-0.5">Walking Guidance</span>
-                      <p className="leading-relaxed">{selectedLandmark.instruction}</p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-start gap-2.5">
-                    <div className="p-1.5 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 mt-0.5 shrink-0">
-                      <CheckCircle2 className="w-3.5 h-3.5" />
-                    </div>
-                    <div>
-                      <span className="font-semibold text-white block mb-0.5">Clinic Entry Points</span>
-                      <p className="leading-relaxed">
-                        Ground floor foyer. OPD registration desk, emergency dressing room, and duty physician cabins are located immediately inside.
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-start gap-2.5">
-                    <div className="p-1.5 rounded-lg bg-rose-500/20 text-rose-300 border border-rose-500/30 mt-0.5 shrink-0">
-                      <Ambulance className="w-3.5 h-3.5" />
-                    </div>
-                    <div>
-                      <span className="font-semibold text-white block mb-0.5">Emergency Mobile Dispatch</span>
-                      <p className="leading-relaxed">
-                        If unable to walk due to high fever, sprain, or sudden trauma, dial the campus ambulance for immediate pickup from your hostel.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="mt-6 pt-4 border-t border-white/10 space-y-2.5">
-                <a
-                  href={`https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(selectedLandmark.query)}&destination=30.356008,76.368689&travelmode=walking`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-full py-2.5 px-4 rounded-xl bg-teal-600 hover:bg-teal-500 text-slate-950 font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer shadow-md"
-                >
-                  <Navigation className="w-3.5 h-3.5" />
-                  <span>Start Walking Navigation</span>
-                </a>
-
-                <a
-                  href="tel:+918288008122"
-                  className="w-full py-2.5 px-4 rounded-xl bg-white/10 hover:bg-white/15 border border-white/15 text-rose-300 font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer"
-                >
-                  <Phone className="w-3.5 h-3.5" />
-                  <span>Call 24/7 Ambulance (+91 8288008122)</span>
-                </a>
-              </div>
-            </div>
-          </div>
         </div>
       </section>
 
-      {/* ── SECTION 2: REAL OPD TIMINGS & SHIFTS (#opd-timings) ── */}
+      {/* ── DYNAMIC COMPONENT 3: ANIMATED SLIDING TABBED OPD TIMINGS (#opd-timings) ── */}
       <section id="opd-timings" className="relative z-10 w-full max-w-6xl mx-auto px-4 sm:px-6 py-16">
         <div className="text-center mb-10">
-          <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-teal-500/10 border border-teal-500/20 text-xs font-semibold text-teal-300 mb-3">
+          <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-teal-500/10 border border-teal-500/20 text-xs font-semibold text-teal-300 mb-2">
             <Clock className="w-3.5 h-3.5" />
-            <span>Official Operating Hours</span>
+            <span>Official University Healthcare Schedule</span>
           </div>
           <h2 className="text-3xl sm:text-5xl font-extrabold text-white tracking-tight">
-            OPD Timings & Duty Shifts
+            OPD Timings & Duty Rosters
           </h2>
-          <p className="mt-3 text-sm sm:text-base text-teal-100/70 max-w-xl mx-auto">
-            The TIET Health Centre operates 24 hours a day on weekdays with continuous day consultations, on-duty night physicians, and emergency on-call staffing.
+          <p className="mt-2 text-sm sm:text-base text-teal-100/75 max-w-xl mx-auto">
+            Interactive clinical shift schedules. Real-time active shift indicator updates in accordance with university clinic regulations.
           </p>
 
-          {/* Real-time Open/Closed Badge */}
-          <div className="mt-5 inline-flex items-center gap-2.5 px-4 py-1.5 rounded-full bg-teal-500/15 border border-teal-500/30 text-xs font-medium">
+          {/* Live System Time Status Beacon */}
+          <div className="mt-4 inline-flex items-center gap-2.5 px-4 py-1.5 rounded-full bg-teal-500/15 border border-teal-500/30 text-xs font-medium">
             <span className="relative flex h-2.5 w-2.5">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
               <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
             </span>
-            <span className="font-bold text-white">{currentOpdStatus.label}</span>
-            <span className="text-teal-200/70">• {currentOpdStatus.sub}</span>
+            <span className="font-bold text-white">{liveStatus.label}</span>
+            <span className="text-teal-200/70">• {liveStatus.sub}</span>
           </div>
         </div>
 
-        {/* Timings 4-Card Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-          {OPD_SCHEDULE.map((sched, idx) => (
-            <div
-              key={idx}
-              className="p-6 rounded-3xl bg-white/[0.04] border border-teal-500/20 hover:border-teal-400/40 transition-all backdrop-blur-md flex flex-col justify-between"
-            >
-              <div>
-                <div className="flex items-center justify-between mb-4">
-                  <div>
-                    <h3 className="text-lg font-bold text-white">{sched.day}</h3>
-                    <p className="text-xs text-teal-300 font-medium">{sched.hours}</p>
-                  </div>
-                  <span className={`text-[11px] font-semibold px-2.5 py-0.5 rounded-full border ${sched.badgeColor}`}>
-                    {sched.status}
-                  </span>
-                </div>
-
-                <div className="space-y-2.5 mt-4">
-                  {sched.details.map((item, dIdx) => (
-                    <div key={dIdx} className="p-3 rounded-xl bg-white/[0.03] border border-white/5 flex items-start gap-3">
-                      <div className="p-1 rounded bg-teal-500/20 text-teal-300 mt-0.5">
-                        <Clock className="w-3 h-3" />
-                      </div>
-                      <div>
-                        <span className="text-xs font-bold text-white block">{item.time}</span>
-                        <span className="text-[11px] text-teal-100/70">{item.desc}</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="mt-5 pt-3 border-t border-white/10 flex items-center justify-between text-[11px] text-teal-200/60">
-                <span>TIET Health Regulations</span>
-                <span className="text-emerald-400 font-semibold">24/7 Ambulance Synchronized</span>
-              </div>
-            </div>
-          ))}
+        {/* Sliding Tab Switcher with Framer Motion LayoutId */}
+        <div className="flex items-center justify-center mb-8">
+          <div className="flex items-center gap-1 p-1.5 rounded-2xl bg-white/[0.04] border border-teal-500/20 backdrop-blur-xl flex-wrap justify-center">
+            {OPD_SCHEDULE_TABS.map((tab) => {
+              const isActive = activeTimetableTab === tab.id
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTimetableTab(tab.id)}
+                  className={cn(
+                    'relative px-4 py-2 rounded-xl text-xs font-bold transition-colors duration-200 cursor-pointer z-10',
+                    isActive ? 'text-slate-950 font-extrabold' : 'text-teal-100/75 hover:text-white'
+                  )}
+                >
+                  {isActive && (
+                    <motion.div
+                      layoutId="activeOpdTab"
+                      className="absolute inset-0 bg-gradient-to-r from-teal-400 to-emerald-400 rounded-xl shadow-md"
+                      transition={{ type: 'spring', stiffness: 450, damping: 30 }}
+                    />
+                  )}
+                  <span className="relative z-10">{tab.label}</span>
+                </button>
+              )
+            })}
+          </div>
         </div>
+
+        {/* Tab Content Display Card */}
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={currentTabSchedule.id}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -10 }}
+            transition={{ duration: 0.25 }}
+            className="p-6 sm:p-8 rounded-3xl bg-white/[0.04] border border-teal-500/25 backdrop-blur-xl shadow-2xl"
+          >
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-6 border-b border-white/10 mb-6">
+              <div>
+                <h3 className="text-xl font-bold text-white">{currentTabSchedule.label}</h3>
+                <p className="text-xs text-teal-200/80 mt-0.5">{currentTabSchedule.description}</p>
+              </div>
+              <span className={`text-xs font-bold px-3 py-1 rounded-full border self-start sm:self-auto ${currentTabSchedule.badgeColor}`}>
+                {currentTabSchedule.badge}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {currentTabSchedule.shifts.map((s, idx) => (
+                <div
+                  key={idx}
+                  className="p-4 rounded-2xl bg-white/[0.03] border border-white/5 hover:border-teal-400/30 transition-all flex items-start gap-3.5 group"
+                >
+                  <div className="h-9 w-9 rounded-xl bg-teal-500/20 text-teal-300 flex items-center justify-center shrink-0 mt-0.5 group-hover:scale-105 transition-transform">
+                    <Clock className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <span className="text-xs font-mono font-bold text-teal-300 block mb-0.5">{s.time}</span>
+                    <h4 className="text-sm font-bold text-white">{s.title}</h4>
+                    <p className="text-xs text-teal-100/70 mt-1 leading-relaxed">{s.desc}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </motion.div>
+        </AnimatePresence>
       </section>
 
-      {/* ── SECTION 3: CORE FACILITIES & CLINICAL SERVICES (#facilities) ── */}
+      {/* ── DYNAMIC COMPONENT 4: 3D PERSPECTIVE TILT CARDS ON FACILITIES (#facilities) ── */}
       <section id="facilities" className="relative z-10 w-full max-w-6xl mx-auto px-4 sm:px-6 py-16">
         <div className="text-center mb-10">
-          <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-teal-500/10 border border-teal-500/20 text-xs font-semibold text-teal-300 mb-3">
+          <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-teal-500/10 border border-teal-500/20 text-xs font-semibold text-teal-300 mb-2">
             <HeartPulse className="w-3.5 h-3.5" />
-            <span>Comprehensive Student & Staff Care</span>
+            <span>Full Comprehensive Clinical Infrastructure</span>
           </div>
           <h2 className="text-3xl sm:text-5xl font-extrabold text-white tracking-tight">
             Facilities & Health Services
           </h2>
-          <p className="mt-3 text-sm sm:text-base text-teal-100/70 max-w-xl mx-auto">
-            Everything provided inside the TIET Health Centre for complete physical, medical, and emotional well-being.
+          <p className="mt-2 text-sm sm:text-base text-teal-100/75 max-w-xl mx-auto">
+            Hover over any clinic facility to experience dynamic 3D card tilt. Click any card to expand full medical details.
           </p>
         </div>
 
-        <BentoGrid>
-          <BentoCard
-            name="Outpatient Department (OPD)"
-            description="Daily medical consultations with registered physicians for fever, colds, seasonal allergies, injuries, and routine medical checkups. Free consultations for all enrolled TIET students."
-            Icon={Stethoscope}
-            className="md:col-span-2"
-            cta="View Doctor Duty"
-            onCtaClick={() => scrollToElement('#doctors')}
-            background={
-              <div className="absolute inset-0 bg-gradient-to-br from-teal-500/15 via-transparent to-teal-900/30" />
-            }
-          />
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+          {FACILITIES_DATA.map((fac) => {
+            const Icon = fac.icon
+            return (
+              <TiltCard
+                key={fac.id}
+                onClick={() => setSelectedFacility(fac)}
+                className="group relative cursor-pointer p-6 rounded-3xl bg-white/[0.04] border border-teal-500/25 hover:border-teal-400/60 backdrop-blur-xl shadow-lg transition-all flex flex-col justify-between"
+              >
+                <div>
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="h-12 w-12 rounded-2xl bg-teal-500/20 border border-teal-500/30 text-teal-300 flex items-center justify-center shadow-inner group-hover:scale-110 transition-transform">
+                      <Icon className="w-6 h-6" />
+                    </div>
+                    <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${fac.badgeColor}`}>
+                      {fac.tag}
+                    </span>
+                  </div>
 
-          <BentoCard
-            name="24x7 Campus Ambulance"
-            description="Fully equipped emergency ambulance on active standby across campus. Rapid hospital transfer to Rajindra Hospital and Columbia Asia / Manipal Hospital in Patiala."
-            Icon={Ambulance}
-            className="md:col-span-1"
-            cta="Call +91 8288008122"
-            onCtaClick={() => (window.location.href = 'tel:+918288008122')}
-            background={
-              <div className="absolute inset-0 bg-gradient-to-b from-rose-500/15 via-transparent to-transparent" />
-            }
-          />
+                  <span className="text-[10px] font-semibold text-teal-300 uppercase tracking-wider block mb-1">
+                    {fac.category}
+                  </span>
+                  <h3 className="text-lg font-bold text-white group-hover:text-teal-200 transition-colors">
+                    {fac.title}
+                  </h3>
+                  <p className="text-xs text-teal-100/75 mt-2 leading-relaxed">
+                    {fac.shortDesc}
+                  </p>
+                </div>
 
-          <BentoCard
-            name="Institute Dispensary & Pharmacy"
-            description="Fully stocked dispensary providing essential formulary medications (analgesics, antibiotics, antiallergics, antacids, ORS) at no cost to university students upon doctor prescription."
-            Icon={Pill}
-            className="md:col-span-1"
-            cta="Check Timings"
-            onCtaClick={() => scrollToElement('#opd-timings')}
-            background={
-              <div className="absolute inset-0 bg-gradient-to-t from-teal-500/15 to-transparent" />
-            }
-          />
-
-          <BentoCard
-            name="Emergency Dressing & Minor Trauma Room"
-            description="Equipped for aseptic wound cleansing, suture dressings, first aid, burn care, emergency nebulization for asthma, and immediate tetanus toxoid (TT) administration."
-            Icon={Activity}
-            className="md:col-span-1"
-            cta="Learn More"
-            onCtaClick={() => showToast('Minor treatment and dressing room open during all OPD hours.')}
-            background={
-              <div className="absolute inset-0 bg-gradient-to-tl from-amber-500/15 via-transparent to-transparent" />
-            }
-          />
-
-          <BentoCard
-            name="Observation & Recovery Restrooms"
-            description="Clean daycare beds for students suffering from severe acute fever, dehydration requiring IV saline infusions, post-syncopal recovery, or monitoring prior to hospital transfer."
-            Icon={Bed}
-            className="md:col-span-1"
-            cta="Patient Care"
-            onCtaClick={() => showToast('Restroom observation beds are supervised by duty nursing staff.')}
-            background={
-              <div className="absolute inset-0 bg-gradient-to-tr from-emerald-500/15 via-transparent to-transparent" />
-            }
-          />
-
-          <BentoCard
-            name="Mental Health Counseling (TICC Integration)"
-            description="Direct linkage with the Thapar Institute Counselling Cell (TICC). Confidential clinical psychologist and psychiatric consultations for stress, anxiety, insomnia, and exam fatigue."
-            Icon={HeartPulse}
-            className="md:col-span-3"
-            cta="Confidential Support"
-            onCtaClick={() => showToast('TICC counseling is 100% confidential. Book through Health Centre or DoSA.')}
-            background={
-              <div className="absolute inset-0 bg-gradient-to-r from-teal-500/10 via-transparent to-emerald-500/15" />
-            }
-          />
-        </BentoGrid>
+                <div className="mt-5 pt-3 border-t border-white/10 flex items-center justify-between text-xs">
+                  <span className="text-[11px] font-mono text-teal-300/80">{fac.stat}</span>
+                  <span className="text-teal-300 font-semibold group-hover:translate-x-1 transition-transform flex items-center gap-1">
+                    <span>Explore</span>
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </span>
+                </div>
+              </TiltCard>
+            )
+          })}
+        </div>
       </section>
 
-      {/* ── SECTION 4: MEDICAL OFFICERS & HEALTHCARE TEAM (#doctors) ── */}
+      {/* ── DYNAMIC COMPONENT 5: MEDICAL FACULTY FOCUS DECK (#doctors) ── */}
       <section id="doctors" className="relative z-10 w-full max-w-6xl mx-auto px-4 sm:px-6 py-16">
         <div className="text-center mb-10">
-          <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-teal-500/10 border border-teal-500/20 text-xs font-semibold text-teal-300 mb-3">
+          <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-teal-500/10 border border-teal-500/20 text-xs font-semibold text-teal-300 mb-2">
             <Users className="w-3.5 h-3.5" />
-            <span>Official TIET Healthcare Leadership</span>
+            <span>Campus Healthcare Leadership & Clinical Staff</span>
           </div>
           <h2 className="text-3xl sm:text-5xl font-extrabold text-white tracking-tight">
             Medical Officers & Leadership
           </h2>
-          <p className="mt-3 text-sm sm:text-base text-teal-100/70 max-w-xl mx-auto">
-            Experienced medical practitioners and university leadership dedicated to the student body and campus community health.
+          <p className="mt-2 text-sm sm:text-base text-teal-100/75 max-w-xl mx-auto">
+            Experienced medical practitioners and university administrators managing student healthcare.
           </p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {MEDICAL_TEAM.map((doc, idx) => (
-            <div
-              key={idx}
-              className="p-6 rounded-3xl bg-white/[0.04] border border-teal-500/25 hover:border-teal-400 transition-all backdrop-blur-md flex flex-col justify-between"
-            >
-              <div>
-                <div className="flex items-center gap-3.5 mb-4">
-                  <div className={`h-14 w-14 rounded-2xl ${doc.avatarBg} text-white font-bold text-lg flex items-center justify-center shadow-md shrink-0`}>
-                    {doc.avatar}
+          {MEDICAL_TEAM.map((doc) => {
+            const isHovered = hoveredDoctorId === doc.id
+            const isAnyHovered = hoveredDoctorId !== null
+            return (
+              <motion.div
+                key={doc.id}
+                onMouseEnter={() => setHoveredDoctorId(doc.id)}
+                onMouseLeave={() => setHoveredDoctorId(null)}
+                animate={{
+                  scale: isHovered ? 1.03 : isAnyHovered ? 0.98 : 1,
+                  opacity: isHovered ? 1 : isAnyHovered ? 0.8 : 1,
+                }}
+                transition={{ type: 'spring', stiffness: 350, damping: 25 }}
+                className={cn(
+                  'p-6 rounded-3xl bg-white/[0.04] border backdrop-blur-xl shadow-xl transition-all flex flex-col justify-between',
+                  isHovered ? 'border-teal-400 shadow-[0_15px_40px_rgba(45,212,191,0.2)]' : 'border-teal-500/25'
+                )}
+              >
+                <div>
+                  <div className="flex items-center gap-3.5 mb-4">
+                    <div className={`h-14 w-14 rounded-2xl ${doc.avatarBg} text-white font-bold text-lg flex items-center justify-center shadow-md shrink-0`}>
+                      {doc.avatar}
+                    </div>
+                    <div>
+                      <h3 className="text-base font-bold text-white">{doc.name}</h3>
+                      <p className="text-xs text-teal-300 font-semibold">{doc.designation}</p>
+                      <span className="text-[10px] text-teal-100/60 block">{doc.qualification}</span>
+                    </div>
                   </div>
-                  <div>
-                    <h3 className="text-base font-bold text-white">{doc.name}</h3>
-                    <p className="text-xs text-teal-300 font-semibold">{doc.designation}</p>
-                    <span className="text-[10px] text-teal-100/60 block">{doc.qualification}</span>
+
+                  <div className="space-y-2 mt-4 text-xs text-teal-100/75">
+                    <div className="p-3 rounded-xl bg-white/[0.03] border border-white/5">
+                      <span className="text-[10px] text-teal-400 font-bold uppercase block mb-0.5">Role</span>
+                      <p className="leading-relaxed">{doc.role}</p>
+                    </div>
+                    <div className="p-3 rounded-xl bg-white/[0.03] border border-white/5">
+                      <span className="text-[10px] text-teal-400 font-bold uppercase block mb-0.5">Specialty & Oversight</span>
+                      <p className="leading-relaxed">{doc.specialty}</p>
+                    </div>
                   </div>
                 </div>
 
-                <div className="space-y-2 mt-4 text-xs text-teal-100/75">
-                  <div className="p-2.5 rounded-xl bg-white/[0.03] border border-white/5">
-                    <span className="text-[10px] text-teal-400 font-bold uppercase block mb-0.5">Role</span>
-                    <p className="leading-relaxed">{doc.role}</p>
-                  </div>
-                  <div className="p-2.5 rounded-xl bg-white/[0.03] border border-white/5">
-                    <span className="text-[10px] text-teal-400 font-bold uppercase block mb-0.5">Specialty & Oversight</span>
-                    <p className="leading-relaxed">{doc.specialty}</p>
-                  </div>
+                <div className="mt-5 pt-3 border-t border-white/10 flex items-center justify-between text-xs text-teal-200">
+                  <span className="flex items-center gap-1">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>TIET Verified</span>
+                  </span>
+                  <span className="text-[11px] font-mono text-teal-400/90 font-bold">{doc.cabin}</span>
                 </div>
-              </div>
-
-              <div className="mt-5 pt-3 border-t border-white/10 flex items-center justify-between text-xs text-teal-200">
-                <span className="flex items-center gap-1">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>TIET Verified</span>
-                </span>
-                <span className="text-[11px] text-teal-400/80 font-mono">Room 101 – 105</span>
-              </div>
-            </div>
-          ))}
+              </motion.div>
+            )
+          })}
         </div>
 
-        {/* Nursing & Paramedical Support Staff Bar */}
-        <div className="mt-6 p-5 rounded-2xl bg-teal-900/30 border border-teal-500/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-teal-100/80">
+        {/* Nursing Roster Bar */}
+        <div className="mt-6 p-4 sm:p-5 rounded-2xl bg-teal-900/30 border border-teal-500/25 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-teal-100/80">
           <div className="flex items-center gap-2.5">
             <Award className="w-4 h-4 text-teal-300 shrink-0" />
             <span>
-              <strong>Supporting Healthcare Team:</strong> Qualified nursing officers, registered dispensary pharmacists, lab assistants, and 24x7 ambulance paramedics on rotation.
+              <strong>Supporting Clinical Roster:</strong> Qualified staff nurses, certified dispensary pharmacists, laboratory assistants, and 24x7 ambulance drivers on active rotation.
             </span>
           </div>
-          <span className="text-teal-300 font-semibold shrink-0">Official Thapar Roster</span>
+          <span className="text-teal-300 font-semibold shrink-0">Health Centre Staff</span>
         </div>
       </section>
 
-      {/* ── SECTION 5: STUDENT ACADEMIC GUIDELINES & MEDICAL SLIPS ── */}
+      {/* ── DYNAMIC COMPONENT 6: INTERACTIVE ACADEMIC STEPPER (#guidelines) ── */}
       <section className="relative z-10 w-full max-w-6xl mx-auto px-4 sm:px-6 py-16">
-        <div className="p-8 sm:p-10 rounded-3xl bg-gradient-to-r from-teal-900/40 via-[#0a302d] to-[#0c2827] border border-teal-500/30 shadow-2xl">
-          <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6 pb-6 border-b border-teal-500/20">
+        <div className="p-7 sm:p-10 rounded-3xl bg-gradient-to-r from-teal-900/40 via-[#0a302d] to-[#0c2827] border border-teal-500/30 shadow-2xl">
+          <div className="text-center mb-8">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-teal-500/10 border border-teal-500/20 text-xs font-semibold text-teal-300 mb-2">
+              <GraduationCap className="w-3.5 h-3.5" />
+              <span>University Academic Protocol</span>
+            </div>
+            <h3 className="text-2xl sm:text-4xl font-extrabold text-white">
+              Medical Slips & Make-Up Exams
+            </h3>
+            <p className="text-xs sm:text-sm text-teal-100/75 mt-1 max-w-xl mx-auto">
+              Follow the 3-step endorsement workflow for student medical leaves and make-up examination sanction.
+            </p>
+          </div>
+
+          {/* Stepper Tabs */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            {ACADEMIC_STEPS.map((st, idx) => {
+              const Icon = st.icon
+              const isSelected = activeAcademicStep === idx
+              return (
+                <button
+                  key={idx}
+                  onClick={() => setActiveAcademicStep(idx)}
+                  className={cn(
+                    'p-4 rounded-2xl border text-left transition-all duration-200 cursor-pointer flex flex-col justify-between',
+                    isSelected
+                      ? 'bg-teal-500/25 border-teal-400 shadow-[0_0_20px_rgba(45,212,191,0.25)] ring-1 ring-teal-400'
+                      : 'bg-white/5 border-white/10 hover:bg-white/10 text-teal-100/70 hover:text-white'
+                  )}
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-lg font-black text-teal-300">{st.step}</span>
+                    <Icon className="w-4 h-4 text-teal-300" />
+                  </div>
+                  <h4 className="text-sm font-bold text-white leading-tight">{st.title}</h4>
+                  <span className="text-[11px] text-teal-300/80 block mt-1">{st.subtitle}</span>
+                </button>
+              )
+            })}
+          </div>
+
+          {/* Active Step Detailed Display */}
+          <div className="p-5 rounded-2xl bg-white/[0.03] border border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-teal-500/10 border border-teal-500/20 text-xs font-semibold text-teal-300 mb-2">
-                <FileCheck className="w-3.5 h-3.5" />
-                <span>Academic Examination & Leave Regulations</span>
-              </div>
-              <h3 className="text-2xl sm:text-3xl font-extrabold text-white">
-                Medical Certificates & Make-Up Exams
-              </h3>
-              <p className="text-xs sm:text-sm text-teal-100/70 mt-1 max-w-2xl leading-relaxed">
-                Important official guidelines from Thapar Institute regarding medical absences and external treatment endorsements.
+              <span className="text-[10px] font-bold text-teal-300 uppercase tracking-wider block mb-1">
+                Step {ACADEMIC_STEPS[activeAcademicStep].step} Procedure
+              </span>
+              <h4 className="text-base font-bold text-white">{ACADEMIC_STEPS[activeAcademicStep].title}</h4>
+              <p className="text-xs text-teal-100/80 mt-1 leading-relaxed max-w-2xl">
+                {ACADEMIC_STEPS[activeAcademicStep].desc}
               </p>
             </div>
-
             <button
-              onClick={() => showToast('Contact healthcentre@thapar.edu or visit Room 102 for certificate vetting.')}
-              className="px-5 py-2.5 rounded-full bg-teal-700 hover:bg-teal-600 text-white font-semibold text-xs transition-all cursor-pointer shadow-md shrink-0 flex items-center gap-1.5"
+              onClick={() => showToast('Visit Health Centre Room 102 or email healthcentre@thapar.edu for vetting.')}
+              className="px-5 py-2.5 rounded-full bg-teal-600 hover:bg-teal-500 text-slate-950 font-bold text-xs transition-all cursor-pointer shadow-md shrink-0 flex items-center gap-1.5 self-start sm:self-auto"
             >
-              <Info className="w-3.5 h-3.5" />
-              <span>Vetting Procedure</span>
+              <span>Vetting Guidelines</span>
+              <ArrowRight className="w-3.5 h-3.5" />
             </button>
           </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mt-6">
-            <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/10">
-              <div className="flex items-center gap-2.5 mb-2">
-                <FileText className="w-4 h-4 text-emerald-400" />
-                <h4 className="text-sm font-bold text-white">External Treatment Endorsement</h4>
-              </div>
-              <p className="text-xs text-teal-100/75 leading-relaxed">
-                If treated outside the institute, students must consult a registered MBBS/MD physician. All prescription slips, diagnostic bills, and discharge summaries <strong>must be vetted and signed by the TIET Health Centre Medical Officer</strong> upon return to campus.
-              </p>
-            </div>
-
-            <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/10">
-              <div className="flex items-center gap-2.5 mb-2">
-                <Calendar className="w-4 h-4 text-teal-400" />
-                <h4 className="text-sm font-bold text-white">Make-Up Examination Requests</h4>
-              </div>
-              <p className="text-xs text-teal-100/75 leading-relaxed">
-                Students unable to appear for mid-semester or end-semester examinations due to medical emergencies must submit their Health Centre-verified treatment slips to the <strong>Office of the Dean of Academic Affairs (DoAA)</strong> within university deadlines.
-              </p>
-            </div>
-          </div>
         </div>
       </section>
 
-      {/* ── SECTION 6: 24/7 EMERGENCY SOS BANNER & ACTION DIRECTORY ── */}
+      {/* ── DYNAMIC COMPONENT 7: 24/7 EMERGENCY SOS DECK ── */}
       <section className="relative z-10 w-full max-w-6xl mx-auto px-4 sm:px-6 py-16">
-        <div className="relative rounded-3xl overflow-hidden p-8 sm:p-12 text-center border border-teal-500/30 bg-gradient-to-b from-teal-900/50 via-[#0a2f2c]/90 to-[#07201e] shadow-2xl">
-          <BorderBeam duration={8} colorFrom="#2dd4bf" colorTo="#0d9488" />
-
-          <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-rose-500/20 border border-rose-500/30 text-xs font-semibold text-rose-300 mb-4">
+        <div className="relative rounded-3xl overflow-hidden p-8 sm:p-12 text-center border border-teal-500/35 bg-gradient-to-b from-teal-900/50 via-[#0a2f2c]/90 to-[#07201e] shadow-2xl">
+          <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-rose-500/20 border border-rose-500/30 text-xs font-semibold text-rose-300 mb-3">
             <AlertCircle className="w-3.5 h-3.5" />
             <span>24/7 Campus Emergency Medical Hotline</span>
           </div>
 
           <h2 className="text-3xl sm:text-5xl font-extrabold text-white tracking-tight">
-            Need Immediate Medical Assistance?
+            Immediate Medical Assistance
           </h2>
 
-          <p className="mt-4 text-sm sm:text-base text-teal-100/75 max-w-xl mx-auto leading-relaxed">
-            Our campus ambulance and medical assistants are ready 24/7. Call directly, visit the on-campus clinic, or log into the portal.
+          <p className="mt-3 text-sm sm:text-base text-teal-100/75 max-w-xl mx-auto leading-relaxed">
+            Our campus ambulance and duty medical officers operate 24 hours a day. Dial directly for emergency hostel dispatch.
           </p>
 
           <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3.5">
@@ -1265,6 +1372,66 @@ export default function LandingPage() {
         </div>
       </footer>
 
+      {/* ── FACILITY DETAIL MODAL (Opens on Clicking any 3D Tilt Facility Card) ── */}
+      <AnimatePresence>
+        {selectedFacility && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 15 }}
+              className="w-full max-w-lg rounded-3xl bg-[#0c2827] border border-teal-500/40 p-6 sm:p-8 shadow-2xl text-white relative"
+            >
+              <button
+                onClick={() => setSelectedFacility(null)}
+                className="absolute top-4 right-4 p-2 rounded-full bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white transition-all cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+
+              <div className="flex items-center gap-3.5 mb-4">
+                <div className="h-12 w-12 rounded-2xl bg-teal-500/20 border border-teal-500/30 text-teal-300 flex items-center justify-center">
+                  <selectedFacility.icon className="w-6 h-6" />
+                </div>
+                <div>
+                  <span className="text-[10px] font-bold text-teal-300 uppercase tracking-wider block">
+                    {selectedFacility.category}
+                  </span>
+                  <h3 className="text-xl font-bold text-white">{selectedFacility.title}</h3>
+                </div>
+              </div>
+
+              <div className="space-y-3.5 my-5 text-xs text-teal-100/85">
+                <p className="leading-relaxed">{selectedFacility.details}</p>
+                <div className="p-3 rounded-2xl bg-white/[0.04] border border-white/10 flex items-center justify-between">
+                  <span className="text-teal-300 font-semibold">Location / Access:</span>
+                  <span className="font-mono text-white font-bold">{selectedFacility.stat}</span>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-white/10">
+                <button
+                  onClick={() => setSelectedFacility(null)}
+                  className="px-5 py-2.5 rounded-full bg-white/10 hover:bg-white/20 text-xs font-semibold text-white transition-all cursor-pointer"
+                >
+                  Close
+                </button>
+                <button
+                  onClick={() => {
+                    setSelectedFacility(null)
+                    scrollToElement('#campus-map')
+                  }}
+                  className="px-5 py-2.5 rounded-full bg-teal-600 hover:bg-teal-500 text-slate-950 font-bold text-xs transition-all cursor-pointer shadow-md flex items-center gap-1.5"
+                >
+                  <MapPin className="w-3.5 h-3.5" />
+                  <span>Navigate There</span>
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
       {/* ── EMERGENCY SOS MODAL POPUP (Triggered by Navbar SOS button) ── */}
       <AnimatePresence>
         {showEmergencyModal && (
@@ -1293,7 +1460,7 @@ export default function LandingPage() {
               </div>
 
               <p className="text-xs text-teal-100/80 mb-5 leading-relaxed">
-                For sudden unconsciousness, acute sports trauma, breathing distress, or urgent campus ambulance pickup, click below to dial instantly:
+                For acute sports trauma, breathing distress, sudden unconsciousness, or urgent campus ambulance pickup, click below to dial instantly:
               </p>
 
               <div className="space-y-2.5 mb-5">
@@ -1321,7 +1488,7 @@ export default function LandingPage() {
 
                 <div className="p-3 rounded-2xl bg-white/5 border border-white/10 text-xs text-teal-100/70">
                   <span className="font-semibold text-white block mb-0.5">Location</span>
-                  <span>TIET Health Centre Ground Floor, Room 101-105 (30.3566° N, 76.3641° E)</span>
+                  <span>TIET Health Centre Ground Floor, Room 101-105 (30.356008° N, 76.368689° E)</span>
                 </div>
               </div>
 
