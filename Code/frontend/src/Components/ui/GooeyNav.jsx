@@ -3,20 +3,20 @@ import './GooeyNav.css';
 
 const GooeyNav = ({
   items,
-  animationTime = 600,
-  particleCount = 15,
-  particleDistances = [90, 10],
-  particleR = 100,
-  timeVariance = 300,
-  colors = [1, 2, 3, 1, 2, 3, 1, 4],
+  animationTime = 500,
+  particleCount = 14,
+  particleDistances = [70, 10],
+  particleR = 90,
+  timeVariance = 200,
+  colors = ['#2dd4bf', '#14b8a6', '#10b981', '#34d399', '#5eead4'],
   initialActiveIndex = 0,
   activeIndex: controlledIndex,
   onChange,
 }) => {
   const containerRef = useRef(null);
   const navRef = useRef(null);
-  const filterRef = useRef(null);
-  const textRef = useRef(null);
+  const pillRef = useRef(null);
+  const particleSpotRef = useRef(null);
   const [internalActiveIndex, setInternalActiveIndex] = useState(initialActiveIndex);
 
   const activeIndex = controlledIndex !== undefined ? controlledIndex : internalActiveIndex;
@@ -40,18 +40,29 @@ const GooeyNav = ({
     };
   };
 
-  const makeParticles = (element) => {
+  const makeParticles = (spotElement) => {
+    if (!spotElement) return;
     const d = particleDistances;
     const r = particleR;
     const bubbleTime = animationTime * 2 + timeVariance;
-    element.style.setProperty('--time', `${bubbleTime}ms`);
+    spotElement.style.setProperty('--time', `${bubbleTime}ms`);
+
+    // Clean previous particles
+    const existing = spotElement.querySelectorAll('.particle');
+    existing.forEach((p) => {
+      try {
+        spotElement.removeChild(p);
+      } catch {
+        // Ignore
+      }
+    });
 
     for (let i = 0; i < particleCount; i++) {
-      const t = animationTime * 2 + noise(timeVariance * 2);
+      const t = animationTime * 1.5 + noise(timeVariance);
       const p = createParticle(i, t, d, r);
-      element.classList.remove('active');
 
       setTimeout(() => {
+        if (!spotElement) return;
         const particle = document.createElement('span');
         const point = document.createElement('span');
         particle.classList.add('particle');
@@ -61,45 +72,48 @@ const GooeyNav = ({
         particle.style.setProperty('--end-y', `${p.end[1]}px`);
         particle.style.setProperty('--time', `${p.time}ms`);
         particle.style.setProperty('--scale', `${p.scale}`);
-        particle.style.setProperty('--color', `var(--color-${p.color}, #2dd4bf)`);
+        particle.style.setProperty('--color', `${p.color}`);
         particle.style.setProperty('--rotate', `${p.rotate}deg`);
 
         point.classList.add('point');
         particle.appendChild(point);
-        element.appendChild(particle);
-        requestAnimationFrame(() => {
-          element.classList.add('active');
-        });
+        spotElement.appendChild(particle);
+
         setTimeout(() => {
           try {
-            element.removeChild(particle);
+            spotElement.removeChild(particle);
           } catch {
-            // Ignore if already unmounted
+            // Ignore
           }
         }, t);
-      }, 30);
+      }, 20);
     }
   };
 
-  const updateEffectPosition = (element) => {
-    if (!containerRef.current || !filterRef.current || !textRef.current || !element) return;
+  const updatePillPosition = (element) => {
+    if (!containerRef.current || !pillRef.current || !element) return;
     const containerRect = containerRef.current.getBoundingClientRect();
     const pos = element.getBoundingClientRect();
 
-    const styles = {
-      left: `${pos.x - containerRect.x}px`,
-      top: `${pos.y - containerRect.y}px`,
-      width: `${pos.width}px`,
-      height: `${pos.height}px`,
-    };
-    Object.assign(filterRef.current.style, styles);
-    Object.assign(textRef.current.style, styles);
-    textRef.current.innerText = element.innerText;
+    const left = pos.x - containerRect.x;
+    const top = pos.y - containerRect.y;
+    const width = pos.width;
+    const height = pos.height;
+
+    pillRef.current.style.left = `${left}px`;
+    pillRef.current.style.top = `${top}px`;
+    pillRef.current.style.width = `${width}px`;
+    pillRef.current.style.height = `${height}px`;
+
+    if (particleSpotRef.current) {
+      particleSpotRef.current.style.left = `${left + width / 2}px`;
+      particleSpotRef.current.style.top = `${top + height / 2}px`;
+    }
   };
 
   const handleClick = (e, index) => {
     e.preventDefault();
-    const liEl = e.currentTarget;
+    const liEl = navRef.current?.querySelectorAll('li')[index];
     const item = items[index];
 
     if (item && item.onClick) {
@@ -112,37 +126,11 @@ const GooeyNav = ({
     if (activeIndex === index) return;
 
     setInternalActiveIndex(index);
-    updateEffectPosition(liEl);
-
-    if (filterRef.current) {
-      const particles = filterRef.current.querySelectorAll('.particle');
-      particles.forEach((p) => {
-        try {
-          filterRef.current.removeChild(p);
-        } catch {
-          // Ignore
-        }
-      });
+    if (liEl) {
+      updatePillPosition(liEl);
     }
-
-    if (textRef.current) {
-      textRef.current.classList.remove('active');
-      void textRef.current.offsetWidth;
-      textRef.current.classList.add('active');
-    }
-
-    if (filterRef.current) {
-      makeParticles(filterRef.current);
-    }
-  };
-
-  const handleKeyDown = (e, index) => {
-    if (e.key === 'Enter' || e.key === ' ') {
-      e.preventDefault();
-      const liEl = e.currentTarget.parentElement;
-      if (liEl) {
-        handleClick({ currentTarget: liEl, preventDefault: () => {} }, index);
-      }
+    if (particleSpotRef.current) {
+      makeParticles(particleSpotRef.current);
     }
   };
 
@@ -150,14 +138,13 @@ const GooeyNav = ({
     if (!navRef.current || !containerRef.current) return;
     const activeLi = navRef.current.querySelectorAll('li')[activeIndex];
     if (activeLi) {
-      updateEffectPosition(activeLi);
-      textRef.current?.classList.add('active');
+      updatePillPosition(activeLi);
     }
 
     const resizeObserver = new ResizeObserver(() => {
       const currentActiveLi = navRef.current?.querySelectorAll('li')[activeIndex];
       if (currentActiveLi) {
-        updateEffectPosition(currentActiveLi);
+        updatePillPosition(currentActiveLi);
       }
     });
 
@@ -167,6 +154,14 @@ const GooeyNav = ({
 
   return (
     <div className="gooey-nav-container" ref={containerRef}>
+      {/* Dynamic sliding white pill backdrop */}
+      <span className="active-pill-bg" ref={pillRef} />
+
+      {/* Scoped particle emission spot with zero external bleed */}
+      <div className="effect-container">
+        <span className="particle-spot" ref={particleSpotRef} />
+      </div>
+
       <nav>
         <ul ref={navRef}>
           {items.map((item, index) => {
@@ -179,13 +174,18 @@ const GooeyNav = ({
               >
                 <button
                   type="button"
-                  onKeyDown={(e) => handleKeyDown(e, index)}
                   aria-selected={isActive}
                 >
                   {item.icon && <span className="shrink-0">{item.icon}</span>}
-                  <span>{item.label}</span>
+                  <span className="whitespace-nowrap">{item.label}</span>
                   {item.badge !== undefined && (
-                    <span className="text-[10px] px-1.5 py-0.2 rounded-full font-bold bg-teal-500/30 text-teal-200 border border-teal-400/40 ml-1">
+                    <span
+                      className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ml-0.5 shrink-0 transition-colors ${
+                        isActive
+                          ? 'bg-teal-800 text-white'
+                          : 'bg-teal-500/25 text-teal-200 border border-teal-400/30'
+                      }`}
+                    >
                       {item.badge}
                     </span>
                   )}
@@ -195,8 +195,6 @@ const GooeyNav = ({
           })}
         </ul>
       </nav>
-      <span className="effect filter" ref={filterRef} />
-      <span className="effect text" ref={textRef} />
     </div>
   );
 };
