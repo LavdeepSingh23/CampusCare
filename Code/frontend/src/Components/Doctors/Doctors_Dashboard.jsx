@@ -41,7 +41,6 @@ import {
   completeConsultation,
 } from '../../api'
 import { cn } from '../../lib/utils'
-import GooeyNav from '../ui/GooeyNav'
 
 // Initial patients queue matching hospital OPD workflow
 const INITIAL_DEMO_QUEUE = [
@@ -538,20 +537,76 @@ export default function Doctors_Dashboard() {
           </div>
         </div>
 
-        {/* Center: ReactBits GooeyNav Navigation */}
-        <div className="relative flex items-center justify-center">
-          <GooeyNav
-            items={navItems}
-            activeIndex={activeNavIndex}
-            onChange={(idx, item) => setActiveTab(item.key)}
-            particleCount={15}
-            particleDistances={[90, 10]}
-            particleR={100}
-            initialActiveIndex={0}
-            animationTime={600}
-            timeVariance={300}
-            colors={[1, 2, 3, 1, 2, 3, 1, 4]}
-          />
+        {/* Center: Futuristic LumaBar Navigation (Top-Docked, Healthcare Teal/Emerald Glow - Zero Purple) */}
+        <div className="relative">
+          <div className="relative flex items-center justify-center gap-1 sm:gap-2.5 bg-white/75 backdrop-blur-2xl rounded-full px-2.5 sm:px-4 py-1.5 shadow-lg shadow-teal-950/5 border border-teal-100/80 overflow-hidden">
+            {/* Active Indicator Glow - Teal/Emerald Healthcare Palette */}
+            <motion.div
+              layoutId="luma-active-glow"
+              className="absolute w-24 h-24 bg-gradient-to-r from-teal-400 via-emerald-400 to-teal-500 rounded-full blur-2xl -z-10 opacity-75 pointer-events-none"
+              animate={{
+                left: `calc(${activeNavIndex * (100 / navItems.length)}% + ${100 / navItems.length / 2}%)`,
+                translateX: '-50%',
+              }}
+              transition={{ type: 'spring', stiffness: 450, damping: 28 }}
+            />
+
+            {navItems.map((item, index) => {
+              const isActive = index === activeNavIndex
+              return (
+                <motion.div key={item.id} className="relative flex flex-col items-center group">
+                  {/* Button */}
+                  <motion.button
+                    onClick={() => setActiveTab(item.key)}
+                    whileHover={{ scale: 1.08 }}
+                    whileTap={{ scale: 0.95 }}
+                    className={cn(
+                      'relative z-10 flex items-center gap-2 px-3 sm:px-4 py-2 rounded-full text-xs font-semibold transition-colors duration-200 cursor-pointer select-none',
+                      isActive
+                        ? 'text-teal-950 font-bold'
+                        : 'text-slate-600 hover:text-teal-700'
+                    )}
+                  >
+                    {/* Active Pill backdrop */}
+                    {isActive && (
+                      <motion.div
+                        layoutId="luma-pill-active"
+                        className="absolute inset-0 bg-white/95 rounded-full shadow-xs -z-10 border border-teal-200/60"
+                        transition={{ type: 'spring', stiffness: 450, damping: 30 }}
+                      />
+                    )}
+
+                    <motion.span
+                      animate={{ scale: isActive ? 1.2 : 1 }}
+                      transition={{ type: 'spring', stiffness: 450, damping: 25 }}
+                      className={cn(
+                        'flex items-center',
+                        isActive ? 'text-teal-700' : 'text-slate-500 group-hover:text-teal-600'
+                      )}
+                    >
+                      {item.icon}
+                    </motion.span>
+                    <span className="hidden md:inline">{item.label}</span>
+                    {item.badge !== undefined && (
+                      <span
+                        className={cn(
+                          'text-[10px] px-1.5 py-0.2 rounded-full font-bold',
+                          item.badgeClass
+                        )}
+                      >
+                        {item.badge}
+                      </span>
+                    )}
+                  </motion.button>
+
+                  {/* Tooltip (Positioned below the top navbar) */}
+                  <span className="absolute top-full mt-2.5 px-2.5 py-1 text-xs rounded-md bg-slate-900 text-teal-200 opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap shadow-xl border border-teal-500/25 pointer-events-none z-50">
+                    {item.tooltip}
+                  </span>
+                </motion.div>
+              )
+            })}
+          </div>
         </div>
 
         {/* Right Doctor Profile & Quick Actions */}
