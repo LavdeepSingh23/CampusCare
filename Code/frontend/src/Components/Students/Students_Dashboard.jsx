@@ -1,5 +1,28 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { useParams } from 'react-router-dom'
+import {
+  Sun,
+  Sunset,
+  Moon,
+  Pill,
+  Phone,
+  Ambulance,
+  Droplet,
+  ChevronRight,
+  LogOut,
+  Mail,
+  GraduationCap,
+  AlertTriangle,
+  Clock,
+  Stethoscope,
+  HeartPulse,
+  Activity,
+  CalendarDays,
+  Home,
+  FileText,
+  User,
+  IdCard,
+} from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import {
   fetchPatientProfile,
@@ -7,160 +30,715 @@ import {
   fetchPatientHistory,
 } from '../../api'
 
-// ── Icons ──────────────────────────────────────────────────────────────
+// ── Constants ──────────────────────────────────────────────────────────
 
-function ChevronIcon({ open }) {
+const NONE = 'None recorded'
+const EMPTY_SUMMARY = { conditions: NONE, allergies: NONE, medication: NONE }
+
+// Placeholders — swap in your campus's real numbers.
+const EMERGENCY = [
+  { label: 'Ambulance', sub: 'Medical emergencies', number: '108', icon: Ambulance },
+  { label: 'Tele-MANAS', sub: 'Mental health support, 24×7', number: '14416', icon: HeartPulse },
+]
+const CAMPUS_NUMBERS = [
+  { label: 'Campus Health Centre', sub: 'Appointments and medical help', number: '+91-000-000-0000' },
+  { label: 'Campus Security', sub: 'Safety issues on campus', number: '+91-000-000-0001' },
+  { label: 'Hostel Warden (on duty)', sub: 'Hostel issues, late-night help', number: '+91-000-000-0002' },
+]
+
+const SLOTS = [
+  { key: 'morning', label: 'Morning', icon: Sun, tint: 'bg-amber-50 text-amber-700 border-amber-200' },
+  { key: 'evening', label: 'Evening', icon: Sunset, tint: 'bg-orange-50 text-orange-700 border-orange-200' },
+  { key: 'night', label: 'Night', icon: Moon, tint: 'bg-indigo-50 text-indigo-700 border-indigo-200' },
+]
+
+const TABS = [
+  { key: 'home', label: 'Home', icon: Home },
+  { key: 'prescription', label: 'Prescription', icon: FileText },
+  { key: 'health', label: 'Health', icon: HeartPulse },
+  { key: 'help', label: 'Help', icon: Phone, urgent: true },
+  { key: 'account', label: 'Account', icon: User },
+]
+
+// ── Helpers ────────────────────────────────────────────────────────────
+
+function getInitials(name) {
+  const parts = (name || '').split(' ').filter(Boolean)
+  if (parts.length === 0) return ''
+  if (parts.length === 1) return parts[0][0].toUpperCase()
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
+}
+
+function greeting(hour) {
+  if (hour < 12) return 'Good morning'
+  if (hour < 17) return 'Good afternoon'
+  return 'Good evening'
+}
+
+function currentSlot(hour) {
+  if (hour >= 5 && hour < 12) return 'morning'
+  if (hour >= 12 && hour < 19) return 'evening'
+  return 'night'
+}
+
+// Splits medicines into morning / evening / night by reading the free-text
+// `timing` field (e.g. "morning, night"). Anything else goes to `other`.
+function groupBySlot(medicines = []) {
+  const groups = { morning: [], evening: [], night: [], other: [] }
+  medicines.forEach((m) => {
+    const t = (m.timing || '').toLowerCase()
+    let placed = false
+    SLOTS.forEach((s) => {
+      if (t.includes(s.key)) {
+        groups[s.key].push(m)
+        placed = true
+      }
+    })
+    if (!placed) groups.other.push(m)
+  })
+  return groups
+}
+
+const telHref = (n) => `tel:${n.replace(/[^0-9+]/g, '')}`
+const joinTiming = (m, sep) => [m.timing, m.note].filter(Boolean).join(sep)
+
+// ── Shared UI ──────────────────────────────────────────────────────────
+
+function Card({ title, icon: Icon, aside, children, className = '' }) {
   return (
-    <svg
-      width="14"
-      height="14"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={'transition-transform duration-200 flex' + (open ? ' rotate-90' : '')}
+    <section className={'rounded-3xl bg-white border border-slate-200/80 p-5 lg:p-6 ' + className}>
+      {title && (
+        <div className="flex items-center justify-between gap-3 mb-4">
+          <h2 className="cc-display flex items-center gap-2 text-lg font-semibold text-slate-900">
+            {Icon && <Icon className="w-[18px] h-[18px] text-teal-700" aria-hidden="true" />}
+            {title}
+          </h2>
+          {aside}
+        </div>
+      )}
+      {children}
+    </section>
+  )
+}
+
+function PageTitle({ children, sub }) {
+  return (
+    <div className="mb-4 px-1">
+      <h1 className="cc-display text-2xl lg:text-3xl font-bold text-slate-900">{children}</h1>
+      {sub && <p className="text-sm text-slate-500 mt-0.5">{sub}</p>}
+    </div>
+  )
+}
+
+function Stat({ icon: Icon, label, value, className = '' }) {
+  return (
+    <div className={'rounded-2xl bg-white/10 border border-white/15 px-3.5 py-2.5 flex-1 min-w-[96px] ' + className}>
+      <div className="flex items-center gap-1.5 text-teal-100/80 text-xs mb-0.5">
+        <Icon className="w-3.5 h-3.5" aria-hidden="true" />
+        {label}
+      </div>
+      <div className="cc-display text-lg font-semibold text-white leading-tight whitespace-nowrap">{value}</div>
+    </div>
+  )
+}
+
+function InfoRow({ icon: Icon, label, children }) {
+  return (
+    <div className="flex items-start gap-3 py-3">
+      <span className="w-8 h-8 rounded-lg bg-teal-50 text-teal-700 flex items-center justify-center shrink-0">
+        <Icon className="w-4 h-4" aria-hidden="true" />
+      </span>
+      <div className="min-w-0">
+        <p className="text-xs text-slate-400">{label}</p>
+        <p className="text-sm font-medium text-slate-800 break-words">{children}</p>
+      </div>
+    </div>
+  )
+}
+
+function AllergyAlert({ allergies }) {
+  return (
+    <div role="alert" className="rounded-2xl bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-800 flex items-start gap-2.5">
+      <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0 text-red-600" aria-hidden="true" />
+      <span>
+        <span className="font-semibold">Allergic to: </span>
+        {allergies}. Tell any doctor or pharmacist before you take new medicine.
+      </span>
+    </div>
+  )
+}
+
+function CallButton({ item }) {
+  const Icon = item.icon
+  return (
+    <a
+      href={telHref(item.number)}
+      aria-label={`Call ${item.label} at ${item.number}`}
+      className="rounded-2xl bg-red-600 active:bg-red-800 hover:bg-red-700 text-white p-4 lg:p-5 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-red-500/60 focus-visible:ring-offset-2"
     >
-      <polyline points="9 6 15 12 9 18" />
-    </svg>
+      <Icon className="w-5 h-5 mb-2" aria-hidden="true" />
+      <span className="block text-sm text-red-100">{item.label}</span>
+      <span className="cc-display block text-3xl font-bold tabular-nums">{item.number}</span>
+      {item.sub && <span className="block text-xs text-red-100/80 mt-1">{item.sub}</span>}
+    </a>
   )
 }
 
-function ChevronDownIcon() {
+// ── Dose schedule ──────────────────────────────────────────────────────
+
+function DoseSchedule({ latest, nowSlot }) {
+  const groups = groupBySlot(latest?.medicines)
   return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <polyline points="6 9 12 15 18 9" />
-    </svg>
+    <Card
+      title="Dose schedule"
+      icon={Clock}
+      aside={latest && <span className="text-xs text-slate-400">{latest.date} prescription</span>}
+    >
+      {!latest || !latest.medicines || latest.medicines.length === 0 ? (
+        <p className="text-sm text-slate-500">No medicines to take right now.</p>
+      ) : (
+        <>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {SLOTS.map((s) => {
+              const list = groups[s.key]
+              const isNow = s.key === nowSlot
+              const SlotIcon = s.icon
+              return (
+                <div
+                  key={s.key}
+                  className={'rounded-2xl border p-3.5 lg:p-4 ' + (isNow ? s.tint : 'bg-slate-50/70 border-slate-200 text-slate-600')}
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="flex items-center gap-1.5 text-sm font-semibold">
+                      <SlotIcon className="w-4 h-4" aria-hidden="true" />
+                      {s.label}
+                    </span>
+                    {isNow && <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-white/80">Now</span>}
+                  </div>
+                  {list.length === 0 ? (
+                    <p className="text-xs opacity-60">Nothing to take</p>
+                  ) : (
+                    <ul className="space-y-1.5">
+                      {list.map((m, i) => (
+                        <li key={i} className="flex items-start gap-1.5 text-sm text-slate-800">
+                          <Pill className="w-3.5 h-3.5 mt-0.5 shrink-0 opacity-60" aria-hidden="true" />
+                          <span>
+                            {m.name}
+                            {m.note && <span className="block text-xs text-slate-500">{m.note}</span>}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+
+          {groups.other.length > 0 && (
+            <div className="mt-3 rounded-2xl bg-slate-50 border border-slate-200 p-3.5">
+              <p className="text-sm font-semibold text-slate-700 mb-1.5">As directed</p>
+              <ul className="space-y-1">
+                {groups.other.map((m, i) => (
+                  <li key={i} className="text-sm text-slate-700">
+                    {m.name}
+                    {joinTiming(m, ', ') && <span className="text-slate-400"> — {joinTiming(m, ', ')}</span>}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </>
+      )}
+    </Card>
   )
 }
 
-function MailIcon() {
+// ── Visit history timeline ─────────────────────────────────────────────
+
+function VisitHistory({ history }) {
+  const [expanded, setExpanded] = useState(null)
   return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="5" width="18" height="14" rx="2" />
-      <polyline points="3 7 12 13 21 7" />
-    </svg>
+    <Card title="Visit history" icon={CalendarDays}>
+      {history.length === 0 ? (
+        <p className="text-sm text-slate-500">No previous visits on record.</p>
+      ) : (
+        <ol className="relative border-l-2 border-slate-200 ml-2 space-y-1">
+          {history.map((h, index) => {
+            const open = expanded === index
+            return (
+              <li key={index} className="pl-5 relative">
+                <span
+                  aria-hidden="true"
+                  className={
+                    'absolute -left-[7px] top-4 w-3 h-3 rounded-full border-2 border-white ' +
+                    (index === 0 ? 'bg-teal-700' : 'bg-slate-300')
+                  }
+                />
+                <button
+                  onClick={() => setExpanded(open ? null : index)}
+                  aria-expanded={open}
+                  className="w-full flex items-center justify-between gap-3 text-left rounded-xl px-3 py-3 hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-500/50 transition-colors"
+                >
+                  <span>
+                    <span className="block text-xs text-slate-400">{h.date}</span>
+                    <span className="block text-sm font-semibold text-slate-900">{h.diagnosis}</span>
+                  </span>
+                  <ChevronRight
+                    className={'w-4 h-4 text-slate-400 cc-anim transition-transform duration-200 ' + (open ? 'rotate-90' : '')}
+                    aria-hidden="true"
+                  />
+                </button>
+                <div
+                  className="cc-anim"
+                  style={{ display: 'grid', gridTemplateRows: open ? '1fr' : '0fr', transition: 'grid-template-rows 250ms ease' }}
+                >
+                  <div className="overflow-hidden">
+                    <div className="mx-3 mb-3 rounded-xl bg-slate-50 border border-slate-100 px-4 py-3 space-y-2">
+                      {h.notes && <p className="text-sm text-slate-600">{h.notes}</p>}
+                      {h.medicines && h.medicines.length > 0 ? (
+                        <ul className="space-y-1">
+                          {h.medicines.map((m, mi) => (
+                            <li key={mi} className="text-sm text-slate-700">
+                              {m.name}
+                              {joinTiming(m, ', ') && <span className="text-slate-400"> — {joinTiming(m, ', ')}</span>}
+                            </li>
+                          ))}
+                        </ul>
+                      ) : (
+                        <p className="text-xs text-slate-400">No medicines were prescribed at this visit.</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </li>
+            )
+          })}
+        </ol>
+      )}
+    </Card>
   )
 }
 
-function DropletIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 2s7 8.5 7 13a7 7 0 0 1-14 0c0-4.5 7-13 7-13z" />
-    </svg>
-  )
-}
+// ── Prescription card (used on Prescription tab) ───────────────────────
 
-function BookIcon() {
+function LatestPrescription({ latest }) {
   return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
-      <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
-    </svg>
-  )
-}
-
-function PillIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="m10.5 20.5 10-10a4.95 4.95 0 1 0-7-7l-10 10a4.95 4.95 0 1 0 7 7z" />
-      <path d="m8.5 8.5 7 7" />
-    </svg>
-  )
-}
-
-function PhoneIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z" />
-    </svg>
-  )
-}
-
-function AlertIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M12 9v4" />
-      <path d="M12 17h.01" />
-      <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
-    </svg>
-  )
-}
-
-function ClockIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="12" r="9" />
-      <polyline points="12 7 12 12 15 14" />
-    </svg>
-  )
-}
-
-function CheckCircleIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-      <polyline points="22 4 12 14.01 9 11.01" />
-    </svg>
-  )
-}
-
-function LogoutIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-      <polyline points="16 17 21 12 16 7" />
-      <line x1="21" y1="12" x2="9" y2="12" />
-    </svg>
-  )
-}
-
-// ── Reusable accordion section (read-only version, no Edit button) ─────
-
-function Section({ label, valuePreview, tone, open, onToggle, children }) {
-  const labelColor = tone === 'red' ? 'text-red-600' : 'text-teal-700/70'
-  return (
-    <div className="mb-1">
-      <button
-        onClick={onToggle}
-        className="w-full flex items-center justify-between gap-2 px-2 py-2 rounded-md text-left hover:bg-teal-50/70 transition-colors"
-      >
-        <div className="min-w-0">
-          <div className={'text-xs font-semibold tracking-wide uppercase ' + labelColor}>{label}</div>
-          {valuePreview && !open && (
-            <div className="text-xs font-normal text-slate-400 truncate mt-0.5">{valuePreview}</div>
+    <Card title="Latest prescription" icon={Stethoscope} aside={latest && <span className="text-xs text-slate-400">{latest.date}</span>}>
+      {!latest ? (
+        <p className="text-sm text-slate-500">No prescriptions yet. Once a doctor sees you, it'll show up here.</p>
+      ) : (
+        <div className="space-y-4">
+          <div>
+            <p className="text-xs text-slate-400 mb-0.5">Diagnosis</p>
+            <p className="cc-display text-2xl font-semibold text-slate-900">{latest.diagnosis || 'Not specified'}</p>
+          </div>
+          {latest.notes && (
+            <div className="rounded-2xl bg-slate-50 border border-slate-200 px-4 py-3">
+              <p className="text-xs text-slate-400 mb-0.5">Doctor's notes</p>
+              <p className="text-sm text-slate-700 leading-relaxed">{latest.notes}</p>
+            </div>
+          )}
+          {latest.medicines && latest.medicines.length > 0 ? (
+            <div>
+              <p className="text-xs text-slate-400 mb-2">Medicines</p>
+              <ul className="divide-y divide-slate-100 rounded-2xl border border-slate-200 overflow-hidden">
+                {latest.medicines.map((m, i) => (
+                  <li key={i} className="flex items-center gap-3 px-4 py-3">
+                    <span className="w-8 h-8 rounded-lg bg-teal-50 text-teal-700 flex items-center justify-center shrink-0">
+                      <Pill className="w-4 h-4" aria-hidden="true" />
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block text-sm font-medium text-slate-900">{m.name}</span>
+                      <span className="block text-xs text-slate-500">{joinTiming(m, ' — ')}</span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : (
+            <p className="text-sm text-slate-500">No medicines were prescribed at this visit.</p>
           )}
         </div>
-        <span className="text-teal-600/60 shrink-0">
-          <ChevronIcon open={open} />
-        </span>
-      </button>
-      <div style={{ display: 'grid', gridTemplateRows: open ? '1fr' : '0fr', transition: 'grid-template-rows 250ms ease' }}>
-        <div className="overflow-hidden">
-          <div className="pt-1 pb-2 px-2">{children}</div>
+      )}
+    </Card>
+  )
+}
+
+// ── Tab views ──────────────────────────────────────────────────────────
+
+function HomeView({ profile, latest, history, hasAllergies, summary, hour, goTo }) {
+  const firstName = (profile.name || '').split(' ')[0]
+  return (
+    <div className="space-y-4">
+      {/* Hero */}
+      <section className="rounded-3xl bg-teal-900 text-white p-5 sm:p-6 lg:p-8 relative overflow-hidden">
+        <div
+          aria-hidden="true"
+          className="absolute inset-0 opacity-[0.07] pointer-events-none"
+          style={{ backgroundImage: 'repeating-linear-gradient(115deg, #fff 0, #fff 1px, transparent 1px, transparent 28px)' }}
+        />
+        <div className="relative flex flex-col lg:flex-row lg:items-end lg:justify-between gap-5">
+          <div className="max-w-xl">
+            <h1 className="cc-display text-2xl sm:text-3xl lg:text-4xl font-bold leading-tight">
+              {greeting(hour)}{firstName ? `, ${firstName}` : ''}.
+            </h1>
+            <p className="mt-1.5 text-teal-100/85 text-sm lg:text-base leading-relaxed">
+              {latest
+                ? `Last visit: ${latest.date}, ${latest.diagnosis || 'check-up'}.`
+                : 'No visits yet. Your prescriptions will show up here after a doctor sees you.'}
+            </p>
+          </div>
+          <div className="flex gap-2.5 lg:min-w-[380px]">
+            <Stat icon={Droplet} label="Blood group" value={profile.bloodGroup || '—'} />
+            <Stat icon={Activity} label="Visits" value={history.length} />
+            <Stat icon={CalendarDays} label="Last visit" value={latest ? latest.date : '—'} className="hidden sm:block" />
+          </div>
+        </div>
+      </section>
+
+      {hasAllergies && <AllergyAlert allergies={summary.allergies} />}
+
+      <DoseSchedule latest={latest} nowSlot={currentSlot(hour)} />
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+        {/* Desktop-only preview — phones have the Prescription tab */}
+        <div className="hidden lg:block">
+          <Card
+            title="Latest prescription"
+            icon={Stethoscope}
+            aside={
+              <button onClick={() => goTo('prescription')} className="text-xs font-medium text-teal-700 hover:text-teal-900 flex items-center gap-0.5">
+                View all <ChevronRight className="w-3.5 h-3.5" aria-hidden="true" />
+              </button>
+            }
+          >
+            {!latest ? (
+              <p className="text-sm text-slate-500">No prescriptions yet.</p>
+            ) : (
+              <div className="space-y-3">
+                <p className="cc-display text-xl font-semibold text-slate-900">{latest.diagnosis || 'Not specified'}</p>
+                {latest.notes && <p className="text-sm text-slate-600 leading-relaxed">{latest.notes}</p>}
+                {latest.medicines && latest.medicines.length > 0 && (
+                  <ul className="space-y-1.5">
+                    {latest.medicines.map((m, i) => (
+                      <li key={i} className="flex items-center gap-2 text-sm text-slate-800">
+                        <Pill className="w-3.5 h-3.5 text-teal-700" aria-hidden="true" />
+                        {m.name}
+                        <span className="text-slate-400 text-xs">{joinTiming(m, ' — ')}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
+          </Card>
+        </div>
+
+        <div className="space-y-4">
+          {/* Emergency strip */}
+          <section className="rounded-3xl bg-red-50 border border-red-200 p-4 lg:p-5 flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="cc-display text-base font-semibold text-red-900">Emergency?</p>
+              <button onClick={() => goTo('help')} className="text-xs text-red-700 underline underline-offset-2">
+                See all helplines
+              </button>
+            </div>
+            <a
+              href={telHref(EMERGENCY[0].number)}
+              aria-label="Call ambulance at 108"
+              className="flex items-center gap-2 rounded-full bg-red-600 active:bg-red-800 hover:bg-red-700 text-white px-5 py-3 text-sm font-semibold transition-colors shrink-0"
+            >
+              <Ambulance className="w-4 h-4" aria-hidden="true" />
+              Call 108
+            </a>
+          </section>
+
+          {/* Desktop-only health snapshot */}
+          <div className="hidden lg:block">
+            <Card
+              title="Health snapshot"
+              icon={HeartPulse}
+              aside={
+                <button onClick={() => goTo('health')} className="text-xs font-medium text-teal-700 hover:text-teal-900 flex items-center gap-0.5">
+                  Medical ID <ChevronRight className="w-3.5 h-3.5" aria-hidden="true" />
+                </button>
+              }
+            >
+              <dl className="space-y-3">
+                <div>
+                  <dt className="text-xs text-slate-400">Conditions</dt>
+                  <dd className="text-sm font-medium text-slate-800">{summary.conditions}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-slate-400">Allergies</dt>
+                  <dd className={'text-sm font-medium ' + (hasAllergies ? 'text-red-700' : 'text-slate-800')}>{summary.allergies}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-slate-400">Ongoing medication</dt>
+                  <dd className="text-sm font-medium text-slate-800">{summary.medication}</dd>
+                </div>
+              </dl>
+            </Card>
+          </div>
         </div>
       </div>
     </div>
   )
 }
 
-const EMPTY_SUMMARY = { conditions: 'None recorded', allergies: 'None recorded', medication: 'None recorded' }
+function PrescriptionView({ latest, history }) {
+  return (
+    <div>
+      <PageTitle sub="What your doctor prescribed, and your past visits">Prescription</PageTitle>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+        <LatestPrescription latest={latest} />
+        <VisitHistory history={history} />
+      </div>
+    </div>
+  )
+}
 
-// Numbers a student may need in a hurry. Swap in your campus's real
-// numbers here — these are placeholders.
-const IMPORTANT_NUMBERS = [
-  { label: 'Campus Health Centre', number: '+91-000-000-0000' },
-  { label: 'Ambulance', number: '108' },
-  { label: 'Campus Security', number: '+91-000-000-0001' },
-  { label: 'Hostel Warden (On Duty)', number: '+91-000-000-0002' },
-  { label: 'Mental Health Helpline (Tele-MANAS)', number: '14416' },
-]
+function HealthView({ profile, summary, hasAllergies }) {
+  return (
+    <div className="space-y-4">
+      <PageTitle sub="Show this to a doctor or first responder in an emergency">Medical ID</PageTitle>
 
-function Students_Dashboard() {
+      <Card className="!p-0 overflow-hidden">
+        <div className="bg-teal-900 text-white px-5 py-4 lg:px-6 lg:py-5 flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className="cc-display text-lg lg:text-xl font-semibold truncate">{profile.name || 'Student'}</p>
+            <p className="text-xs text-teal-100/80">{profile.rollNumber}</p>
+          </div>
+          <div className="text-right shrink-0">
+            <p className="text-[11px] text-teal-100/70">Blood group</p>
+            <p className="cc-display text-2xl lg:text-3xl font-bold leading-none">{profile.bloodGroup || '—'}</p>
+          </div>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 divide-y md:divide-y-0 md:divide-x divide-slate-100">
+          <div className="p-5 lg:p-6">
+            <p className="text-xs text-slate-400 mb-0.5">Allergies</p>
+            <p className={'text-sm font-semibold ' + (hasAllergies ? 'text-red-700' : 'text-slate-800')}>{summary.allergies}</p>
+          </div>
+          <div className="p-5 lg:p-6">
+            <p className="text-xs text-slate-400 mb-0.5">Conditions</p>
+            <p className="text-sm font-semibold text-slate-800">{summary.conditions}</p>
+          </div>
+          <div className="p-5 lg:p-6">
+            <p className="text-xs text-slate-400 mb-0.5">Ongoing medication</p>
+            <p className="text-sm font-semibold text-slate-800">{summary.medication}</p>
+          </div>
+        </div>
+      </Card>
+
+      <p className="text-xs text-slate-400 px-1 leading-relaxed">
+        Kept up to date by the doctors who treat you. If something here looks wrong, contact the health centre.
+      </p>
+    </div>
+  )
+}
+
+function HelpView() {
+  return (
+    <div>
+      <PageTitle sub="Tap a number to call">Helplines</PageTitle>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+        <div className="grid grid-cols-2 gap-3">
+          {EMERGENCY.map((e) => (
+            <CallButton key={e.label} item={e} />
+          ))}
+        </div>
+
+        <Card title="On campus" icon={Phone}>
+          <ul className="divide-y divide-slate-100 -my-1.5">
+            {CAMPUS_NUMBERS.map((c) => (
+              <li key={c.label}>
+                <a
+                  href={telHref(c.number)}
+                  aria-label={`Call ${c.label} at ${c.number}`}
+                  className="flex items-center justify-between gap-3 py-3.5 active:bg-slate-50 hover:text-teal-800"
+                >
+                  <span className="min-w-0">
+                    <span className="block text-sm font-medium text-slate-800">{c.label}</span>
+                    <span className="block text-xs text-slate-500">{c.sub}</span>
+                  </span>
+                  <span className="flex items-center gap-1.5 text-sm font-semibold text-teal-800 tabular-nums shrink-0">
+                    <Phone className="w-3.5 h-3.5" aria-hidden="true" />
+                    {c.number}
+                  </span>
+                </a>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      </div>
+    </div>
+  )
+}
+
+function AccountView({ profile, logout }) {
+  return (
+    <div className="max-w-xl space-y-4">
+      <PageTitle>Account</PageTitle>
+
+      <Card>
+        <div className="flex items-center gap-3 pb-4 border-b border-slate-100">
+          <span className="w-14 h-14 rounded-full bg-teal-800 text-white flex items-center justify-center text-lg font-semibold">
+            {getInitials(profile.name)}
+          </span>
+          <div className="min-w-0">
+            <p className="cc-display text-lg font-semibold text-slate-900 truncate">{profile.name}</p>
+            <p className="text-sm text-slate-500">{profile.rollNumber}</p>
+          </div>
+        </div>
+        <div className="divide-y divide-slate-100">
+          <InfoRow icon={GraduationCap} label="Course">
+            {profile.course ? `${profile.course}${profile.branch ? ` · ${profile.branch}` : ''}` : 'Not on file'}
+          </InfoRow>
+          <InfoRow icon={Droplet} label="Blood group">{profile.bloodGroup || 'Not on file'}</InfoRow>
+          <InfoRow icon={Mail} label="Email">{profile.email || 'Not on file'}</InfoRow>
+          <InfoRow icon={Phone} label="Contact number">{profile.contact || 'Not on file'}</InfoRow>
+          <InfoRow icon={IdCard} label="Roll number">{profile.rollNumber}</InfoRow>
+        </div>
+      </Card>
+
+      <button
+        onClick={logout}
+        className="w-full flex items-center justify-center gap-2 rounded-2xl border border-red-200 bg-white text-red-600 py-3.5 text-sm font-semibold hover:bg-red-50 active:bg-red-100 transition-colors"
+      >
+        <LogOut className="w-4 h-4" aria-hidden="true" />
+        Log out
+      </button>
+    </div>
+  )
+}
+
+// ── Navigation: bottom dock (phones/tablets) + sidebar (desktop) ───────
+
+function Dock({ tab, onChange }) {
+  return (
+    <nav
+      aria-label="Main"
+      className="lg:hidden fixed bottom-0 inset-x-0 z-50 bg-white/95 backdrop-blur border-t border-slate-200"
+      style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
+    >
+      <ul className="flex items-stretch justify-around max-w-xl mx-auto">
+        {TABS.map((t) => {
+          const active = tab === t.key
+          const Icon = t.icon
+          return (
+            <li key={t.key} className="flex-1">
+              <button
+                onClick={() => onChange(t.key)}
+                aria-current={active ? 'page' : undefined}
+                className="w-full min-h-[60px] flex flex-col items-center justify-center gap-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-teal-500/50 rounded-xl"
+              >
+                <span
+                  className={
+                    'flex items-center justify-center w-14 h-7 rounded-full cc-anim transition-colors duration-200 ' +
+                    (active
+                      ? t.urgent ? 'bg-red-100 text-red-700' : 'bg-teal-100 text-teal-800'
+                      : t.urgent ? 'text-red-500' : 'text-slate-500')
+                  }
+                >
+                  <Icon className="w-[20px] h-[20px]" aria-hidden="true" />
+                </span>
+                <span
+                  className={
+                    'text-[11px] leading-none ' +
+                    (active
+                      ? t.urgent ? 'font-semibold text-red-700' : 'font-semibold text-teal-800'
+                      : t.urgent ? 'text-red-500' : 'text-slate-500')
+                  }
+                >
+                  {t.label}
+                </span>
+              </button>
+            </li>
+          )
+        })}
+      </ul>
+    </nav>
+  )
+}
+
+// Slim icon rail that expands over the page on hover / keyboard focus.
+// Icons never move: every row uses the same left offset in both states,
+// only the labels fade in. No toggle button needed.
+function Sidebar({ tab, onChange, profile, logout }) {
+  const label = 'whitespace-nowrap opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-200'
+  return (
+    <aside
+      aria-label="Sidebar"
+      className="group hidden lg:flex fixed inset-y-0 left-0 z-40 flex-col overflow-hidden bg-white border-r border-slate-200 p-3 w-[76px] hover:w-64 focus-within:w-64 hover:shadow-2xl focus-within:shadow-2xl cc-anim transition-[width,box-shadow] duration-300 ease-out"
+    >
+      {/* Brand — icon stays put */}
+      <div className="flex items-center gap-2.5 pt-1 px-[6px]">
+        <div className="w-10 h-10 rounded-xl bg-teal-800 text-white flex items-center justify-center shrink-0">
+          <Stethoscope className="w-[18px] h-[18px]" aria-hidden="true" />
+        </div>
+        <span className={'cc-display text-lg font-semibold text-slate-900 ' + label}>CampusCare</span>
+      </div>
+
+      {/* Nav */}
+      <nav aria-label="Main" className="mt-8 flex-1">
+        <ul className="space-y-1">
+          {TABS.map((t) => {
+            const active = tab === t.key
+            const Icon = t.icon
+            return (
+              <li key={t.key}>
+                <button
+                  onClick={() => onChange(t.key)}
+                  aria-current={active ? 'page' : undefined}
+                  aria-label={t.label}
+                  className={
+                    'w-full flex items-center gap-3 rounded-xl py-2.5 px-[17px] text-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-500/50 ' +
+                    (active
+                      ? t.urgent ? 'bg-red-50 text-red-700 font-semibold' : 'bg-teal-50 text-teal-800 font-semibold'
+                      : t.urgent ? 'text-red-600 hover:bg-red-50' : 'text-slate-600 hover:bg-slate-50')
+                  }
+                >
+                  <Icon className="w-[18px] h-[18px] shrink-0" aria-hidden="true" />
+                  <span className={label}>{t.label}</span>
+                </button>
+              </li>
+            )
+          })}
+        </ul>
+      </nav>
+
+      {/* User + logout */}
+      <div className="border-t border-slate-100 pt-4">
+        <div className="flex items-center gap-2.5 px-[8px] mb-3">
+          <span className="w-9 h-9 rounded-full bg-teal-800 text-white flex items-center justify-center text-xs font-semibold shrink-0">
+            {getInitials(profile.name)}
+          </span>
+          <div className={'min-w-0 ' + label}>
+            <p className="text-sm font-semibold text-slate-800 truncate">{profile.name}</p>
+            <p className="text-xs text-slate-400 truncate">{profile.rollNumber}</p>
+          </div>
+        </div>
+        <button
+          onClick={logout}
+          aria-label="Log out"
+          className="w-full flex items-center gap-2 rounded-xl py-2 px-[18px] text-sm text-red-600 hover:bg-red-50 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400/50"
+        >
+          <LogOut className="w-4 h-4 shrink-0" aria-hidden="true" />
+          <span className={label}>Log out</span>
+        </button>
+      </div>
+    </aside>
+  )
+}
+
+// ── Main component ─────────────────────────────────────────────────────
+
+function StudentDashboard() {
   const { rollNumber } = useParams()
   const { logout } = useAuth()
 
+  const [tab, setTab] = useState('home')
   const [profile, setProfile] = useState({
     name: '',
     rollNumber: rollNumber ?? '',
@@ -170,17 +748,10 @@ function Students_Dashboard() {
     email: '',
     contact: '',
   })
-
   const [summary, setSummary] = useState(EMPTY_SUMMARY)
   const [history, setHistory] = useState([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
-
-  const [openSections, setOpenSections] = useState({})
-  const [expandedVisit, setExpandedVisit] = useState(null)
-
-  const [profileOpen, setProfileOpen] = useState(false)
-  const profileRef = useRef(null)
 
   const loadAll = useCallback(async () => {
     if (!rollNumber) return
@@ -206,328 +777,85 @@ function Students_Dashboard() {
     loadAll()
   }, [loadAll])
 
+  // Start each tab at the top of the page
   useEffect(() => {
-    function handleClickOutside(e) {
-      if (profileRef.current && !profileRef.current.contains(e.target)) setProfileOpen(false)
-    }
-    function handleEscape(e) {
-      if (e.key === 'Escape') setProfileOpen(false)
-    }
-    document.addEventListener('mousedown', handleClickOutside)
-    document.addEventListener('keydown', handleEscape)
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside)
-      document.removeEventListener('keydown', handleEscape)
-    }
-  }, [])
+    window.scrollTo({ top: 0 })
+  }, [tab])
 
-  function toggleSection(key) {
-    setOpenSections((prev) => ({ ...prev, [key]: !prev[key] }))
-  }
-
-  function toggleVisit(index) {
-    setExpandedVisit(expandedVisit === index ? null : index)
-  }
-
-  // Assumes fetchPatientHistory returns visits newest-first, matching the
-  // order they're rendered in the doctor's dashboard. If your API returns
-  // oldest-first instead, swap this to history[history.length - 1].
+  // Assumes history comes back newest-first (same as the doctor dashboard).
   const latest = history.length > 0 ? history[0] : null
-
-  const initials = (profile.name || '')
-    .split(' ')
-    .filter(Boolean)
-    .map((n) => n[0])
-    .slice(-2)
-    .join('')
+  const hasAllergies = !!summary.allergies && summary.allergies !== NONE
+  const now = new Date()
+  const hour = now.getHours()
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#F7F8F6] flex items-center justify-center">
+      <div className="min-h-screen bg-[#F2F6F5] flex items-center justify-center">
         <p className="text-slate-400 text-sm">Loading your dashboard…</p>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-[#F7F8F6] px-4 py-5 sm:px-6 sm:py-7">
-      <div className="max-w-6xl mx-auto">
-        {/* ── Header ─────────────────────────────────────────────────── */}
-        <div className="flex items-center justify-between mb-6 border-b border-slate-200 pb-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-teal-700 text-white flex items-center justify-center shadow-sm">
-              <span className="text-lg font-semibold">+</span>
-            </div>
-            <div>
-              <h1 className="text-xl font-bold tracking-tight text-slate-900">My Health Dashboard</h1>
-              <p className="text-sm text-slate-500">CampusCare</p>
-            </div>
-          </div>
+    <div className="min-h-screen bg-[#F2F6F5]">
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,600;12..96,700&display=swap');
+        .cc-display { font-family: 'Bricolage Grotesque', ui-sans-serif, system-ui, sans-serif; letter-spacing: -0.01em; }
+        @media (prefers-reduced-motion: reduce) { .cc-anim { transition: none !important; } }
+      `}</style>
 
-          <div className="flex items-center gap-3">
-            <span className="text-sm text-slate-500 hidden sm:inline">
-              {new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'short' })}
+      <Sidebar tab={tab} onChange={setTab} profile={profile} logout={logout} />
+
+      <div className="lg:pl-[76px]">
+        <div className="max-w-5xl mx-auto px-4 pt-4 pb-28 sm:px-6 sm:pt-6 lg:px-10 lg:pt-8 lg:pb-12">
+          {/* Top bar */}
+          <header className="flex items-center justify-between lg:justify-end mb-5">
+            <div className="flex items-center gap-2.5 lg:hidden">
+              <div className="w-9 h-9 rounded-xl bg-teal-800 text-white flex items-center justify-center">
+                <Stethoscope className="w-[18px] h-[18px]" aria-hidden="true" />
+              </div>
+              <span className="cc-display text-lg font-semibold text-slate-900">CampusCare</span>
+            </div>
+            <span className="text-sm text-slate-500">
+              <span className="lg:hidden">
+                {now.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })}
+              </span>
+              <span className="hidden lg:inline">
+                {now.toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}
+              </span>
             </span>
-            <div className="w-px h-6 bg-slate-200 hidden sm:block" />
+          </header>
 
-            <div className="relative" ref={profileRef}>
-              <button
-                onClick={() => setProfileOpen((prev) => !prev)}
-                aria-expanded={profileOpen}
-                aria-haspopup="true"
-                className={
-                  'flex items-center gap-2 pl-1 pr-2 py-1 rounded-full border transition-colors ' +
-                  (profileOpen ? 'bg-white border-slate-200' : 'border-transparent hover:bg-white hover:border-slate-200')
-                }
-              >
-                <div className="w-8 h-8 rounded-full bg-teal-700 text-white flex items-center justify-center text-xs font-semibold shrink-0">
-                  {initials}
-                </div>
-                <div className="text-left leading-tight hidden sm:block">
-                  <div className="text-sm font-semibold text-slate-800">{profile.name}</div>
-                  <div className="text-xs text-slate-400">{profile.rollNumber}</div>
-                </div>
-                <span className={'text-slate-400 ml-0.5 transition-transform duration-200' + (profileOpen ? ' rotate-180' : '')}>
-                  <ChevronDownIcon />
-                </span>
-              </button>
-
-              {profileOpen && (
-                <div className="absolute right-0 top-full mt-2 w-72 bg-white border border-slate-200 rounded-lg shadow-lg z-50 overflow-hidden">
-                  <div className="p-3 border-b border-slate-100 bg-teal-50/50 flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-teal-700 text-white flex items-center justify-center text-sm font-semibold shrink-0">
-                      {initials}
-                    </div>
-                    <div className="min-w-0">
-                      <div className="text-sm font-semibold text-slate-800 truncate">{profile.name}</div>
-                      <div className="text-xs text-teal-700">{profile.rollNumber}</div>
-                    </div>
-                  </div>
-
-                  <div className="p-3 space-y-2 border-b border-slate-100">
-                    <div className="flex items-center gap-2 text-sm text-slate-600">
-                      <span className="text-teal-600/70 shrink-0"><BookIcon /></span>
-                      <span>{profile.course}{profile.branch ? ` · ${profile.branch}` : ''}</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-sm text-slate-600">
-                      <span className="text-teal-600/70 shrink-0"><DropletIcon /></span>
-                      <span>Blood group: {profile.bloodGroup || 'Not on file'}</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-sm text-slate-600">
-                      <span className="text-teal-600/70 shrink-0"><MailIcon /></span>
-                      <span className="truncate">{profile.email}</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-sm text-slate-600">
-                      <span className="text-teal-600/70 shrink-0"><PhoneIcon /></span>
-                      <span>{profile.contact || 'Not on file'}</span>
-                    </div>
-                  </div>
-
-                  <div className="p-3 border-b border-slate-100">
-                    <div className="text-xs font-semibold tracking-wide uppercase text-teal-700/70 mb-2">Health Record</div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <div className="bg-teal-50 rounded-md px-3 py-2">
-                        <div className="flex items-center gap-1.5 text-teal-700/80 mb-1">
-                          <CheckCircleIcon />
-                          <span className="text-xs">Total visits</span>
-                        </div>
-                        <div className="text-lg font-bold text-slate-800">{history.length}</div>
-                      </div>
-                      <div className="bg-slate-50 rounded-md px-3 py-2">
-                        <div className="flex items-center gap-1.5 text-slate-500 mb-1">
-                          <ClockIcon />
-                          <span className="text-xs">Last visit</span>
-                        </div>
-                        <div className="text-sm font-bold text-slate-800">{latest ? latest.date : '—'}</div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <button
-                    onClick={logout}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
-                  >
-                    <LogoutIcon />
-                    Log out
-                  </button>
-                </div>
-              )}
+          {loadError && (
+            <div role="alert" className="bg-red-50 border border-red-200 rounded-2xl px-4 py-3 mb-4 text-sm text-red-700 flex items-center justify-between">
+              <span>{loadError}</span>
+              <button onClick={loadAll} className="underline text-xs">Retry</button>
             </div>
-          </div>
-        </div>
+          )}
 
-        {loadError && (
-          <div className="bg-red-50 border border-red-200 rounded-md px-3 py-2 mb-4 text-sm text-red-700 flex items-center justify-between">
-            <span>{loadError}</span>
-            <button onClick={loadAll} className="text-red-700 underline text-xs">
-              Retry
-            </button>
-          </div>
-        )}
-
-        {/* ── Main grid ──────────────────────────────────────────────── */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-          {/* Left / main column */}
-          <div className="lg:col-span-2 space-y-5">
-            {/* Latest prescription */}
-            <div className="bg-white border border-slate-200 rounded-2xl p-5 sm:p-6 shadow-sm">
-              <div className="flex items-center justify-between mb-3">
-                <h2 className="text-sm font-semibold tracking-wide uppercase text-teal-700/70">Latest Prescription</h2>
-                {latest && <span className="text-xs text-slate-400">{latest.date}</span>}
-              </div>
-
-              {!latest && (
-                <p className="text-sm text-slate-400">No prescriptions yet. Once a doctor sees you, it'll show up here.</p>
-              )}
-
-              {latest && (
-                <div>
-                  <div className="mb-3">
-                    <div className="text-xs text-slate-400 mb-0.5">Diagnosis</div>
-                    <div className="text-base font-semibold text-slate-800">{latest.diagnosis || 'Not specified'}</div>
-                  </div>
-
-                  {latest.notes && (
-                    <div className="mb-4">
-                      <div className="text-xs text-slate-400 mb-0.5">Doctor's notes</div>
-                      <p className="text-sm text-slate-600">{latest.notes}</p>
-                    </div>
-                  )}
-
-                  {latest.medicines && latest.medicines.length > 0 ? (
-                    <div>
-                      <div className="text-xs text-slate-400 tracking-wide mb-2">MEDICINES</div>
-                      <div className="space-y-2">
-                        {latest.medicines.map((m, mi) => (
-                          <div key={mi} className="flex items-start gap-2.5 bg-teal-50/60 rounded-lg px-3 py-2">
-                            <span className="text-teal-600 mt-0.5 shrink-0"><PillIcon /></span>
-                            <div>
-                              <div className="text-sm font-medium text-slate-800">{m.name}</div>
-                              <div className="text-xs text-slate-500">
-                                {m.timing}{m.note ? ` — ${m.note}` : ''}
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  ) : (
-                    <p className="text-sm text-slate-400">No medicines were prescribed at this visit.</p>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* Prescription history */}
-            <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
-              <h2 className="text-sm font-semibold tracking-wide uppercase text-teal-700/70 px-2 mb-1">Prescription History</h2>
-
-              {history.length === 0 && <p className="text-sm text-slate-400 px-2 py-2">No previous visits on record.</p>}
-
-              {history.map((h, index) => (
-                <div key={index} className="border border-slate-200 rounded-md mb-1.5 overflow-hidden">
-                  <button
-                    onClick={() => toggleVisit(index)}
-                    className="w-full flex items-center justify-between px-3 py-2 text-left hover:bg-teal-50/60 transition-colors"
-                  >
-                    <div>
-                      <b className="text-slate-800 text-sm block">{h.date}</b>
-                      <span className="text-sm text-slate-600">{h.diagnosis}</span>
-                    </div>
-                    <span className="text-teal-600/60">
-                      <ChevronIcon open={expandedVisit === index} />
-                    </span>
-                  </button>
-                  <div style={{ display: 'grid', gridTemplateRows: expandedVisit === index ? '1fr' : '0fr', transition: 'grid-template-rows 250ms ease' }}>
-                    <div className="overflow-hidden">
-                      <div className="px-3 pb-3 pt-1 bg-slate-50 border-t border-slate-100">
-                        <div className="text-xs text-slate-500 mb-2">{h.notes}</div>
-                        {h.medicines && h.medicines.length > 0 && (
-                          <div>
-                            <div className="text-slate-400 text-xs tracking-wide mb-1">MEDICINES GIVEN</div>
-                            {h.medicines.map((m, mi) => (
-                              <div key={mi} className="text-sm text-slate-700 mb-0.5">
-                                {m.name} <span className="text-slate-400">— {m.timing}{m.note ? `, ${m.note}` : ''}</span>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Right / sidebar column */}
-          <div className="space-y-5">
-            {/* Health summary */}
-            <div className="bg-white border border-slate-200 rounded-2xl p-3 shadow-sm">
-              <h2 className="text-sm font-semibold tracking-wide uppercase text-teal-700/70 px-2 pt-1 mb-1">Health Summary</h2>
-
-              <Section
-                label="Conditions"
-                valuePreview={summary.conditions}
-                open={!!openSections.conditions}
-                onToggle={() => toggleSection('conditions')}
-              >
-                <span className="text-sm text-slate-700">{summary.conditions}</span>
-              </Section>
-
-              <Section
-                label="Allergies"
-                valuePreview={summary.allergies}
-                tone={summary.allergies === 'None recorded' ? 'default' : 'red'}
-                open={!!openSections.allergies}
-                onToggle={() => toggleSection('allergies')}
-              >
-                <span className={summary.allergies === 'None recorded' ? 'text-sm text-slate-700' : 'text-sm text-red-700 font-medium'}>
-                  {summary.allergies}
-                </span>
-              </Section>
-
-              <Section
-                label="Ongoing Medication"
-                valuePreview={summary.medication}
-                open={!!openSections.medication}
-                onToggle={() => toggleSection('medication')}
-              >
-                <span className="text-sm text-slate-700">{summary.medication}</span>
-              </Section>
-
-              <p className="text-xs text-slate-400 px-2 pt-1 pb-2">
-                This information is maintained by the doctors who've treated you. Contact the health centre if anything here looks wrong.
-              </p>
-            </div>
-
-            {/* Important numbers */}
-            <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
-              <h2 className="text-sm font-semibold tracking-wide uppercase text-teal-700/70 mb-3 flex items-center gap-1.5">
-                <span className="text-red-500"><AlertIcon /></span>
-                Important Numbers
-              </h2>
-              <div className="space-y-1">
-                {IMPORTANT_NUMBERS.map((item, i) => (
-                  <a
-                    key={i}
-                    href={`tel:${item.number.replace(/[^0-9+]/g, '')}`}
-                    className="flex items-center justify-between px-2 py-2 rounded-md hover:bg-teal-50/70 transition-colors group"
-                  >
-                    <span className="text-sm text-slate-600">{item.label}</span>
-                    <span className="text-sm font-semibold text-teal-700 flex items-center gap-1.5">
-                      <PhoneIcon />
-                      {item.number}
-                    </span>
-                  </a>
-                ))}
-              </div>
-            </div>
-          </div>
+          <main>
+            {tab === 'home' && (
+              <HomeView
+                profile={profile}
+                latest={latest}
+                history={history}
+                hasAllergies={hasAllergies}
+                summary={summary}
+                hour={hour}
+                goTo={setTab}
+              />
+            )}
+            {tab === 'prescription' && <PrescriptionView latest={latest} history={history} />}
+            {tab === 'health' && <HealthView profile={profile} summary={summary} hasAllergies={hasAllergies} />}
+            {tab === 'help' && <HelpView />}
+            {tab === 'account' && <AccountView profile={profile} logout={logout} />}
+          </main>
         </div>
       </div>
+
+      <Dock tab={tab} onChange={setTab} />
     </div>
   )
 }
 
-export default Students_Dashboard
+export default StudentDashboard
