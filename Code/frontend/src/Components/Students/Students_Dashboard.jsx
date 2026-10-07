@@ -25,7 +25,7 @@ import {
   IdCard,
 } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
-import TiltedDock from '../ui/tilted-dock'
+import StudentDock from '../ui/dock'
 import {
   fetchPatientProfile,
   fetchPatientSummary,
@@ -759,7 +759,7 @@ function StudentDashboard() {
         </main>
       </div>
 
-      <TiltedDock tab={tab} onChange={setTab} />
+      <StudentDock tab={tab} onChange={setTab} />
     </div>
   )
 }
