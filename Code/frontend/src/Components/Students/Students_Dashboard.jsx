@@ -25,6 +25,7 @@ import {
   IdCard,
 } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
+import TiltedDock from '../ui/tilted-dock'
 import {
   fetchPatientProfile,
   fetchPatientSummary,
@@ -56,8 +57,8 @@ const SLOTS = [
 const TABS = [
   { key: 'home', label: 'Home', icon: Home },
   { key: 'prescription', label: 'Prescription', icon: FileText },
-  { key: 'health', label: 'Health', icon: HeartPulse },
-  { key: 'help', label: 'Help', icon: Phone, urgent: true },
+  { key: 'health', label: 'Medical History', icon: HeartPulse },
+  { key: 'help', label: 'Emergency', icon: AlertTriangle, urgent: true },
   { key: 'account', label: 'Account', icon: User },
 ]
 
@@ -614,127 +615,7 @@ function AccountView({ profile, logout }) {
   )
 }
 
-// ── Navigation: bottom dock (phones/tablets) + sidebar (desktop) ───────
-
-function Dock({ tab, onChange }) {
-  return (
-    <nav
-      aria-label="Main"
-      className="lg:hidden fixed bottom-0 inset-x-0 z-50 bg-white/95 backdrop-blur border-t border-slate-200"
-      style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
-    >
-      <ul className="flex items-stretch justify-around max-w-xl mx-auto">
-        {TABS.map((t) => {
-          const active = tab === t.key
-          const Icon = t.icon
-          return (
-            <li key={t.key} className="flex-1">
-              <button
-                onClick={() => onChange(t.key)}
-                aria-current={active ? 'page' : undefined}
-                className="w-full min-h-[60px] flex flex-col items-center justify-center gap-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-teal-500/50 rounded-xl"
-              >
-                <span
-                  className={
-                    'flex items-center justify-center w-14 h-7 rounded-full cc-anim transition-colors duration-200 ' +
-                    (active
-                      ? t.urgent ? 'bg-red-100 text-red-700' : 'bg-teal-100 text-teal-800'
-                      : t.urgent ? 'text-red-500' : 'text-slate-500')
-                  }
-                >
-                  <Icon className="w-[20px] h-[20px]" aria-hidden="true" />
-                </span>
-                <span
-                  className={
-                    'text-[11px] leading-none ' +
-                    (active
-                      ? t.urgent ? 'font-semibold text-red-700' : 'font-semibold text-teal-800'
-                      : t.urgent ? 'text-red-500' : 'text-slate-500')
-                  }
-                >
-                  {t.label}
-                </span>
-              </button>
-            </li>
-          )
-        })}
-      </ul>
-    </nav>
-  )
-}
-
-// Slim icon rail that expands over the page on hover / keyboard focus.
-// Icons never move: every row uses the same left offset in both states,
-// only the labels fade in. No toggle button needed.
-function Sidebar({ tab, onChange, profile, logout }) {
-  const label = 'whitespace-nowrap opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-200'
-  return (
-    <aside
-      aria-label="Sidebar"
-      className="group hidden lg:flex fixed inset-y-0 left-0 z-40 flex-col overflow-hidden bg-white border-r border-slate-200 p-3 w-[76px] hover:w-64 focus-within:w-64 hover:shadow-2xl focus-within:shadow-2xl cc-anim transition-[width,box-shadow] duration-300 ease-out"
-    >
-      <div className="flex items-center gap-2.5 pt-1 px-[6px]">
-        <div className="w-10 h-10 rounded-xl bg-teal-900 flex items-center justify-center p-1 shrink-0 shadow-sm">
-          <img
-            src={campusCareLogo}
-            alt="CampusCare"
-            className="w-7 h-7 object-contain"
-          />
-        </div>
-        <span className={'cc-display text-lg font-semibold text-slate-900 ' + label}>CampusCare</span>
-      </div>
-
-      {/* Nav */}
-      <nav aria-label="Main" className="mt-8 flex-1">
-        <ul className="space-y-1">
-          {TABS.map((t) => {
-            const active = tab === t.key
-            const Icon = t.icon
-            return (
-              <li key={t.key}>
-                <button
-                  onClick={() => onChange(t.key)}
-                  aria-current={active ? 'page' : undefined}
-                  aria-label={t.label}
-                  className={
-                    'w-full flex items-center gap-3 rounded-xl py-2.5 px-[17px] text-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-500/50 ' +
-                    (active
-                      ? t.urgent ? 'bg-red-50 text-red-700 font-semibold' : 'bg-teal-50 text-teal-800 font-semibold'
-                      : t.urgent ? 'text-red-600 hover:bg-red-50' : 'text-slate-600 hover:bg-slate-50')
-                  }
-                >
-                  <Icon className="w-[18px] h-[18px] shrink-0" aria-hidden="true" />
-                  <span className={label}>{t.label}</span>
-                </button>
-              </li>
-            )
-          })}
-        </ul>
-      </nav>
-
-      {/* User + logout */}
-      <div className="border-t border-slate-100 pt-4">
-        <div className="flex items-center gap-2.5 px-[8px] mb-3">
-          <span className="w-9 h-9 rounded-full bg-teal-800 text-white flex items-center justify-center text-xs font-semibold shrink-0">
-            {getInitials(profile.name)}
-          </span>
-          <div className={'min-w-0 ' + label}>
-            <p className="text-sm font-semibold text-slate-800 truncate">{profile.name}</p>
-            <p className="text-xs text-slate-400 truncate">{profile.rollNumber}</p>
-          </div>
-        </div>
-        <button
-          onClick={logout}
-          aria-label="Log out"
-          className="w-full flex items-center gap-2 rounded-xl py-2 px-[18px] text-sm text-red-600 hover:bg-red-50 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-red-400/50"
-        >
-          <LogOut className="w-4 h-4 shrink-0" aria-hidden="true" />
-          <span className={label}>Log out</span>
-        </button>
-      </div>
-    </aside>
-  )
-}
+// Navigation handled by floating TiltedDock component
 
 // ── Main component ─────────────────────────────────────────────────────
 
@@ -808,56 +689,77 @@ function StudentDashboard() {
         @media (prefers-reduced-motion: reduce) { .cc-anim { transition: none !important; } }
       `}</style>
 
-      <Sidebar tab={tab} onChange={setTab} profile={profile} logout={logout} />
-
-      <div className="lg:pl-[76px]">
-        <div className="max-w-5xl mx-auto px-4 pt-4 pb-28 sm:px-6 sm:pt-6 lg:px-10 lg:pt-8 lg:pb-12">
-          {/* Top bar */}
-          <header className="flex items-center justify-between lg:justify-end mb-5">
-            <div className="flex items-center gap-2.5 lg:hidden">
-              <div className="w-9 h-9 rounded-xl bg-teal-800 text-white flex items-center justify-center">
-                <Stethoscope className="w-[18px] h-[18px]" aria-hidden="true" />
-              </div>
-              <span className="cc-display text-lg font-semibold text-slate-900">CampusCare</span>
+      <div className="max-w-5xl mx-auto px-4 pt-4 pb-36 sm:px-6 sm:pt-6 lg:px-10 lg:pt-8 lg:pb-36">
+        {/* Top bar */}
+        <header className="flex items-center justify-between mb-6 pb-4 border-b border-slate-200/60">
+          <div className="flex items-center gap-3">
+            <img
+              src={campusCareLogo}
+              alt="CampusCare Logo"
+              className="w-9 h-9 object-contain drop-shadow-xs"
+            />
+            <div>
+              <span className="cc-display text-lg font-bold text-slate-900 tracking-tight block leading-tight">
+                CampusCare
+              </span>
+              <span className="text-xs text-slate-500 font-medium">Student Health Portal</span>
             </div>
-            <span className="text-sm text-slate-500">
-              <span className="lg:hidden">
-                {now.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })}
-              </span>
-              <span className="hidden lg:inline">
-                {now.toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}
-              </span>
+          </div>
+
+          <div className="flex items-center gap-3 sm:gap-4">
+            <span className="text-xs sm:text-sm text-slate-500 hidden sm:inline">
+              {now.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })}
             </span>
-          </header>
 
-          {loadError && (
-            <div role="alert" className="bg-red-50 border border-red-200 rounded-2xl px-4 py-3 mb-4 text-sm text-red-700 flex items-center justify-between">
-              <span>{loadError}</span>
-              <button onClick={loadAll} className="underline text-xs">Retry</button>
-            </div>
-          )}
-
-          <main>
-            {tab === 'home' && (
-              <HomeView
-                profile={profile}
-                latest={latest}
-                history={history}
-                hasAllergies={hasAllergies}
-                summary={summary}
-                hour={hour}
-                goTo={setTab}
-              />
+            {profile.name && (
+              <div className="flex items-center gap-2 pl-3 border-l border-slate-200">
+                <span className="w-8 h-8 rounded-full bg-teal-800 text-white flex items-center justify-center text-xs font-semibold shadow-xs">
+                  {getInitials(profile.name)}
+                </span>
+                <span className="text-sm font-medium text-slate-800 hidden md:inline truncate max-w-[140px]">
+                  {profile.name}
+                </span>
+              </div>
             )}
-            {tab === 'prescription' && <PrescriptionView latest={latest} history={history} />}
-            {tab === 'health' && <HealthView profile={profile} summary={summary} hasAllergies={hasAllergies} />}
-            {tab === 'help' && <HelpView />}
-            {tab === 'account' && <AccountView profile={profile} logout={logout} />}
-          </main>
-        </div>
+
+            <button
+              onClick={logout}
+              title="Log out"
+              aria-label="Log out"
+              className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors cursor-pointer"
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
+          </div>
+        </header>
+
+        {loadError && (
+          <div role="alert" className="bg-red-50 border border-red-200 rounded-2xl px-4 py-3 mb-4 text-sm text-red-700 flex items-center justify-between">
+            <span>{loadError}</span>
+            <button onClick={loadAll} className="underline text-xs">Retry</button>
+          </div>
+        )}
+
+        <main>
+          {tab === 'home' && (
+            <HomeView
+              profile={profile}
+              latest={latest}
+              history={history}
+              hasAllergies={hasAllergies}
+              summary={summary}
+              hour={hour}
+              goTo={setTab}
+            />
+          )}
+          {tab === 'prescription' && <PrescriptionView latest={latest} history={history} />}
+          {tab === 'health' && <HealthView profile={profile} summary={summary} hasAllergies={hasAllergies} />}
+          {tab === 'help' && <HelpView />}
+          {tab === 'account' && <AccountView profile={profile} logout={logout} />}
+        </main>
       </div>
 
-      <Dock tab={tab} onChange={setTab} />
+      <TiltedDock tab={tab} onChange={setTab} />
     </div>
   )
 }
