@@ -66,7 +66,13 @@ def login(payload: LoginRequest):
             detail="This account has been disabled. Contact an administrator.",
         )
 
-    if row["role"] != "DOCTOR" or row["doctor_id"] is None:
+    if row["role"] not in ("DOCTOR", "RECEPTIONIST"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This account is not authorized as medical staff or receptionist",
+        )
+
+    if row["role"] == "DOCTOR" and row["doctor_id"] is None:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="This account is not registered as a doctor",
@@ -81,12 +87,17 @@ def login(payload: LoginRequest):
         }
     )
 
+    specialization = row["specialty_name"]
+    if not specialization:
+        specialization = "Front Desk & Reception" if row["role"] == "RECEPTIONIST" else "General"
+
     return LoginResponse(
         access_token=token,
         expires_in_minutes=ACCESS_TOKEN_EXPIRE_MINUTES,
         doctor_id=row["doctor_id"],
+        role=row["role"],
         name=display_name_from_email(row["email"]),
-        specialization=row["specialty_name"] or "General",
+        specialization=specialization,
     )
 
 

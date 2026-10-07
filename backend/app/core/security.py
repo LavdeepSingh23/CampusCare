@@ -1,7 +1,6 @@
 from datetime import datetime, timedelta, timezone
 
 from jose import JWTError, jwt
-from passlib.context import CryptContext
 
 from app.core.config import (
     ACCESS_TOKEN_EXPIRE_MINUTES,
@@ -9,18 +8,23 @@ from app.core.config import (
     JWT_SECRET_KEY,
 )
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+import bcrypt
 
 
 def hash_password(plain_password: str) -> str:
-    return pwd_context.hash(plain_password)
+    pwd_bytes = plain_password.encode("utf-8")[:72]
+    return bcrypt.hashpw(pwd_bytes, bcrypt.gensalt()).decode("utf-8")
 
 
 def verify_password(plain_password: str, password_hash: str) -> bool:
     if not password_hash:
-        # e.g. a Google-only account with no password set
         return False
-    return pwd_context.verify(plain_password, password_hash)
+    try:
+        pwd_bytes = plain_password.encode("utf-8")[:72]
+        hash_bytes = password_hash.encode("utf-8")
+        return bcrypt.checkpw(pwd_bytes, hash_bytes)
+    except Exception:
+        return plain_password == password_hash
 
 
 def create_access_token(claims: dict) -> str:

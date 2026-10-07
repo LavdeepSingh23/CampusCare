@@ -3,12 +3,14 @@ import {
   clearSession,
   getStoredDoctor,
   getStoredStudent,
+  getStoredReceptionist,
   getToken,
   getUserRole,
   login as apiLogin,
   loginStudentGoogle as apiLoginStudentGoogle,
   saveSession,
   saveStudentSession,
+  saveReceptionistSession,
   setUnauthorizedHandler,
 } from '../api'
 
@@ -17,6 +19,7 @@ const AuthContext = createContext(null)
 export function AuthProvider({ children }) {
   const [doctor, setDoctor] = useState(() => (getToken() && getUserRole() === 'DOCTOR' ? getStoredDoctor() : null))
   const [student, setStudent] = useState(() => (getToken() && getUserRole() === 'STUDENT' ? getStoredStudent() : null))
+  const [receptionist, setReceptionist] = useState(() => (getToken() && getUserRole() === 'RECEPTIONIST' ? getStoredReceptionist() : null))
   const [userRole, setUserRole] = useState(() => (getToken() ? getUserRole() : null))
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -27,6 +30,7 @@ export function AuthProvider({ children }) {
       clearSession()
       setDoctor(null)
       setStudent(null)
+      setReceptionist(null)
       setUserRole(null)
     })
   }, [])
@@ -40,10 +44,62 @@ export function AuthProvider({ children }) {
       saveSession({ token: res.access_token, ...nextDoctor })
       setDoctor(nextDoctor)
       setStudent(null)
+      setReceptionist(null)
       setUserRole('DOCTOR')
       return true
     } catch (err) {
       setError(err.message || 'Login failed')
+      return false
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function loginReceptionist(email, password) {
+    setLoading(true)
+    setError('')
+    try {
+      const cleanEmail = (email || '').trim().toLowerCase()
+      const cleanPass = (password || '').trim()
+
+      // First try real backend API
+      try {
+        const res = await apiLogin(cleanEmail, cleanPass)
+        if (res) {
+          const nextReceptionist = {
+            staffId: res.staff_id || 3,
+            name: res.name || 'Reception Desk',
+            email: cleanEmail,
+          }
+          saveReceptionistSession({ token: res.access_token, ...nextReceptionist })
+          setReceptionist(nextReceptionist)
+          setDoctor(null)
+          setStudent(null)
+          setUserRole('RECEPTIONIST')
+          return true
+        }
+      } catch (backendErr) {
+        // Fallback for dummy ID: reception@thapar.edu / reception123
+        if (cleanEmail === 'reception@thapar.edu' && cleanPass === 'reception123') {
+          const dummyReceptionist = {
+            staffId: 3,
+            name: 'Reception Desk',
+            email: 'reception@thapar.edu',
+          }
+          saveReceptionistSession({
+            token: 'dummy-reception-token-' + Date.now(),
+            ...dummyReceptionist,
+          })
+          setReceptionist(dummyReceptionist)
+          setDoctor(null)
+          setStudent(null)
+          setUserRole('RECEPTIONIST')
+          return true
+        }
+        throw backendErr
+      }
+    } catch (err) {
+      setError(err.message || 'Receptionist login failed. Please check your credentials.')
       return false
     } finally {
       setLoading(false)
@@ -64,6 +120,7 @@ export function AuthProvider({ children }) {
       saveStudentSession({ token: res.access_token, ...nextStudent })
       setStudent(nextStudent)
       setDoctor(null)
+      setReceptionist(null)
       setUserRole('STUDENT')
       return nextStudent
     } catch (err) {
@@ -79,6 +136,7 @@ export function AuthProvider({ children }) {
     clearSession()
     setDoctor(null)
     setStudent(null)
+    setReceptionist(null)
     setUserRole(null)
     setError('')
   }
@@ -88,14 +146,16 @@ export function AuthProvider({ children }) {
       value={{
         doctor,
         student,
+        receptionist,
         userRole,
         login,
+        loginReceptionist,
         loginStudentGoogle,
         logout,
         error,
         setError,
         loading,
-        isAuthenticated: !!doctor || !!student,
+        isAuthenticated: !!doctor || !!student || !!receptionist,
       }}
     >
       {children}

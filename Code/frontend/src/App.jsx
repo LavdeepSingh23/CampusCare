@@ -4,6 +4,7 @@ import LandingPage from './Components/Landing/landing_page';
 import Login from './Components/Auth/Login';
 import Doctors_Dashboard from './Components/Doctors/Doctors_Dashboard';
 import Students_Dashboard from './Components/Students/Students_Dashboard';
+import ReceptionDashboard from './Components/Receptionist/receptionist';
 
 function ProtectedRoute({ children }) {
   const { isAuthenticated } = useAuth();
@@ -24,6 +25,14 @@ function AppRoutes() {
         }
       />
       <Route path="/student_dashboard/:rollNumber" element={<Students_Dashboard />} />
+      <Route
+        path="/reception_dashboard"
+        element={
+          <ProtectedRoute>
+            <ReceptionDashboard />
+          </ProtectedRoute>
+        }
+      />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
