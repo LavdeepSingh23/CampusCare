@@ -109,11 +109,13 @@ export default function ReceptionDashboard({ onLogout, initialPage = "reception"
           <div className="flex flex-col flex-1 overflow-y-auto overflow-x-hidden">
             {/* Top Brand Logo matching Acet Labs in screenshot */}
             <div className="flex items-center gap-2.5 px-1 py-1 mb-6">
-              <img
-                src={campusCareLogo}
-                alt="CampusCare"
-                className="h-7 w-7 rounded-lg object-contain shadow-xs shrink-0"
-              />
+              <div className="h-7 w-7 bg-[#0c2827] rounded-lg flex items-center justify-center p-0.5 shadow-xs shrink-0">
+                <img
+                  src={campusCareLogo}
+                  alt="CampusCare"
+                  className="h-5 w-5 object-contain"
+                />
+              </div>
               <motion.div
                 animate={{
                   display: sidebarOpen ? "block" : "none",
