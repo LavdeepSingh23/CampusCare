@@ -229,13 +229,11 @@ export default function Login() {
             onClick={() => navigate('/')}
             className="flex items-center gap-2.5 cursor-pointer group"
           >
-            <div className="h-9 w-9 rounded-xl bg-[#0c2827] flex items-center justify-center p-1 shadow-sm transition-transform group-hover:scale-105">
-              <img
-                src={campusCareLogo}
-                alt="CampusCare Logo"
-                className="h-7 w-7 object-contain"
-              />
-            </div>
+            <img
+              src={tiMark}
+              alt="TI Logo"
+              className="h-8 w-auto object-contain transition-transform group-hover:scale-105"
+            />
             <span className="text-lg font-bold tracking-tight text-slate-900">
               CampusCare
             </span>

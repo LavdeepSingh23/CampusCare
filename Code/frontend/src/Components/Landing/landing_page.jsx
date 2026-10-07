@@ -559,25 +559,13 @@ export default function LandingPage() {
         }}
       />
 
-      {/* ── Fixed Top-Left: CampusCare Brand Logo (Click to scroll top) ── */}
-      <div className="fixed top-5 sm:top-6 left-5 sm:left-8 z-40 select-none flex items-center gap-3">
-        <div
-          onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-          className="p-1 rounded-2xl bg-white/10 backdrop-blur-md border border-white/20 shadow-md flex items-center justify-center cursor-pointer transition-transform hover:scale-105"
-          style={{
-            boxShadow: 'inset 1.5px 1.5px 1.5px 0 rgba(255,255,255,0.35), 0 8px 20px rgba(0,0,0,0.3)',
-          }}
-        >
-          <img
-            src={campusCareLogo}
-            alt="CampusCare Logo"
-            className="h-8 w-8 sm:h-9 sm:w-9 rounded-xl object-contain drop-shadow"
-          />
-        </div>
-        <div className="hidden sm:flex flex-col">
-          <span className="text-xs font-bold tracking-tight text-white leading-tight">CampusCare</span>
-          <span className="text-[10px] text-teal-100/70 font-medium leading-tight">TIET Health Centre</span>
-        </div>
+      {/* ── Fixed Top-Left: TI Logo (Non-Clickable) ── */}
+      <div className="fixed top-5 sm:top-6 left-5 sm:left-8 z-40 select-none flex items-center pointer-events-none">
+        <img
+          src={tiMark}
+          alt="TI Logo"
+          className="h-9 sm:h-10 w-auto object-contain drop-shadow-md"
+        />
       </div>
 
       {/* ── Fixed Top-Right: Sign In Action ── */}
@@ -726,21 +714,16 @@ export default function LandingPage() {
 
       {/* ── HERO SECTION: PRESERVED 100% UNCHANGED AS CONFIRMED ── */}
       <main className="snap-hero relative z-10 w-full max-w-7xl mx-auto px-4 sm:px-6 pt-24 sm:pt-28 pb-8 flex flex-col items-center">
-        {/* Official CampusCare Logo + Institutional Pill Badge */}
+        {/* Institutional Pill Badge (No logo) */}
         <motion.div
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-          className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/10 border border-white/20 backdrop-blur-md text-xs font-medium text-teal-100 mb-5 shadow-sm hover:bg-white/15 transition-colors duration-300"
+          className="inline-flex items-center px-4 py-1.5 rounded-full bg-white/10 border border-white/20 backdrop-blur-md text-xs font-medium text-teal-100 mb-5 shadow-sm hover:bg-white/15 transition-colors duration-300"
           style={{
             boxShadow: 'inset 1px 1px 1px 0 rgba(255,255,255,0.3), inset -1px -1px 1px 0 rgba(255,255,255,0.15)',
           }}
         >
-          <img
-            src={campusCareLogo}
-            alt="CampusCare Emblem"
-            className="w-4 h-4 rounded-full object-contain"
-          />
           <span>Thapar Institute of Engineering & Technology</span>
         </motion.div>
 
