@@ -337,3 +337,26 @@ export function updateMedication(rollNumber, value) {
     body: JSON.stringify({ value }),
   })
 }
+export function lookupStudent(rollNumber) {
+  return request(`/api/reception/students/${encodeURIComponent(rollNumber.trim())}`)
+}
+
+export function fetchReceptionDoctors() {
+  return request('/api/reception/doctors')
+}
+
+export function receptionCheckIn({ rollNumber, doctorId, complaint = '', via = 'MANUAL' }) {
+  return request('/api/reception/checkin', {
+    method: 'POST',
+    body: JSON.stringify({
+      roll_number: rollNumber,
+      doctor_id: doctorId,
+      complaint,
+      via
+    })
+  })
+}
+
+export function fetchReceptionQueue() {
+  return request('/api/reception/queue')
+}

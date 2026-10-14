@@ -1,0 +1,527 @@
+\documentclass{scrreprt}
+\usepackage{listings}
+\usepackage{underscore}
+\usepackage{graphicx}
+\usepackage{array}
+\usepackage{ragged2e}
+\usepackage{float}
+\usepackage{longtable}
+\usepackage[bookmarks=true]{hyperref}
+\usepackage[utf8]{inputenc}
+\usepackage[english]{babel}
+\hypersetup{
+    bookmarks=false,
+    pdftitle={Software Requirements Specification - CampusCare},
+    pdfauthor={Lavdeep Singh, Harshveer Singh, Damanbir Singh, Kriti},
+    pdfsubject={CampusCare: Integrated Digital Healthcare Platform},
+    pdfkeywords={SRS, CampusCare, campus health center, queue management, prescription},
+    colorlinks=true,
+    linkcolor=blue,
+    citecolor=black,
+    filecolor=black,
+    urlcolor=purple,
+    linktoc=page
+}%
+\def\myversion{1.0 }
+\date{}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0.6em}
+\renewcommand{\arraystretch}{1.25}
+
+% Shows the image when it exists in the project, otherwise a placeholder box,
+% so the document compiles either way.  Usage: \figbox{file.png}{width}
+% Height is capped and aspect ratio kept, so tall images always fit on a page.
+\newcommand{\figbox}[2]{%
+  \IfFileExists{#1}{%
+    \includegraphics[width=#2,height=0.55\textheight,keepaspectratio]{#1}}{%
+    \fbox{\parbox{#2}{\centering\vspace{2cm}Insert image: #1\vspace{2cm}}}}}
+
+% Same, but for large diagrams that get (almost) a full page of their own.
+\newcommand{\figfull}[1]{%
+  \IfFileExists{#1}{%
+    \includegraphics[width=\textwidth,height=0.8\textheight,keepaspectratio]{#1}}{%
+    \fbox{\parbox{0.9\textwidth}{\centering\vspace{4cm}Insert image: #1\vspace{4cm}}}}}
+
+\begin{document}
+
+\begin{titlepage}
+\begin{flushright}
+    \rule{16cm}{5pt}\vskip0.6cm
+    \begin{bfseries}
+        \Huge{SOFTWARE REQUIREMENTS\\ SPECIFICATION}\\
+        \vspace{0.8cm}
+        for\\
+        \vspace{0.8cm}
+        CAMPUSCARE\\
+        \vspace{0.2cm}
+        \large{An Integrated Digital Healthcare Platform\\for Thapar's Health Center}\\
+        \vspace{0.8cm}
+        \LARGE{Version \myversion}\\
+        \vspace{0.8cm}
+        \large{Prepared by :\\
+        1. Lavdeep Singh (1024030107)\\
+        2. Harshveer Singh (1024030109)\\
+        3. Damanbir Singh (1024030110)\\
+        4. Kriti (1024030111)}\\
+        \vspace{0.8cm}
+        \large{Submitted to : Ms. Anushka\\
+        Department of Computer Science and Engineering\\
+        Thapar Institute of Engineering and Technology, Patiala}\\
+        \vspace{0.8cm}
+        % Replace with your actual submission date
+        \large{October 13 , 2026}\\
+    \end{bfseries}
+\end{flushright}
+\end{titlepage}
+
+\tableofcontents
+
+%======================================================================
+\chapter{Introduction}
+
+\section{Purpose}
+CampusCare is proposed as a centralized web-based system for managing the Health Center at Thapar Institute of Engineering and Technology. The system aims to address the challenges of manual record-keeping, unorganized doctor queues, and difficulties in maintaining and accessing student medical records and prescriptions.
+
+By bringing student registration, check-in, consultations, medical records, prescriptions, and medicine dispensing onto a single platform, CampusCare aims to reduce paperwork, improve the accuracy of information, and make the overall healthcare process more organized and efficient for students and health center staff.
+
+\section{Intended Audience and Reading Suggestions}
+This document is intended for developers, project supervisors, testers, and health center staff. It provides an overview of the system, its requirements, and the workflows of different users to support the development, testing, and use of CampusCare.
+
+The chapters follow the usual order of an SRS: introduction, overall description, system features (including external interface requirements), nonfunctional requirements and other requirements. Readers who only want the big picture can read Chapter 1 and Section 2.5. Developers and testers should focus on Chapter 3, which lists the numbered functional requirements.
+
+\section{Project Scope}
+CampusCare covers the routine, day-to-day healthcare activities of the health center. Five kinds of people use it: students, doctors, receptionists, pharmacists and administrators. Each gets an interface that shows only what their job needs.
+
+Students can log in to CampusCare using their Thapar email credentials. When they arrive at the health center, they can be identified through an RFID/NFC card or, if the hardware is unavailable, through manual verification by the receptionist. After check-in, a visit is created, and the student is added to the queue of the doctor they have chosen or been assigned to.
+
+Every student also has a personal portal. Its home screen greets the student and summarizes their blood group, number of visits and last visit, shows the dose schedule of the medicines they should take right now, the latest prescription, a health snapshot (conditions and allergies) and an emergency shortcut. From the portal the student can open the full prescription history and the medical history, view the Medical ID, and manage their profile. Where nothing has been recorded yet, the screens say so plainly, for example ``No visits yet'' for a new student.
+
+The receptionist works from a reception dashboard. It shows how many students are waiting in the lounge, in consultation, waiting for medicine and completed today, together with the live status of every doctor's cabin. From it the receptionist handles identification and check-in, watches the live OPD queue, deals with unusual cases such as a student who does not respond when called or one who has to be moved to another doctor, and sees an alert when prescriptions are waiting for pickup at the dispensing station.
+
+The doctor marks themselves available or unavailable, calls the next student, reads the authorized medical history and allergy warnings, records the reason for the visit, the diagnosis and clinical notes, and writes a structured prescription linked to that consultation.
+
+The pharmacist reviews valid prescriptions and records what was actually dispensed. This dispensing record is stored separately, so the doctor's original prescription is never altered at the counter.
+
+The administrator manages user accounts, doctor availability schedules and identification credentials, and can review the audit log.
+
+\begin{figure}[H]
+    \centering
+    \figbox{workflow-diagram.png}{13cm}
+    \caption{Role and Record Workflow}
+    \label{fig:CAMPUSCARE}
+\end{figure}
+
+Figure~\ref{fig:CAMPUSCARE} shows who acts on which record. The administrator manages accounts and sets doctor availability. The receptionist verifies the student, checks the student in so that a visit is created, and handles no-shows and redirection in the doctor's queue. The doctor calls the next student, conducts the consultation and writes the prescription. The pharmacist reviews the prescription and records the dispensing, after which the student collects the medicines.
+
+In short, what one role produces is what the next role works with, which is why the system is designed as one connected workflow instead of separate tools.
+
+%======================================================================
+\chapter{Overall Description}
+
+\section{Product Perspective}
+CampusCare replaces the manual and partly disconnected way the health center keeps its records today. Information that used to sit in registers, loose papers or separate files is moved into one central database, and every role reads and writes the same records.
+
+The system is a new, self-contained web application. It follows a client-server architecture with three layers:
+\begin{center}
+React Frontend $\rightarrow$ FastAPI REST API $\rightarrow$ Application Logic $\rightarrow$ MySQL Database
+\end{center}
+Keeping these layers apart means the interface, the business rules and the storage can each be changed without rewriting the others. The backend is the single authority for the state of the queues, so two staff members working at the same time always see the same picture.
+
+\section{User Classes and Characteristics}
+CampusCare has five types of users. Staff is further divided into receptionist and pharmacist.
+\begin{itemize}
+    \item Students
+    \item Doctors
+    \item Staff
+        \begin{itemize}
+            \item Receptionist
+            \item Pharmacist
+        \end{itemize}
+    \item Administrator
+\end{itemize}
+
+\begin{figure}[H]
+    \centering
+    \figbox{user-types.png}{10cm}
+    \caption{Type of users}
+    \label{fig:type of users}
+\end{figure}
+
+\begin{center}
+\begin{tabular}{|p{2.6cm}|p{5cm}|p{5.6cm}|}
+\hline
+\textbf{User class} & \textbf{Main responsibility} & \textbf{Typical characteristics} \\
+\hline
+Student & Gets identified, joins a queue, views queue status, dose schedule, prescription history, medical history and Medical ID, and can reach emergency helplines. & Largest group. Uses the system occasionally, mostly on a phone, and needs a very simple interface. \\
+\hline
+Doctor & Marks availability, calls students, reads history and allergy warnings, records consultations, writes prescriptions. & Uses the system continuously during consultation hours, so speed matters. \\
+\hline
+Receptionist & Verifies and checks in students, monitors the live queue and doctor cabins, handles no-shows and redirection, and works at the dispensing station. & Works at a front-desk counter during a fixed shift and keeps the reception dashboard open all day. \\
+\hline
+Pharmacist & Reviews prescriptions and records dispensing. & Works at the dispensing counter and only needs prescription-related screens. \\
+\hline
+Administrator & Manages users, doctor availability schedules, RFID credentials, audit logs. & Small group with full management rights but no clinical role. \\
+\hline
+\end{tabular}
+\end{center}
+
+\section{Product Functions}
+CampusCare stores and links the visit, queue, consultation, prescription and dispensing records of the students of the campus. Every user must be registered and must log in before using any of these functions.
+
+The system is divided into six processes:
+\begin{enumerate}
+    \item Authentication and User Management
+    \item Student Profile and Check-in
+    \item Doctor Availability and Queue Management
+    \item Consultation and Medical History
+    \item Prescription and Dispensing
+    \item Administration and Audit
+\end{enumerate}
+
+The data behind these processes is organized around the life of one visit:
+\begin{center}
+Student $\rightarrow$ Visit $\rightarrow$ Queue Entry $\rightarrow$ Consultation $\rightarrow$ Prescription $\rightarrow$ Dispensing
+\end{center}
+
+Figure~\ref{fig:DB Schema} (next page) shows how these records are stored. A prescription contains one or more prescription items. A visit belongs to one student and one doctor, and can have at most one consultation.
+
+A visit goes through four stages: \textbf{Waiting}, \textbf{In Consultation}, \textbf{For Medicine} and \textbf{Completed}. The reception dashboard shows the number of students in each stage. Whenever a visit changes its stage, the system records the event, such as when a consultation starts or ends. These events are also shown in the Recent Desk Activity log. The student's home screen also shows the medicine schedule based on the frequency code saved in the prescription, such as 1-0-1 (morning, noon, night).
+
+% The ER diagram is large, so it gets a page of its own to stay readable.
+% Export db-schema.png at high resolution (at least 2000 px wide).
+\clearpage
+\begin{figure}[H]
+    \centering
+    \figfull{db-schema.png}
+    \caption{Database Schema (ER Diagram)}
+    \label{fig:DB Schema}
+\end{figure}
+\clearpage
+
+\section{Operating Environment}
+CampusCare runs in a web browser, so it works on Windows, macOS and Linux. The server side runs FastAPI with a MySQL database. RFID/NFC identification needs suitable reader hardware and browser or device support. Where that is missing, the receptionist identifies the student manually, so the health center can keep working either way.
+
+\section{Design}
+The workflow of each role is described below.
+
+\textbf{Student.} A student's visit has four steps:
+\begin{itemize}
+    \item Login and identification (RFID/NFC card or receptionist verification)
+    \item Check-in and doctor selection
+    \item Waiting in the queue and consultation
+    \item Collecting medicines and viewing visit details
+\end{itemize}
+The student profile holds personal information, medical information, queue status, prescriptions and visit information.
+
+\textbf{Student portal.} After logging in, the student reaches the home screen. The bottom navigation bar has five sections: Home, Prescriptions, Medical History, Emergency and Profile. The home screen includes:
+\begin{itemize}
+    \item A greeting and a summary of the student's blood group, total visits and last visit date.
+    \item \textbf{Dose Schedule}, which shows which medicines the student needs to take and when.
+    \item \textbf{Latest Prescription}, with a link to view all previous prescriptions.
+    \item \textbf{Health Snapshot}, which shows the student's medical conditions and allergies, along with a link to the Medical ID.
+    \item An \textbf{Emergency} card with a button to call 108 and a link to other helpline numbers.
+\end{itemize}
+The Prescriptions section stores all previous prescriptions, while Medical History shows the student's medical conditions, allergies, current medicines and past visits. Students can access only their own medical records. The activities of a student are summarized in Figure~\ref{fig:Students Activites}.
+
+\begin{figure}[H]
+    \centering
+    \figbox{student_activity_diagram.png}{15cm}
+    \caption{Student Activities (Activity Diagram)}
+    \label{fig:Students Activites}
+\end{figure}
+
+\textbf{Doctor.}
+\begin{itemize}
+    \item Mark own availability
+    \item View the personal queue and call the next student
+    \item View authorized medical history and allergy warnings
+    \item Record the reason for the visit, diagnosis and clinical notes
+    \item Create a structured prescription, print it and send it to the dispensary
+    \item Review the consultations completed today
+\end{itemize}
+The activities of a doctor are summarized in Figure~\ref{fig:Doctor Activities}. The doctor workstation has three tabs in its top bar:
+\begin{itemize}
+    \item \textbf{Live OPD Queue.} A side panel shows the doctor's room, the number of students in the queue, the number seen today, shift hours, the average consultation time and a ``Call Next Student'' button. The middle panel lists today's consultation line with each student's roll number, reason for visit, waiting time and status (Inspecting, Next in Line or Waiting). The right panel shows the selected student's medical history, an allergy warning and the clinical chart.
+    \item \textbf{E-Prescription Studio.} The doctor adds medicines from one-click formulary presets or as custom entries, chooses the dosage, frequency (for example 1-0-1) and duration, and reviews the table of prescribed medicines. The doctor then enters the final diagnosis and dietary advice, can print the prescription slip, and completes the consultation, which records the prescription under the doctor's name and sends it to the dispensary.
+    \item \textbf{Completed Today.} A log of the consultations finished during the shift, showing time, student, roll number, diagnosis, the prescription sent and its dispensary status.
+\end{itemize}
+
+\begin{figure}[H]
+    \centering
+    \figbox{doctor-activity-diagram.png}{15cm}
+    \caption{Doctor Activities (Activity Diagram)}
+    \label{fig:Doctor Activities}
+\end{figure}
+
+\textbf{Receptionist.}
+\begin{itemize}
+    \item Verify the student and complete check-in
+    \item Watch the live OPD queue and open the queue of a particular doctor (``Check Line'')
+    \item Handle no-shows and redirect a student to another doctor's queue
+    \item Look up students and review completed visits
+    \item Open the dispensing station when prescriptions are waiting for pickup
+    \item Follow the recent desk activity log
+\end{itemize}
+The activities of a receptionist are summarized in Figure~\ref{fig:Receptionist Activities}. The reception dashboard has a side menu with Reception, Student Check-in, Live OPD Queue, Students, Dispensing, Completed Visits, Activity, Settings and Logout. The Live OPD Queue and Dispensing entries carry a count badge. The main area contains:
+\begin{itemize}
+    \item four counters: \textbf{Waiting in Lounge} (with the average wait time), \textbf{In Consultation}, \textbf{For Medicine} and \textbf{Completed Today};
+    \item \textbf{Doctor Cabins Live Status}, one card per doctor showing name, specialization, room, whether the doctor is available, and the number of students in that doctor's queue;
+    \item an \textbf{Action Required} panel that tells the front desk how many prescriptions are waiting for pickup, with a button to open the dispensing station, and shows the counter and shift timings of the logged-in receptionist;
+    \item \textbf{Recent Desk Activity}, a live log with time, student, prescription number or doctor, and the event (for example consultation started or completed).
+\end{itemize}
+
+\begin{figure}[H]
+    \centering
+    \figbox{receptionist-activity-diagram.png}{15cm}
+    \caption{Receptionist Activities (Activity Diagram)}
+    \label{fig:Receptionist Activities}
+\end{figure}
+
+\textbf{Pharmacist.}
+\begin{itemize}
+    \item Review a valid prescription
+    \item Record dispensing against that prescription
+\end{itemize}
+
+\textbf{Administrator.}
+\begin{itemize}
+    \item Create, update and deactivate user accounts
+    \item Manage doctor availability schedules and RFID credentials
+    \item View system records and audit logs
+\end{itemize}
+
+The normal flow of one visit is:
+\begin{enumerate}
+    \item The user logs in and the student's identity is verified.
+    \item The receptionist checks the student in and a visit is created.
+    \item The student is added to the chosen doctor's queue.
+    \item The doctor calls the next student and opens the authorized medical history.
+    \item The doctor records the consultation and, if needed, creates a prescription.
+    \item The visit moves to the For Medicine stage and shows up as a pickup alert on the reception dashboard. The pharmacy side reviews the prescription and records the dispensing.
+    \item The visit is marked completed and stays available for future authorized access.
+\end{enumerate}
+
+%======================================================================
+\chapter{System Features}
+CampusCare is a healthcare workflow web application. Its main job is to carry a student's visit from check-in to dispensing without the information being copied by hand from one step to the next.
+
+\section{Description and Priority}
+Some features are central and some are supporting, but every one of them is needed for the system to be complete. In order of priority, from highest to lowest:
+\begin{enumerate}
+    \item \textbf{Authentication and role-based access:} every user logs in and sees only what their role allows. Nothing else works safely without this.
+    \item \textbf{Check-in and queue management:} this is the heart of the system. Each doctor has a separate queue with position and status, and the receptionist can handle no-shows and redirect students.
+    \item \textbf{Consultation and medical history:} the doctor reads the authorized history and allergy warnings, and records the reason, diagnosis and notes.
+    \item \textbf{Prescription:} the doctor creates a structured prescription tied to the consultation and sends it to the dispensary.
+    \item \textbf{Dispensing:} the pharmacist records dispensing against a valid prescription, separately from the prescription itself.
+    \item \textbf{Role dashboards:} the student portal (prescription history, medical history, dose schedule, Medical ID, emergency shortcut), the doctor workstation (live queue, e-prescription studio, completed log) and the reception dashboard (live counters, doctor cabin status, pickup alerts, desk activity).
+    \item \textbf{Administration and audit:} the administrator manages users, doctor availability and credentials, and important actions are logged.
+    \item \textbf{RFID/NFC identification:} an extension that speeds up check-in where the hardware is available.
+\end{enumerate}
+
+\section{Functional Requirements}
+The functional requirements are listed below. ``Shall'' marks a requirement that must be met, and ``may'' marks an optional one. The Priority column uses three levels: \textbf{Must} (essential for the system to work), \textbf{Should} (important, but the system can run without it for a short time) and \textbf{May} (optional).
+
+\begin{longtable}{|p{1.3cm}|>{\raggedright\arraybackslash}p{3cm}|>{\raggedright\arraybackslash}p{6.3cm}|p{1.4cm}|}
+\hline
+\textbf{ID} & \textbf{Requirement} & \textbf{Description} & \textbf{Priority} \\
+\hline
+\endfirsthead
+\hline
+\textbf{ID} & \textbf{Requirement} & \textbf{Description} & \textbf{Priority} \\
+\hline
+\endhead
+FR-01 & Authentication & The system shall authenticate users and give access according to their assigned role. & Must \\
+\hline
+FR-02 & Student Profile & The system shall maintain student profile and identification information. & Must \\
+\hline
+FR-03 & Student Check-in & The receptionist shall be able to verify and check in a student. & Must \\
+\hline
+FR-04 & Doctor Availability & The system shall maintain doctor availability information. The doctor shall be able to mark themselves available or unavailable, and the administrator shall be able to manage availability schedules. & Must \\
+\hline
+FR-05 & Queue Management & The system shall maintain a separate queue for each doctor. & Must \\
+\hline
+FR-06 & Queue Status & The system shall maintain queue position and status information (for example Inspecting, Next in Line, Waiting). & Must \\
+\hline
+FR-07 & Medical History & An authorized doctor shall be able to access the relevant medical history of a student. & Must \\
+\hline
+FR-08 & Consultation & The doctor shall be able to record the reason for consultation, the diagnosis and clinical notes. & Must \\
+\hline
+FR-09 & Prescription & The doctor shall be able to create a structured prescription linked to the consultation. & Must \\
+\hline
+FR-10 & Dispensing & The pharmacist, or reception staff working at the dispensing station, shall be able to record medicine dispensing against a valid prescription. & Must \\
+\hline
+FR-11 & Administration & The administrator shall be able to manage users, doctor availability and RFID credentials. & Must \\
+\hline
+FR-12 & RFID/NFC & The system may support RFID/NFC-based identification where suitable hardware and browser support are available. & May \\
+\hline
+FR-13 & Audit & Important administrative and system actions shall be recorded for auditing. & Should \\
+\hline
+FR-14 & No-show Handling & The queue system shall support handling of students who do not respond when called. & Should \\
+\hline
+FR-15 & Queue Redirection & The receptionist or the doctor shall be able to redirect a student to an appropriate doctor's queue when required. & Should \\
+\hline
+FR-16 & Student Home & The student portal shall show the student's blood group, number of visits, last visit, dose schedule, latest prescription and health snapshot, with clear empty states when nothing is recorded. & Should \\
+\hline
+FR-17 & Prescription History & A student shall be able to view all of their own earlier prescriptions. & Should \\
+\hline
+FR-18 & Student Medical History & A student shall be able to view their own medical history and Medical ID (conditions, allergies, ongoing medication, past visits). & Should \\
+\hline
+FR-19 & Dose Schedule & The system shall list the medicines due at the current time of day, based on the frequency code recorded in the prescription. & Should \\
+\hline
+FR-20 & Emergency Access & The student portal shall provide a one-tap call to the emergency number (108) and a list of helplines. & Should \\
+\hline
+FR-21 & Reception Dashboard & The system shall show the receptionist the number of students waiting, in consultation, waiting for medicine and completed today, with the average waiting time. & Should \\
+\hline
+FR-22 & Doctor Cabin Status & The system shall show each doctor's room, availability status and queue length, and let the receptionist open that doctor's queue. & Should \\
+\hline
+FR-23 & Pickup Alert & The system shall alert the front desk when prescriptions are waiting for pickup and give direct access to the dispensing station. & Should \\
+\hline
+FR-24 & Desk Activity Log & The system shall keep a log of recent visit events (for example consultation started and completed) and show it on the reception dashboard. & Should \\
+\hline
+FR-25 & Student Directory & The receptionist shall be able to look up students and review completed visits. & Should \\
+\hline
+FR-26 & Allergy Warning & The system shall show a prominent warning of the student's known allergies to the doctor before a prescription is written. & Must \\
+\hline
+FR-27 & Formulary Presets & The prescription screen shall offer one-click presets of commonly used medicines, and shall also allow a custom medicine to be added. & Should \\
+\hline
+FR-28 & Prescription Item Details & Each prescription item shall record the medicine name, dosage, a frequency code (for example 1-0-1 or OD) and the duration. General instructions such as food notes and dietary advice shall be recorded on the prescription. & Must \\
+\hline
+FR-29 & Prescription Slip & The doctor shall be able to print a prescription slip. & Should \\
+\hline
+FR-30 & Dispatch to Dispensary & When the doctor completes the consultation, the system shall record the prescription under that doctor's name and send it to the dispensary in real time. & Must \\
+\hline
+FR-31 & Doctor Completed Log & The doctor shall be able to view the consultations completed today, with time, student, roll number, diagnosis, medicines sent and dispensary status. & Should \\
+\hline
+FR-32 & Doctor Metrics & The doctor workstation shall show the number of students in the queue, the number seen today, the shift hours (from the availability schedule) and the average consultation time. & Should \\
+\hline
+\end{longtable}
+
+\textbf{Technology.} CampusCare is built with the following tools.
+\begin{itemize}
+    \item \textbf{Front-end:} React with Vite, Tailwind CSS and JavaScript.
+    \item \textbf{Back-end:} FastAPI (Python) exposing a REST API.
+    \item \textbf{Database:} MySQL, with schema changes managed through version-controlled migrations.
+    \item \textbf{Identification:} staff-assisted check-in, with RFID/NFC support planned.
+    \item \textbf{Testing:} unit and integration testing.
+\end{itemize}
+
+\section{External Interface Requirements}
+\textbf{User interfaces.} CampusCare is used through a web browser. The student portal is designed mainly for phones, with a bottom navigation bar. The doctor workstation and the reception dashboard are designed for desktop screens: the doctor workstation uses a top tab bar, and the reception dashboard a side menu. Every screen shows a plain message when there is nothing to display.
+
+\textbf{Hardware interfaces.}
+\begin{itemize}
+    \item An optional RFID/NFC card reader at the reception desk for student identification.
+    \item A printer at the doctor's workstation for the prescription slip.
+    \item On a phone, the emergency button starts a normal phone call to the number 108.
+\end{itemize}
+
+\textbf{Software interfaces.} The React front end talks to the FastAPI back end through a REST API that exchanges JSON. The back end reads and writes the MySQL database. No other external software system is required.
+
+\textbf{Communication interfaces.} All traffic between the browser and the server should use HTTPS. The queue, the dashboard counters and the desk activity log are refreshed automatically so that every user sees the same state.
+
+%======================================================================
+\chapter{Other Nonfunctional Requirements}
+
+\section{Performance Requirements}
+Everyday operations such as login, check-in, queue updates and record lookup should respond fast enough that nobody at the front desk or in the consultation room has to wait on the system. The targets below are for normal health-center load. They are starting targets and will be confirmed or adjusted after testing under realistic conditions.
+\begin{itemize}
+    \item \textbf{NFR-01:} Login, student lookup and opening a medical record: within 3 seconds for at least 95\% of requests.
+    \item \textbf{NFR-02:} Check-in and calling the next student: within 2 seconds.
+    \item \textbf{NFR-03:} A change in the queue, dashboard counters, cabin status or activity log should appear on other screens within 5 seconds.
+    \item \textbf{NFR-04:} The system should support at least 50 users logged in at the same time.
+    \item \textbf{NFR-05:} The system should be available during the health center's working hours, with a target of at least 99\%.
+\end{itemize}
+
+\section{Security Requirements}
+CampusCare stores medical information, so access has to be controlled carefully.
+\begin{itemize}
+    \item \textbf{NFR-06:} Only registered users can enter the system, and every user must log in.
+    \item \textbf{NFR-07:} Access is role-based. A user can perform only the actions that belong to their role, for example a pharmacist cannot open a consultation note and a student cannot see another student's record.
+    \item \textbf{NFR-08:} Passwords are stored only as hashes, never as plain text.
+    \item \textbf{NFR-09:} A doctor is authorized to open the medical history only of students who have a visit assigned to that doctor.
+    \item \textbf{NFR-10:} Important administrative actions are written to the audit log.
+    \item \textbf{NFR-11:} Data between the browser and the server is sent over HTTPS.
+\end{itemize}
+
+\begin{longtable}{|p{4.2cm}|c|c|c|c|c|}
+\hline
+\textbf{Function} & \textbf{Student} & \textbf{Doctor} & \textbf{Recep.} & \textbf{Pharm.} & \textbf{Admin} \\
+\hline
+\endfirsthead
+\hline
+\textbf{Function} & \textbf{Student} & \textbf{Doctor} & \textbf{Recep.} & \textbf{Pharm.} & \textbf{Admin} \\
+\hline
+\endhead
+Log in & Yes & Yes & Yes & Yes & Yes \\
+\hline
+Own home, prescription history, medical history, Medical ID & Yes & -- & -- & -- & -- \\
+\hline
+Emergency helpline shortcut & Yes & -- & -- & -- & -- \\
+\hline
+Reception dashboard & -- & -- & Yes & -- & -- \\
+\hline
+Check in student & -- & -- & Yes & -- & -- \\
+\hline
+View live queue and cabin status & -- & Yes & Yes & -- & -- \\
+\hline
+Call next, no-show, redirect & -- & Yes & Yes & -- & -- \\
+\hline
+Student directory, completed visits & -- & -- & Yes & -- & -- \\
+\hline
+View clinical medical history and allergy warning of a patient & -- & Yes & -- & -- & -- \\
+\hline
+Record consultation & -- & Yes & -- & -- & -- \\
+\hline
+Create and print prescription & -- & Yes & -- & -- & -- \\
+\hline
+View own completed consultations & -- & Yes & -- & -- & -- \\
+\hline
+Mark own availability & -- & Yes & -- & -- & Yes \\
+\hline
+Record dispensing & -- & -- & Yes & Yes & -- \\
+\hline
+Recent desk activity & -- & -- & Yes & -- & Yes \\
+\hline
+Manage users, RFID, availability schedules & -- & -- & -- & -- & Yes \\
+\hline
+View audit log & -- & -- & -- & -- & Yes \\
+\hline
+\end{longtable}
+
+\section{Software Quality Attributes}
+Testing and feedback from users continue during development, so quality is checked along the way and not left to the end. Database tests, logic tests and user-interface tests are all required, and the system is tested through functional, integration and role-based testing.
+
+The qualities we aim for are:
+\begin{itemize}
+    \item \textbf{Reliability:} student, consultation, prescription and dispensing data stay consistent and available during normal operation.
+    \item \textbf{Usability:} the interfaces are simple enough for students and staff to use without training.
+    \item \textbf{Maintainability:} the application is modular, so one component can be changed without disturbing unrelated ones.
+    \item \textbf{Auditability:} important administrative and system activities can be traced afterwards.
+    \item \textbf{Data integrity:} a prescription is never overwritten by dispensing, because the two are stored as separate records.
+\end{itemize}
+
+\section{Business Rules}
+\begin{itemize}
+    \item A student must be identified and checked in before a visit is created.
+    \item Each doctor has a separate queue, and a student can be moved to another doctor's queue only by the receptionist or the doctor.
+    \item A prescription must be linked to a consultation, and a dispensing record must be linked to a valid prescription.
+    \item The prescription stays as the doctor wrote it. Dispensing is recorded separately, by the pharmacist or by reception staff working at the dispensing station.
+    \item A student's known allergies are shown to the doctor before a prescription is written.
+    \item The backend is the single source of truth for the queue state.
+    \item A visit passes through the stages Waiting, In Consultation, For Medicine and Completed, and every stage change is recorded as a visit event.
+    \item A visit appears in the pickup alert only after the consultation is completed and a prescription exists.
+    \item A student can view only their own prescriptions and medical records.
+    \item Where nothing is recorded (no visits, no prescriptions, no conditions), the screens show a plain ``none recorded'' message instead of leaving blanks.
+    \item Visit information stays available for future authorized access.
+\end{itemize}
+The overall aim is to save the health center's working time and reduce pressure on its staff.
+
+%======================================================================
+\chapter{Other Requirements}
+CampusCare is meant to stay in use for a long time, so it will need regular maintenance and refactoring, and its requirements may change as the health center's needs change. Database changes are made through version-controlled migration files so that they can be tracked and repeated on every development machine.
+
+Because the health center depends on the system during its working hours, the availability of the backend and the database has to be planned for at deployment.
+
+Possible future work includes broader RFID/NFC integration, recording of vitals (blood pressure, pulse, SpO2 and temperature), better real-time queue updates, medication reminders, de-identified health trends, advanced reporting and links to other campus healthcare services.
+
+\end{document}
