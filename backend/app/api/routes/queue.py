@@ -10,6 +10,7 @@ from app.core.deps import (
     get_current_receptionist,
     get_current_staff,
 )
+from app.services import queue_lifecycle as ql
 
 logger = logging.getLogger(__name__)
 
@@ -22,10 +23,25 @@ class CheckInRequest(BaseModel):
     roll_number: str = Field(..., description="Student roll number")
     doctor_id: int = Field(..., description="Target doctor ID")
     complaint: Optional[str] = Field("General Consultation", description="Chief complaint / reason for visit")
+    via: str = "MANUAL"
 
 
 class DispenseRequest(BaseModel):
     remarks: Optional[str] = Field(None, description="Dispensing notes or pharmacy remarks")
+
+
+class ActionReasonRequest(BaseModel):
+    reason: Optional[str] = Field(None, description="Reason for cancellation or no-show")
+
+
+class RequeueRequest(BaseModel):
+    target_doctor_id: int = Field(..., description="Doctor ID to assign for the requeue")
+    reason: Optional[str] = Field("Patient arrived after no-show", description="Requeue reason")
+
+
+class RedirectRequest(BaseModel):
+    target_doctor_id: int = Field(..., description="Doctor ID to redirect to")
+    reason: Optional[str] = Field("Triage referral", description="Redirection reason")
 
 
 # ── Receptionist-Only Endpoints ─────────────────────────────────────────
@@ -40,117 +56,47 @@ def check_in_student(
     Rejects doctors and students with 403 Forbidden.
     Identity recorded in audit events comes strictly from the validated receptionist token.
     """
-    connection = get_db_connection()
-    try:
-        with connection.cursor() as cursor:
-            # 1. Verify student exists
-            cursor.execute(
-                "SELECT roll_number, full_name, status FROM STUDENT WHERE roll_number = %s",
-                (payload.roll_number,),
+    max_retries = 3
+    for attempt in range(max_retries):
+        connection = get_db_connection()
+        try:
+            result = ql.check_in_student(
+                conn=connection,
+                roll_number=payload.roll_number,
+                doctor_id=payload.doctor_id,
+                performed_by_user_id=receptionist.user_id,
+                complaint=payload.complaint,
+                via=payload.via,
             )
-            student = cursor.fetchone()
-            if not student:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail=f"Student with roll number '{payload.roll_number}' was not found in directory.",
-                )
-            if student["status"] != "ACTIVE":
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="This student account is marked inactive.",
-                )
-
-            # 2. Verify doctor exists and is active
-            cursor.execute(
-                "SELECT d.doctor_id, ua.email FROM DOCTOR d JOIN STAFF s ON s.staff_id = d.staff_id JOIN USER_ACCOUNT ua ON ua.user_id = s.user_id WHERE d.doctor_id = %s",
-                (payload.doctor_id,),
-            )
-            doctor = cursor.fetchone()
-            if not doctor:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail=f"Doctor #{payload.doctor_id} not found.",
-                )
-
-            # 3. Check for existing active visit for this student today
-            cursor.execute(
-                """
-                SELECT visit_id, status FROM VISIT
-                WHERE roll_number = %s AND status IN ('CHECKED_IN', 'WAITING_FOR_DOCTOR', 'CALLED', 'IN_CONSULTATION', 'WAITING_FOR_MEDICINE')
-                ORDER BY checked_in_at DESC LIMIT 1
-                """,
-                (payload.roll_number,),
-            )
-            active_visit = cursor.fetchone()
-            if active_visit:
-                raise HTTPException(
-                    status_code=status.HTTP_409_CONFLICT,
-                    detail=f"Student '{payload.roll_number}' already has an active visit in progress (Status: {active_visit['status']}).",
-                )
-
-            # 4. Create new visit
-            cursor.execute(
-                """
-                INSERT INTO VISIT (roll_number, doctor_id, status, checked_in_at)
-                VALUES (%s, %s, 'CHECKED_IN', NOW())
-                """,
-                (payload.roll_number, payload.doctor_id),
-            )
-            visit_id = cursor.lastrowid
-
-            # 5. Compute next queue sequence number for this doctor today
-            cursor.execute(
-                """
-                SELECT COALESCE(MAX(queue_sequence), 0) + 1 AS next_seq
-                FROM QUEUE_ENTRY
-                WHERE doctor_id = %s AND DATE(entered_at) = CURDATE()
-                """,
-                (payload.doctor_id,),
-            )
-            seq_row = cursor.fetchone()
-            sequence = seq_row["next_seq"] if seq_row else 1
-
-            # 6. Insert Queue Entry
-            cursor.execute(
-                """
-                INSERT INTO QUEUE_ENTRY (visit_id, doctor_id, queue_sequence, status, entered_at, queue_data, entry_reason)
-                VALUES (%s, %s, %s, 'WAITING', NOW(), NOW(), 'INITIAL_CHECKIN')
-                """,
-                (visit_id, payload.doctor_id, sequence),
-            )
-            queue_entry_id = cursor.lastrowid
-
-            # 7. Audit log in VISIT_EVENT with receptionist user_id FROM TOKEN
-            cursor.execute(
-                """
-                INSERT INTO VISIT_EVENT (visit_id, event_type, performed_by_user_id, notes)
-                VALUES (%s, 'CHECK_IN', %s, %s)
-                """,
-                (visit_id, receptionist.user_id, f"Check-in by receptionist ({receptionist.email}): {payload.complaint}"),
-            )
-
             connection.commit()
-            return {
-                "status": "checked_in",
-                "visitId": visit_id,
-                "queueEntryId": queue_entry_id,
-                "sequence": sequence,
-                "doctorId": payload.doctor_id,
-                "rollNumber": payload.roll_number,
-                "studentName": student["full_name"],
-            }
-    except HTTPException:
-        connection.rollback()
-        raise
-    except Exception as exc:
-        connection.rollback()
-        logger.error("Queue checkin transaction failed: %s", exc)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to check in student to queue: {exc}",
-        )
-    finally:
-        connection.close()
+            return result
+        except ql.ResourceNotFoundError as exc:
+            connection.rollback()
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+        except ql.ActiveVisitConflictError as exc:
+            connection.rollback()
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
+        except ql.DoctorUnavailableError as exc:
+            connection.rollback()
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
+        except ql.InvalidTransitionError as exc:
+            connection.rollback()
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+        except Exception as exc:
+            connection.rollback()
+            # If MySQL deadlock (code 1213), retry transparently
+            is_deadlock = hasattr(exc, "args") and len(exc.args) > 0 and exc.args[0] == 1213
+            if is_deadlock and attempt < max_retries - 1:
+                import time
+                time.sleep(0.05 * (attempt + 1))
+                continue
+            logger.error("Queue checkin transaction failed: %s", exc, exc_info=True)
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to check in student to queue: {exc}",
+            )
+        finally:
+            connection.close()
 
 
 @router.post("/{visit_id}/dispense")
@@ -165,50 +111,24 @@ def dispense_medicine(
     """
     connection = get_db_connection()
     try:
-        with connection.cursor() as cursor:
-            cursor.execute(
-                "SELECT visit_id, roll_number, status FROM VISIT WHERE visit_id = %s",
-                (visit_id,),
-            )
-            visit = cursor.fetchone()
-            if not visit:
-                raise HTTPException(status_code=404, detail=f"Visit #{visit_id} not found.")
-
-            if visit["status"] == "COMPLETED":
-                return {"status": "already_completed", "visitId": visit_id}
-
-            # Update visit to COMPLETED
-            cursor.execute(
-                """
-                UPDATE VISIT
-                SET status = 'COMPLETED', completed_at = NOW()
-                WHERE visit_id = %s
-                """,
-                (visit_id,),
-            )
-
-            # Record audit event with receptionist user_id from token
-            remarks = payload.remarks if payload and payload.remarks else "Medicines dispensed at front desk"
-            cursor.execute(
-                """
-                INSERT INTO VISIT_EVENT (visit_id, event_type, performed_by_user_id, notes)
-                VALUES (%s, 'DISPENSING_COMPLETED', %s, %s)
-                """,
-                (visit_id, receptionist.user_id, remarks),
-            )
-
-            connection.commit()
-            return {
-                "status": "dispensed",
-                "visitId": visit_id,
-                "rollNumber": visit["roll_number"],
-            }
-    except HTTPException:
+        remarks = payload.remarks if payload and payload.remarks else "Medicines dispensed at front desk"
+        result = ql.dispense_medication(
+            conn=connection,
+            visit_id=visit_id,
+            performed_by_user_id=receptionist.user_id,
+            remarks=remarks,
+        )
+        connection.commit()
+        return result
+    except ql.ResourceNotFoundError as exc:
         connection.rollback()
-        raise
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+    except ql.InvalidTransitionError as exc:
+        connection.rollback()
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
     except Exception as exc:
         connection.rollback()
-        logger.error("Dispense transaction failed: %s", exc)
+        logger.error("Dispense transaction failed: %s", exc, exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to record dispensing for visit #{visit_id}: {exc}",
@@ -217,7 +137,109 @@ def dispense_medicine(
         connection.close()
 
 
+@router.post("/{visit_id}/requeue")
+def requeue_visit(
+    visit_id: int,
+    payload: RequeueRequest,
+    receptionist: CurrentReceptionist = Depends(get_current_receptionist),
+):
+    """
+    Receptionist-only operation: Requeues a NO_SHOW visit into an active doctor queue.
+    """
+    connection = get_db_connection()
+    try:
+        result = ql.requeue_patient(
+            conn=connection,
+            visit_id=visit_id,
+            target_doctor_id=payload.target_doctor_id,
+            performed_by_user_id=receptionist.user_id,
+            reason=payload.reason or "Patient arrived after no-show",
+        )
+        connection.commit()
+        return result
+    except ql.ResourceNotFoundError as exc:
+        connection.rollback()
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+    except ql.InvalidTransitionError as exc:
+        connection.rollback()
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
+    except Exception as exc:
+        connection.rollback()
+        logger.error("Requeue transaction failed: %s", exc, exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to requeue visit: {exc}")
+    finally:
+        connection.close()
+
+
 # ── Staff-Only Endpoints (Doctors & Receptionists) ──────────────────────
+
+@router.post("/{visit_id}/redirect")
+def redirect_visit(
+    visit_id: int,
+    payload: RedirectRequest,
+    staff: CurrentUser = Depends(get_current_staff),
+):
+    """
+    Staff operation: Redirects an active visit to another doctor's line.
+    """
+    connection = get_db_connection()
+    try:
+        result = ql.redirect_patient(
+            conn=connection,
+            visit_id=visit_id,
+            target_doctor_id=payload.target_doctor_id,
+            performed_by_user_id=staff.user_id,
+            reason=payload.reason or "Clinical referral",
+        )
+        connection.commit()
+        return result
+    except ql.ResourceNotFoundError as exc:
+        connection.rollback()
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+    except ql.InvalidTransitionError as exc:
+        connection.rollback()
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
+    except Exception as exc:
+        connection.rollback()
+        logger.error("Redirect transaction failed: %s", exc, exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to redirect visit: {exc}")
+    finally:
+        connection.close()
+
+
+@router.post("/{visit_id}/cancel")
+def cancel_visit(
+    visit_id: int,
+    payload: Optional[ActionReasonRequest] = None,
+    staff: CurrentUser = Depends(get_current_staff),
+):
+    """
+    Staff operation: Cancels an active or waiting visit.
+    """
+    connection = get_db_connection()
+    try:
+        reason = payload.reason if payload and payload.reason else "Cancelled by front desk"
+        result = ql.cancel_visit(
+            conn=connection,
+            visit_id=visit_id,
+            performed_by_user_id=staff.user_id,
+            cancel_reason=reason,
+        )
+        connection.commit()
+        return result
+    except ql.ResourceNotFoundError as exc:
+        connection.rollback()
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+    except ql.InvalidTransitionError as exc:
+        connection.rollback()
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
+    except Exception as exc:
+        connection.rollback()
+        logger.error("Cancel transaction failed: %s", exc, exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to cancel visit: {exc}")
+    finally:
+        connection.close()
+
 
 @router.get("/live")
 def get_live_queue(
@@ -277,4 +299,3 @@ def get_live_queue(
             ]
     finally:
         connection.close()
-

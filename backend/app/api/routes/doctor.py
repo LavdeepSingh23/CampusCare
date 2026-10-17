@@ -12,6 +12,7 @@ from app.core.deps import (
 )
 from app.core.util import display_name_from_email
 from app.schemas.doctor import CompleteConsultationRequest, UpdateValueRequest
+from app.services import queue_lifecycle as ql
 
 router = APIRouter(tags=["doctor"])
 
@@ -158,6 +159,10 @@ def get_doctor_profile(doctor_id: int, current: CurrentDoctor = Depends(get_curr
 
 @router.get("/doctor/{doctor_id}/queue")
 def get_doctor_queue(doctor_id: int, current: CurrentDoctor = Depends(get_current_doctor)):
+    """
+    Doctor-only endpoint: Returns the doctor's queue (both the patient currently in consultation and waiting patients).
+    Enforces that doctors can only view their own queue line.
+    """
     require_own_doctor_id(doctor_id, current)
 
     connection = get_db_connection()
@@ -165,13 +170,13 @@ def get_doctor_queue(doctor_id: int, current: CurrentDoctor = Depends(get_curren
         with connection.cursor() as cursor:
             cursor.execute(
                 """
-                SELECT qe.queue_entry_id, qe.entered_at, v.visit_id, v.roll_number,
-                       st.full_name, st.date_of_birth, st.blood_group
+                SELECT qe.queue_entry_id, qe.entered_at, qe.called_at, qe.status, qe.queue_sequence,
+                       v.visit_id, v.roll_number, st.full_name, st.date_of_birth, st.blood_group
                 FROM QUEUE_ENTRY qe
                 JOIN VISIT v ON v.visit_id = qe.visit_id
                 JOIN STUDENT st ON st.roll_number = v.roll_number
-                WHERE qe.doctor_id = %s AND qe.status = 'WAITING'
-                ORDER BY qe.queue_sequence ASC
+                WHERE qe.doctor_id = %s AND qe.status IN ('IN_CONSULTATION', 'WAITING')
+                ORDER BY FIELD(qe.status, 'IN_CONSULTATION', 'WAITING'), qe.queue_sequence ASC
                 """,
                 (doctor_id,),
             )
@@ -185,12 +190,63 @@ def get_doctor_queue(doctor_id: int, current: CurrentDoctor = Depends(get_curren
             "visitId": r["visit_id"],
             "rollNumber": r["roll_number"],
             "name": r["full_name"],
+            "status": "In Consultation" if r["status"] == "IN_CONSULTATION" else "Waiting",
+            "statusCode": r["status"],
+            "queueNo": r["queue_sequence"],
             "waitingSince": r["entered_at"].strftime("%I:%M %p") if r["entered_at"] else None,
+            "calledAt": r["called_at"].strftime("%I:%M %p") if r.get("called_at") else None,
             "age": _calculate_age(r["date_of_birth"]),
             "bloodGroup": r["blood_group"],
         }
         for r in rows
     ]
+
+
+@router.get("/doctor/{doctor_id}/active-consultation")
+def get_active_consultation(
+    doctor_id: int,
+    current: CurrentDoctor = Depends(get_current_doctor),
+):
+    """
+    Doctor-only endpoint: Returns the single student currently in active consultation with this doctor.
+    Returns active=False when no consultation is in progress.
+    """
+    require_own_doctor_id(doctor_id, current)
+
+    connection = get_db_connection()
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT qe.queue_entry_id, qe.called_at, qe.queue_sequence,
+                       v.visit_id, v.roll_number, st.full_name, st.date_of_birth, st.blood_group
+                FROM QUEUE_ENTRY qe
+                JOIN VISIT v ON v.visit_id = qe.visit_id
+                JOIN STUDENT st ON st.roll_number = v.roll_number
+                WHERE qe.doctor_id = %s AND qe.status = 'IN_CONSULTATION'
+                LIMIT 1
+                """,
+                (doctor_id,),
+            )
+            row = cursor.fetchone()
+            if not row:
+                return {"active": False, "patient": None}
+
+            return {
+                "active": True,
+                "patient": {
+                    "queueEntryId": row["queue_entry_id"],
+                    "visitId": row["visit_id"],
+                    "rollNumber": row["roll_number"],
+                    "name": row["full_name"],
+                    "queueNo": row["queue_sequence"],
+                    "calledAt": row["called_at"].strftime("%I:%M %p") if row.get("called_at") else None,
+                    "age": _calculate_age(row["date_of_birth"]),
+                    "bloodGroup": row["blood_group"],
+                },
+            }
+    finally:
+        connection.close()
 
 
 @router.get("/doctor/{doctor_id}/stats")
@@ -482,87 +538,16 @@ def call_next_student(
     require_own_doctor_id(doctor_id, current)
     connection = get_db_connection()
     try:
-        with connection.cursor() as cursor:
-            # Check if doctor already has an active consultation
-            cursor.execute(
-                """
-                SELECT qe.queue_entry_id, v.visit_id, v.roll_number, st.full_name
-                FROM QUEUE_ENTRY qe
-                JOIN VISIT v ON v.visit_id = qe.visit_id
-                JOIN STUDENT st ON st.roll_number = v.roll_number
-                WHERE qe.doctor_id = %s AND qe.status = 'IN_CONSULTATION'
-                LIMIT 1
-                """,
-                (doctor_id,),
-            )
-            in_consult = cursor.fetchone()
-            if in_consult:
-                return {
-                    "status": "already_in_consultation",
-                    "queueEntryId": in_consult["queue_entry_id"],
-                    "visitId": in_consult["visit_id"],
-                    "rollNumber": in_consult["roll_number"],
-                    "name": in_consult["full_name"],
-                }
-
-            # Fetch next waiting patient in sequence
-            cursor.execute(
-                """
-                SELECT qe.queue_entry_id, qe.queue_sequence, v.visit_id, v.roll_number, st.full_name
-                FROM QUEUE_ENTRY qe
-                JOIN VISIT v ON v.visit_id = qe.visit_id
-                JOIN STUDENT st ON st.roll_number = v.roll_number
-                WHERE qe.doctor_id = %s AND qe.status = 'WAITING'
-                ORDER BY qe.queue_sequence ASC, qe.entered_at ASC
-                LIMIT 1
-                """,
-                (doctor_id,),
-            )
-            next_patient = cursor.fetchone()
-            if not next_patient:
-                raise HTTPException(status_code=404, detail="No patients currently waiting in queue.")
-
-            queue_entry_id = next_patient["queue_entry_id"]
-            visit_id = next_patient["visit_id"]
-
-            cursor.execute(
-                """
-                UPDATE QUEUE_ENTRY
-                SET status = 'IN_CONSULTATION', called_at = NOW()
-                WHERE queue_entry_id = %s
-                """,
-                (queue_entry_id,),
-            )
-
-            cursor.execute(
-                """
-                UPDATE VISIT
-                SET status = 'IN_CONSULTATION', consultation_started_at = NOW()
-                WHERE visit_id = %s
-                """,
-                (visit_id,),
-            )
-
-            cursor.execute(
-                """
-                INSERT INTO VISIT_EVENT (visit_id, event_type, performed_by_user_id, notes)
-                VALUES (%s, 'CONSULTATION_STARTED', %s, %s)
-                """,
-                (visit_id, current.user_id, f"Called by Doctor #{doctor_id}"),
-            )
-
-            connection.commit()
-            return {
-                "status": "called",
-                "queueEntryId": queue_entry_id,
-                "visitId": visit_id,
-                "rollNumber": next_patient["roll_number"],
-                "name": next_patient["full_name"],
-                "sequence": next_patient["queue_sequence"],
-            }
-    except HTTPException:
+        res = ql.call_next_patient(
+            conn=connection,
+            doctor_id=doctor_id,
+            performed_by_user_id=current.user_id,
+        )
+        connection.commit()
+        return res
+    except ql.ResourceNotFoundError as exc:
         connection.rollback()
-        raise
+        raise HTTPException(status_code=404, detail=str(exc))
     except Exception as exc:
         connection.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to call next patient: {exc}")
@@ -579,107 +564,73 @@ def complete_consultation(
     current: CurrentDoctor = Depends(get_current_doctor),
 ):
     require_own_doctor_id(doctor_id, current)
-
     connection = get_db_connection()
     try:
-        with connection.cursor() as cursor:
-            cursor.execute(
-                """
-                SELECT qe.queue_entry_id, v.visit_id
-                FROM QUEUE_ENTRY qe
-                JOIN VISIT v ON v.visit_id = qe.visit_id
-                WHERE qe.doctor_id = %s AND v.roll_number = %s
-                  AND qe.status IN ('WAITING', 'IN_CONSULTATION')
-                ORDER BY qe.entered_at DESC
-                LIMIT 1
-                """,
-                (doctor_id, payload.roll_number),
-            )
-            active = cursor.fetchone()
-            if not active:
-                raise HTTPException(
-                    status_code=404,
-                    detail="No active visit found for this patient with this doctor",
-                )
-            visit_id = active["visit_id"]
-            queue_entry_id = active["queue_entry_id"]
-
-            cursor.execute(
-                """
-                INSERT INTO CONSULTATION (visit_id, doctor_id, reason_for_visit, diagnosis, clinical_notes)
-                VALUES (%s, %s, %s, %s, %s)
-                """,
-                (visit_id, doctor_id, payload.diagnosis, payload.diagnosis, payload.general or None),
-            )
-            consultation_id = cursor.lastrowid
-
-            cursor.execute(
-                """
-                INSERT INTO PRESCRIPTION (consultation_id, general_instructions, finalized_at)
-                VALUES (%s, %s, NOW())
-                """,
-                (consultation_id, payload.general or None),
-            )
-            prescription_id = cursor.lastrowid
-
-            for med in payload.medicines:
-                name = (med.name or "").strip()
-                if not name:
-                    continue
-                cursor.execute(
-                    """
-                    INSERT INTO PRESCRIPTION_ITEM (prescription_id, medicine_name, special_instructions)
-                    VALUES (%s, %s, %s)
-                    """,
-                    (prescription_id, name, med.note or None),
-                )
-                prescription_item_id = cursor.lastrowid
-
-                for flag, time_of_day in ((med.morning, "MORNING"), (med.evening, "EVENING"), (med.night, "NIGHT")):
-                    if flag:
-                        cursor.execute(
-                            """
-                            INSERT INTO PRESCRIPTION_DOSE (prescription_item_id, time_of_day, dose_quantity, dose_unit)
-                            VALUES (%s, %s, %s, %s)
-                            """,
-                            (prescription_item_id, time_of_day, 1, "dose"),
-                        )
-
-            cursor.execute(
-                """
-                UPDATE QUEUE_ENTRY
-                SET status = 'COMPLETED', exited_at = NOW(), exit_reason = 'COMPLETED'
-                WHERE queue_entry_id = %s
-                """,
-                (queue_entry_id,),
-            )
-
-            cursor.execute(
-                """
-                UPDATE VISIT
-                SET status = 'WAITING_FOR_MEDICINE', consultation_completed_at = NOW()
-                WHERE visit_id = %s
-                """,
-                (visit_id,),
-            )
-
-            cursor.execute(
-                """
-                INSERT INTO VISIT_EVENT (visit_id, event_type, performed_by_user_id, notes)
-                VALUES (%s, 'CONSULTATION_COMPLETED', %s, NULL)
-                """,
-                (visit_id, current.user_id),
-            )
-
-            connection.commit()
-    except HTTPException:
+        meds_data = [
+            {
+                "name": med.name,
+                "note": med.note,
+                "morning": med.morning,
+                "afternoon": getattr(med, "afternoon", False),
+                "evening": med.evening,
+                "night": med.night,
+            }
+            for med in payload.medicines
+        ]
+        res = ql.complete_consultation(
+            conn=connection,
+            doctor_id=doctor_id,
+            roll_number=payload.roll_number,
+            diagnosis=payload.diagnosis,
+            clinical_notes=payload.general,
+            general_instructions=payload.general,
+            medicines=meds_data,
+            performed_by_user_id=current.user_id,
+        )
+        connection.commit()
+        return res
+    except ql.ResourceNotFoundError as exc:
         connection.rollback()
-        raise
-    except Exception:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except ql.InvalidTransitionError as exc:
         connection.rollback()
-        raise HTTPException(status_code=500, detail="Failed to save consultation")
+        raise HTTPException(status_code=409, detail=str(exc))
+    except Exception as exc:
+        connection.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to save consultation: {exc}")
     finally:
         connection.close()
 
-    return {"status": "ok", "visitId": visit_id, "consultationId": consultation_id}
+
+# ── mark no-show ────────────────────────────────────────────────────────
+
+@router.post("/doctor/{doctor_id}/no-show/{visit_id}")
+def mark_doctor_patient_no_show(
+    doctor_id: int,
+    visit_id: int,
+    current: CurrentDoctor = Depends(get_current_doctor),
+):
+    require_own_doctor_id(doctor_id, current)
+    connection = get_db_connection()
+    try:
+        res = ql.mark_no_show(
+            conn=connection,
+            visit_id=visit_id,
+            doctor_id=doctor_id,
+            performed_by_user_id=current.user_id,
+        )
+        connection.commit()
+        return res
+    except ql.ResourceNotFoundError as exc:
+        connection.rollback()
+        raise HTTPException(status_code=404, detail=str(exc))
+    except ql.InvalidTransitionError as exc:
+        connection.rollback()
+        raise HTTPException(status_code=409, detail=str(exc))
+    except Exception as exc:
+        connection.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to mark no-show: {exc}")
+    finally:
+        connection.close()
+
 
