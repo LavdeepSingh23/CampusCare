@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { useQueue, DOCTORS, DIRECTORY, dispense, logAction, resetDemo } from "../../context/queueStore";
-import { lookupStudent, fetchReceptionDoctors, receptionCheckIn } from "../../api";
+import { lookupStudent, fetchReceptionDoctors, receptionCheckIn, fetchReceptionQueue } from "../../api";
 import { useAuth } from "../../context/AuthContext";
 import { Sidebar, SidebarBody, SidebarLink } from "../ui/sidebar";
 import campusCareLogo from "../../assets/campuscare-logo.png";
@@ -22,6 +22,10 @@ import {
   Check,
   AlertTriangle,
   CheckCircle,
+  RotateCw,
+  Clock,
+  Activity as ActivityIcon,
+  AlertCircle,
 } from "lucide-react";
  
 /* CampusCare – Receptionist Desk
@@ -80,13 +84,37 @@ export default function ReceptionDashboard({ onLogout, initialPage = "reception"
     }
   };
  
+  const [liveQueue, setLiveQueue] = useState([]);
+  const [liveDoctors, setLiveDoctors] = useState([]);
+
+  useEffect(() => {
+    const fetchLive = () => {
+      fetchReceptionQueue()
+        .then((q) => {
+          if (Array.isArray(q)) setLiveQueue(q);
+        })
+        .catch(() => {});
+      fetchReceptionDoctors()
+        .then((d) => {
+          if (Array.isArray(d)) setLiveDoctors(d);
+        })
+        .catch(() => {});
+    };
+    fetchLive();
+    const timer = setInterval(fetchLive, 4000);
+    return () => clearInterval(timer);
+  }, []);
+
   const active = visits.filter((v) => v.status === "waiting" || v.status === "cabin");
   const waiting = visits.filter((v) => v.status === "waiting");
   const inConsult = visits.filter((v) => v.status === "cabin");
   const forMedicine = visits.filter((v) => v.status === "done").sort((a, b) => a.doneAt - b.doneAt);
   const completed = visits.filter((v) => v.status === "dispensed").sort((a, b) => b.dispensedAt - a.dispensedAt);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const counts = { queue: active.length, dispensing: forMedicine.length };
+  const counts = {
+    queue: liveQueue.length > 0 ? liveQueue.length : active.length,
+    dispensing: forMedicine.length,
+  };
  
   return (
     <div className="flex flex-col md:flex-row bg-[#f4f5f6] w-full min-h-screen text-slate-800 font-sans selection:bg-teal-500 selection:text-white">
@@ -174,9 +202,9 @@ export default function ReceptionDashboard({ onLogout, initialPage = "reception"
         </div>
  
         <div className="flex-1">
-          {page === "reception" && <Home {...{ now, visits, active, waiting, inConsult, forMedicine, log, setPage }} />}
+          {page === "reception" && <Home {...{ now, visits, active, waiting, inConsult, forMedicine, log, setPage, liveQueue, liveDoctors }} />}
           {page === "checkin" && <CheckIn {...{ flash, setPage }} />}
-          {page === "queue" && <LiveQueue {...{ visits }} />}
+          {page === "queue" && <LiveQueue setPage={setPage} />}
           {page === "students" && <Students {...{ visits }} />}
           {page === "dispensing" && <Dispensing {...{ forMedicine, flash }} />}
           {page === "completed" && <Completed {...{ completed }} />}
@@ -257,11 +285,18 @@ const PageHead = ({ title, sub, badge, right }) => (
 );
  
 /* ====================== 1. RECEPTION (Home Overview) ====================== */
-function Home({ now, visits, waiting, inConsult, forMedicine, log, setPage }) {
+function Home({ now, visits, waiting, inConsult, forMedicine, log, setPage, liveQueue = [], liveDoctors = [] }) {
   const h = now.getHours();
   const greet = h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening";
   const completedToday = visits.filter((v) => v.status === "dispensed");
- 
+
+  const realWaiting = liveQueue.length > 0
+    ? liveQueue.filter((v) => (v.statusCode || v.status || "").toUpperCase() === "WAITING")
+    : waiting;
+  const realInConsult = liveQueue.length > 0
+    ? liveQueue.filter((v) => (v.statusCode || v.status || "").toUpperCase() === "IN_CONSULTATION")
+    : inConsult;
+
   return (
     <div className="space-y-6">
       <div className="bg-gradient-to-r from-teal-50/80 via-white to-slate-50/50 border border-teal-100/90 rounded-2xl p-5 sm:p-6 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -280,7 +315,7 @@ function Home({ now, visits, waiting, inConsult, forMedicine, log, setPage }) {
             {now.toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric" })} • OPD Station 1 active
           </p>
         </div>
- 
+
         <div className="flex items-center gap-2.5 flex-wrap">
           <button
             onClick={() => setPage("checkin")}
@@ -298,7 +333,7 @@ function Home({ now, visits, waiting, inConsult, forMedicine, log, setPage }) {
           </button>
         </div>
       </div>
- 
+
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="p-4 sm:p-5 bg-white rounded-2xl border border-slate-200/80 shadow-2xs hover:border-teal-300 transition-all flex flex-col justify-between">
           <div className="flex items-center justify-between">
@@ -306,22 +341,22 @@ function Home({ now, visits, waiting, inConsult, forMedicine, log, setPage }) {
             <div className="p-2 rounded-xl bg-amber-50 text-amber-700 border border-amber-100"><Users className="w-4 h-4" /></div>
           </div>
           <div className="mt-3">
-            <span className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">{waiting.length}</span>
+            <span className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">{realWaiting.length}</span>
             <span className="text-[11px] text-slate-400 block mt-0.5">~5 min avg wait time</span>
           </div>
         </div>
- 
+
         <div className="p-4 sm:p-5 bg-white rounded-2xl border border-slate-200/80 shadow-2xs hover:border-teal-300 transition-all flex flex-col justify-between">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-slate-500">In Consultation</span>
             <div className="p-2 rounded-xl bg-teal-50 text-teal-700 border border-teal-100"><Stethoscope className="w-4 h-4" /></div>
           </div>
           <div className="mt-3">
-            <span className="text-2xl sm:text-3xl font-extrabold text-teal-800 tracking-tight">{inConsult.length}</span>
+            <span className="text-2xl sm:text-3xl font-extrabold text-teal-800 tracking-tight">{realInConsult.length}</span>
             <span className="text-[11px] text-slate-400 block mt-0.5">Across doctor cabins</span>
           </div>
         </div>
- 
+
         <div className="p-4 sm:p-5 bg-white rounded-2xl border border-slate-200/80 shadow-2xs hover:border-teal-300 transition-all flex flex-col justify-between">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-slate-500">For Medicine</span>
@@ -332,7 +367,7 @@ function Home({ now, visits, waiting, inConsult, forMedicine, log, setPage }) {
             <span className="text-[11px] text-slate-400 block mt-0.5">Ready for pharmacy</span>
           </div>
         </div>
- 
+
         <div className="p-4 sm:p-5 bg-white rounded-2xl border border-slate-200/80 shadow-2xs hover:border-teal-300 transition-all flex flex-col justify-between">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-slate-500">Completed Today</span>
@@ -344,7 +379,7 @@ function Home({ now, visits, waiting, inConsult, forMedicine, log, setPage }) {
           </div>
         </div>
       </div>
- 
+
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         <div className="lg:col-span-7 bg-white rounded-2xl border border-slate-200/90 p-5 shadow-xs space-y-4">
           <div className="flex items-center justify-between pb-3 border-b border-slate-100">
@@ -360,15 +395,20 @@ function Home({ now, visits, waiting, inConsult, forMedicine, log, setPage }) {
               <ArrowRight className="w-3.5 h-3.5" />
             </button>
           </div>
- 
+
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-            {DOCTORS.map((d) => {
-              const q = visits.filter((v) => v.doctorId === d.id && (v.status === "waiting" || v.status === "cabin")).length;
-              const busy = visits.some((v) => v.doctorId === d.id && v.status === "cabin");
- 
+            {(liveDoctors.length > 0 ? liveDoctors : DOCTORS).map((d) => {
+              const docId = d.doctorId ?? d.id;
+              const q = liveQueue.length > 0
+                ? liveQueue.filter((v) => (v.doctorId ?? v.doctor_id) === docId && ((v.statusCode || v.status || "").toUpperCase() === "WAITING")).length
+                : visits.filter((v) => v.doctorId === docId && (v.status === "waiting" || v.status === "cabin")).length;
+              const busy = liveQueue.length > 0
+                ? liveQueue.some((v) => (v.doctorId ?? v.doctor_id) === docId && ((v.statusCode || v.status || "").toUpperCase() === "IN_CONSULTATION"))
+                : visits.some((v) => v.doctorId === docId && v.status === "cabin");
+
               return (
                 <div
-                  key={d.id}
+                  key={docId}
                   className="p-4 rounded-xl border border-slate-200/80 bg-slate-50/60 hover:bg-white hover:border-teal-300 hover:shadow-xs transition-all flex flex-col justify-between gap-3"
                 >
                   <div className="flex items-start justify-between gap-2">
@@ -376,14 +416,14 @@ function Home({ now, visits, waiting, inConsult, forMedicine, log, setPage }) {
                       <Avatar name={d.name} size="sm" className="bg-slate-800 text-white" />
                       <div>
                         <h4 className="text-xs font-bold text-slate-900">{d.name}</h4>
-                        <p className="text-[11px] text-slate-500">{d.role} • {d.room}</p>
+                        <p className="text-[11px] text-slate-500">{d.role || d.specialty || "Physician"} • {d.room || "Cabin"}</p>
                       </div>
                     </div>
                     <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${busy ? "bg-amber-50 text-amber-700 border-amber-200" : "bg-emerald-50 text-emerald-700 border-emerald-200"}`}>
                       {busy ? "In Cabin" : "Available"}
                     </span>
                   </div>
- 
+
                   <div className="pt-2 border-t border-slate-200/60 flex items-center justify-between text-xs">
                     <div>
                       <span className="text-[11px] text-slate-500">Queue: </span>
@@ -402,7 +442,7 @@ function Home({ now, visits, waiting, inConsult, forMedicine, log, setPage }) {
             })}
           </div>
         </div>
- 
+
         <div className="lg:col-span-5 bg-white rounded-2xl border border-slate-200/90 p-5 shadow-xs flex flex-col justify-between space-y-4">
           <div>
             <div className="flex items-center justify-between pb-3 border-b border-slate-100">
@@ -482,50 +522,91 @@ function CheckIn({ flash, setPage }) {
   const [reason, setReason] = useState("");
   const [q, setQ] = useState("");
   const [notFound, setNotFound] = useState(false);
+  const [searchError, setSearchError] = useState(null);
+  const [checkinError, setCheckinError] = useState(null);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState(null);
   const via = "MANUAL";
- 
+
   const pickDefault = (list) => list.find((x) => x.available)?.doctorId ?? null;
- 
+
   useEffect(() => {
     fetchReceptionDoctors()
-      .then((d) => { setDoctors(d); setDoctorId(pickDefault(d)); })
-      .catch(() => flash("Could not load doctors"));
+      .then((d) => {
+        if (Array.isArray(d)) {
+          setDoctors(d);
+          setDoctorId(pickDefault(d));
+        }
+      })
+      .catch(() => flash("Could not load doctor directory"));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
- 
+
   const search = async (e) => {
     e?.preventDefault();
     const roll = q.trim();
     if (!roll) return;
     setBusy(true);
     setNotFound(false);
+    setSearchError(null);
+    setCheckinError(null);
     try {
-      const s = await lookupStudent(roll); // 404 => "Record not found"
+      const s = await lookupStudent(roll);
       setStudent(s);
       setStep("identified");
     } catch (err) {
-      if (String(err.message).includes("404")) setNotFound(true);
-      else flash(err.message);
+      if (err.status === 404 || String(err.message).includes("404")) {
+        setNotFound(true);
+      } else {
+        setSearchError(err.detail || err.message || "Failed to retrieve student record");
+      }
     } finally {
       setBusy(false);
     }
   };
- 
+
   const confirm = async () => {
+    if (!student || !doctorId) return;
     setBusy(true);
+    setCheckinError(null);
     try {
-      const r = await receptionCheckIn({ rollNumber: student.rollNumber, doctorId, complaint: reason, via });
+      const r = await receptionCheckIn({
+        roll_number: student.rollNumber,
+        doctor_id: doctorId,
+        complaint: reason.trim() || "General Consultation",
+        via,
+      });
       setResult(r);
       setStep("done");
     } catch (err) {
-      flash(err.message); // 409 => already in queue / doctor unavailable
+      const msg = err.detail || err.message || "Failed to check in student";
+      if (err.status === 409 || msg.toLowerCase().includes("active visit")) {
+        setCheckinError({
+          title: "Active Visit Conflict (409)",
+          message: "Student already has an active visit in progress. Duplicate active visits are not permitted.",
+        });
+      } else if (err.status === 409 || msg.toLowerCase().includes("unavailable")) {
+        setCheckinError({
+          title: "Doctor Unavailable (409)",
+          message: "The selected doctor is currently marked unavailable today. Please select another doctor cabin.",
+        });
+      } else if (err.status === 422) {
+        setCheckinError({
+          title: "Validation Error (422)",
+          message: "Missing roll number or doctor assignment. Please verify your selection.",
+        });
+      } else {
+        setCheckinError({
+          title: "Check-in Error",
+          message: msg.replace(/^API \d+:\s*/, ""),
+        });
+      }
+      flash(msg.replace(/^API \d+:\s*/, ""));
     } finally {
       setBusy(false);
     }
   };
- 
+
   const reset = () => {
     setStep("scan");
     setStudent(null);
@@ -533,20 +614,22 @@ function CheckIn({ flash, setPage }) {
     setResult(null);
     setQ("");
     setNotFound(false);
+    setSearchError(null);
+    setCheckinError(null);
     setDoctorId(pickDefault(doctors));
   };
- 
-  const doctorName = (id) => doctors.find((d) => d.doctorId === id)?.name || "—";
- 
+
+  const doctorName = (id) => doctors.find((d) => d.doctorId === id)?.name || "Assigned Doctor";
+
   const QUICK_SYMPTOMS = ["Fever", "Cold & Cough", "Severe Headache", "Sports Injury", "Hostel Clearance", "Acidity"];
- 
+
   return (
     <div className="max-w-xl mx-auto py-2">
       <PageHead
         title="Student Check-in"
         sub="Identify student and assign to real-time doctor consultation queue"
       />
- 
+
       {/* ── STEP 1: SEARCH BY ROLL NUMBER ── */}
       {step === "scan" && (
         <div className="bg-white rounded-3xl border border-slate-200/90 p-6 sm:p-8 shadow-xs space-y-6">
@@ -554,12 +637,12 @@ function CheckIn({ flash, setPage }) {
             <div className="h-20 w-20 rounded-full bg-teal-50 border-2 border-dashed border-teal-400/80 flex items-center justify-center text-teal-700 shadow-sm mx-auto">
               <UserCheck className="w-9 h-9" />
             </div>
-            <h3 className="text-base font-bold text-slate-900 mt-4">Find the student</h3>
+            <h3 className="text-base font-bold text-slate-900 mt-4">Find the Student</h3>
             <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
-              Enter the student's roll number to verify their record and start a check-in.
+              Enter the student's university roll number to verify their profile and issue a live OPD queue token.
             </p>
           </div>
- 
+
           <form onSubmit={search} className="space-y-3">
             <label className="text-xs font-semibold text-slate-700 block">Search by Roll Number</label>
             <div className="flex gap-2">
@@ -568,24 +651,42 @@ function CheckIn({ flash, setPage }) {
                 <input
                   type="text"
                   value={q}
-                  onChange={(e) => { setQ(e.target.value); setNotFound(false); }}
-                  placeholder="e.g. 102403112"
-                  className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 bg-slate-50/60 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-teal-500 focus:bg-white transition-all"
+                  onChange={(e) => {
+                    setQ(e.target.value);
+                    setNotFound(false);
+                    setSearchError(null);
+                  }}
+                  placeholder="e.g. CS21B045 or 102403112"
+                  className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 bg-slate-50/60 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-teal-500 focus:bg-white transition-all font-mono"
                 />
               </div>
               <button
                 type="submit"
                 disabled={busy || !q.trim()}
-                className="px-4 rounded-xl bg-teal-700 hover:bg-teal-800 disabled:bg-slate-300 text-white text-xs font-semibold cursor-pointer transition-colors"
+                className="px-5 rounded-xl bg-teal-700 hover:bg-teal-800 disabled:bg-slate-300 text-white text-xs font-semibold cursor-pointer transition-colors shadow-2xs flex items-center gap-1.5"
               >
-                {busy ? "Searching…" : "Search"}
+                {busy && <RotateCw className="w-3.5 h-3.5 animate-spin" />}
+                <span>{busy ? "Searching…" : "Search"}</span>
               </button>
             </div>
-            {notFound && <p className="text-xs text-rose-600 text-center py-1">Record not found.</p>}
+
+            {notFound && (
+              <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                <span>Record not found. Please verify the roll number is registered in TIET records.</span>
+              </div>
+            )}
+
+            {searchError && (
+              <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                <span>{searchError}</span>
+              </div>
+            )}
           </form>
         </div>
       )}
- 
+
       {/* ── STEP 2: STUDENT IDENTIFIED ── */}
       {step === "identified" && student && (
         <div className="bg-white rounded-3xl border border-slate-200/90 p-6 sm:p-8 shadow-xs space-y-6">
@@ -594,44 +695,84 @@ function CheckIn({ flash, setPage }) {
               <div className="h-6 w-6 rounded-full bg-teal-700 text-white flex items-center justify-center">
                 <Check className="w-3.5 h-3.5" />
               </div>
-              <span className="text-xs font-bold text-teal-950">Student Identified & Verified</span>
+              <span className="text-xs font-bold text-teal-950">Student Profile Verified</span>
             </div>
-            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-teal-100 text-teal-800">via {via}</span>
+            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-teal-100 text-teal-800">
+              via {via}
+            </span>
           </div>
- 
+
+          {/* Conflict Error Banner */}
+          {checkinError && (
+            <div className="p-4 rounded-2xl bg-rose-50 border border-rose-300 text-rose-900 text-xs flex items-start justify-between gap-3 shadow-2xs">
+              <div className="flex items-start gap-2.5">
+                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                <div>
+                  <strong className="block font-bold">{checkinError.title}</strong>
+                  <p className="mt-0.5 leading-relaxed text-rose-800">{checkinError.message}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setCheckinError(null)}
+                className="text-rose-400 hover:text-rose-700 p-0.5 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+
+          {/* Active Visit Warning Banner */}
+          {student.alreadyInQueue && (
+            <div className="p-4 rounded-2xl bg-amber-50 border border-amber-300 text-amber-900 text-xs flex items-start gap-2.5 shadow-2xs">
+              <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+              <div>
+                <strong className="block font-bold">Active Visit Warning</strong>
+                <p className="mt-0.5 leading-relaxed text-amber-800">
+                  This student is already in queue or consultation (Status:{" "}
+                  <span className="font-mono font-semibold">{student.activeVisitStatus || "WAITING"}</span>).
+                  Submitting a new check-in will be rejected by the server to prevent duplicate active visits.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Student Bio Card */}
           <div className="flex items-start gap-3.5 p-4 rounded-2xl border border-slate-200 bg-slate-50/60">
             <Avatar name={student.name} size="lg" />
             <div className="flex-1 min-w-0">
               <h3 className="text-base font-bold text-slate-900 truncate">{student.name}</h3>
-              <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+              <div className="flex items-center gap-2 mt-1 flex-wrap">
                 <span className="font-mono text-xs font-bold text-teal-800 bg-teal-100/70 px-2 py-0.5 rounded-md">
                   {student.rollNumber}
                 </span>
                 <span className="text-xs text-slate-500">
                   {[student.program, student.dept].filter(Boolean).join(" ")}
-                  {student.semester ? ` • Semester ${student.semester}` : ""}
+                  {student.semester ? ` • Sem ${student.semester}` : ""}
                 </span>
-                {student.blood && (
-                  <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-slate-200 text-slate-700">
-                    {student.blood}
+                {(student.bloodGroup || student.blood) && (
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-200 text-slate-700">
+                    Blood: {student.bloodGroup || student.blood}
                   </span>
                 )}
               </div>
             </div>
           </div>
- 
+
+          {/* Known Allergies Alert */}
           {student.allergies && student.allergies !== "None known" && (
             <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-center gap-2">
               <ShieldAlert className="w-4 h-4 text-rose-600 shrink-0" />
-              <span><strong>Medical Alert:</strong> Known allergies: {student.allergies}</span>
+              <span>
+                <strong>Clinical Allergy Alert:</strong> {student.allergies}
+              </span>
             </div>
           )}
- 
-          {/* Doctor selection (live from backend) */}
+
+          {/* Doctor Selection (from GET /api/reception/doctors) */}
           <div className="space-y-2.5">
-            <label className="text-xs font-bold text-slate-800 block">Assign to Doctor Cabin</label>
+            <label className="text-xs font-bold text-slate-800 block">Assign to Available Doctor Cabin</label>
             {doctors.length === 0 ? (
-              <p className="text-xs text-slate-400 py-2">No doctors loaded.</p>
+              <p className="text-xs text-slate-400 py-2">Loading active doctors…</p>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {doctors.map((d) => {
@@ -654,11 +795,17 @@ function CheckIn({ flash, setPage }) {
                         <Avatar name={d.name} size="sm" className={selected ? "bg-teal-700" : "bg-slate-700"} />
                         <div>
                           <p className="text-xs font-bold text-slate-900">{d.name}</p>
-                          {d.room && <p className="text-[10px] text-slate-500">{d.room}</p>}
+                          <p className="text-[10px] text-teal-800 font-medium">
+                            {d.room ? `${d.room} • ` : ""}{d.specialty || "Physician"}
+                          </p>
                         </div>
                       </div>
-                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">
-                        {d.available ? `Queue: ${d.queueCount ?? 0}` : "Unavailable"}
+                      <span
+                        className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                          d.available ? "bg-slate-100 text-slate-700" : "bg-rose-50 text-rose-700"
+                        }`}
+                      >
+                        {d.available ? `Queue: ${d.queueCount ?? d.waiting ?? 0}` : "Unavailable"}
                       </span>
                     </button>
                   );
@@ -666,7 +813,8 @@ function CheckIn({ flash, setPage }) {
               </div>
             )}
           </div>
- 
+
+          {/* Chief Complaint */}
           <div className="space-y-2">
             <label className="text-xs font-bold text-slate-800 block">Chief Complaint / Reason for Visit</label>
             <div className="flex flex-wrap gap-1.5 mb-2">
@@ -693,7 +841,8 @@ function CheckIn({ flash, setPage }) {
               className="w-full p-3 rounded-xl border border-slate-200 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-teal-500"
             />
           </div>
- 
+
+          {/* Action Buttons */}
           <div className="pt-2 flex items-center justify-end gap-3 border-t border-slate-100">
             <button
               type="button"
@@ -706,55 +855,66 @@ function CheckIn({ flash, setPage }) {
               type="button"
               disabled={!doctorId || busy}
               onClick={confirm}
-              className="px-5 py-2.5 rounded-xl bg-teal-700 hover:bg-teal-800 disabled:bg-slate-300 text-white text-xs font-semibold transition-all shadow-xs cursor-pointer"
+              className="px-5 py-2.5 rounded-xl bg-teal-700 hover:bg-teal-800 disabled:bg-slate-300 text-white text-xs font-semibold transition-all shadow-xs cursor-pointer flex items-center gap-2"
             >
-              {busy ? "Checking in…" : "Confirm Check-in & Queue"}
+              {busy && <RotateCw className="w-3.5 h-3.5 animate-spin" />}
+              <span>{busy ? "Registering Check-in…" : "Confirm Check-in & Queue"}</span>
             </button>
           </div>
         </div>
       )}
- 
+
       {/* ── STEP 3: CONFIRMED / TOKEN ISSUED ── */}
       {step === "done" && result && student && (
         <div className="bg-white rounded-3xl border border-slate-200/90 p-6 sm:p-8 shadow-xs text-center space-y-6">
           <div className="h-16 w-16 rounded-full bg-emerald-50 border-2 border-emerald-200 text-emerald-600 flex items-center justify-center mx-auto shadow-sm">
             <CheckCircle2 className="w-8 h-8" />
           </div>
- 
+
           <div>
             <h3 className="text-xl font-bold text-slate-900">Check-in Complete</h3>
-            <p className="text-xs text-slate-500 mt-1">Student has been registered in the live OPD queue.</p>
+            <p className="text-xs text-slate-500 mt-1">
+              Sequence token generated and student added to doctor's active queue.
+            </p>
           </div>
- 
+
           <div className="p-5 rounded-2xl border border-teal-200 bg-teal-50/50 max-w-sm mx-auto space-y-3">
             <div>
-              <span className="text-[10px] font-bold text-teal-700 uppercase tracking-wider block">OPD Token Number</span>
+              <span className="text-[10px] font-bold text-teal-700 uppercase tracking-wider block">OPD Token Sequence</span>
               <span className="text-4xl font-extrabold text-teal-950 font-mono">
-                #{result.queueNo != null ? pad(result.queueNo) : "—"}
+                #{pad(result.queueNo ?? result.queue_number ?? result.sequence ?? 1)}
               </span>
             </div>
             <div className="border-t border-teal-200/60 pt-3 text-xs space-y-1.5 text-slate-700">
               <div className="flex justify-between">
-                <span className="text-slate-500">Student:</span>
-                <span className="font-bold">{student.name}</span>
+                <span className="text-slate-500">Student Name:</span>
+                <span className="font-bold">{result.name || student.name}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-500">Roll No:</span>
-                <span className="font-mono">{student.rollNumber}</span>
+                <span className="text-slate-500">Roll Number:</span>
+                <span className="font-mono">{result.rollNumber || student.rollNumber}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-slate-500">Assigned Doctor:</span>
-                <span className="font-bold text-teal-900">{doctorName(result.doctorId ?? doctorId)}</span>
+                <span className="font-bold text-teal-900">
+                  {doctorName(result.doctorId ?? result.doctor_id ?? doctorId)}
+                </span>
               </div>
               {result.position != null && (
                 <div className="flex justify-between">
-                  <span className="text-slate-500">Queue Position:</span>
-                  <span className="font-semibold">{result.position} in line</span>
+                  <span className="text-slate-500">Live Queue Position:</span>
+                  <span className="font-semibold text-emerald-800">{result.position} in line</span>
+                </div>
+              )}
+              {result.visitId && (
+                <div className="flex justify-between text-[11px] text-slate-400">
+                  <span>Visit ID:</span>
+                  <span className="font-mono">#{result.visitId}</span>
                 </div>
               )}
             </div>
           </div>
- 
+
           <div className="flex items-center justify-center gap-3 pt-2">
             <button
               onClick={() => setPage("queue")}
@@ -774,127 +934,340 @@ function CheckIn({ flash, setPage }) {
     </div>
   );
 }
- 
-/* ====================== 3. LIVE OPD QUEUE ====================== */
-function LiveQueue({ visits }) {
-  const [, force] = useState(0);
- 
+
+/* ====================== 3. LIVE OPD QUEUE (Single API-Backed Multi-Doctor Queue) ====================== */
+function LiveQueue({ setPage }) {
+  const [queueItems, setQueueItems] = useState([]);
+  const [doctors, setDoctors] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState(null);
+  const [selectedDoctorFilter, setSelectedDoctorFilter] = useState("ALL");
+
+  const loadData = async (isQuiet = false) => {
+    if (!isQuiet) setRefreshing(true);
+    try {
+      const [queueData, docsData] = await Promise.all([
+        fetchReceptionQueue(),
+        fetchReceptionDoctors(),
+      ]);
+      setQueueItems(Array.isArray(queueData) ? queueData : []);
+      if (Array.isArray(docsData)) setDoctors(docsData);
+      setError(null);
+    } catch (err) {
+      console.warn("Failed to load reception queue:", err);
+      if (!isQuiet) {
+        setError(err.detail || err.message || "Could not retrieve live queue from server");
+      }
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  useEffect(() => {
+    loadData();
+    const interval = setInterval(() => {
+      loadData(true);
+    }, 4000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Filtered doctors list based on tab
+  const displayedDoctors = useMemo(() => {
+    if (selectedDoctorFilter === "ALL") return doctors;
+    return doctors.filter((d) => d.doctorId === selectedDoctorFilter);
+  }, [doctors, selectedDoctorFilter]);
+
+  // Overall queue count
+  const totalWaiting = queueItems.filter(
+    (q) => (q.statusCode || q.status || "").toUpperCase() === "WAITING"
+  ).length;
+  const totalInConsult = queueItems.filter(
+    (q) => (q.statusCode || q.status || "").toUpperCase() === "IN_CONSULTATION"
+  ).length;
+
   return (
     <div className="space-y-6">
       <PageHead
         title="Live OPD Queue"
-        sub="Real-time doctor queue line. Triage updates automatically as doctors call students."
+        sub="Multi-doctor real-time consultation line. Polling every 4s with server-synchronized tokens."
         right={
-          <button
-            onClick={() => force((n) => n + 1)}
-            className="flex items-center gap-2 px-3.5 py-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 font-semibold text-xs shadow-2xs transition-colors cursor-pointer"
-          >
-            <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-            <span>Live • Refresh</span>
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => loadData(false)}
+              disabled={refreshing}
+              className="flex items-center gap-2 px-3.5 py-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 font-semibold text-xs shadow-2xs transition-colors cursor-pointer"
+            >
+              <RotateCw className={`w-3.5 h-3.5 text-teal-700 ${refreshing ? "animate-spin" : ""}`} />
+              <span>{refreshing ? "Syncing…" : "Live • Refresh"}</span>
+            </button>
+            {setPage && (
+              <button
+                onClick={() => setPage("checkin")}
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-teal-700 hover:bg-teal-800 text-white font-semibold text-xs shadow-2xs transition-all cursor-pointer"
+              >
+                <UserCheck className="w-3.5 h-3.5" />
+                <span>+ Check-in</span>
+              </button>
+            )}
+          </div>
         }
       />
- 
-      <div className="space-y-6">
-        {DOCTORS.map((d) => {
-          const rows = visits
-            .filter((v) => v.doctorId === d.id && (v.status === "waiting" || v.status === "cabin"))
-            .sort((a, b) => (a.status === "cabin" ? -1 : b.status === "cabin" ? 1 : a.checkedIn - b.checkedIn));
-          const busy = rows.some((r) => r.status === "cabin");
-          const activeConsultation = rows.find((r) => r.status === "cabin");
-          const waitingStudents = rows.filter((r) => r.status === "waiting");
- 
+
+      {/* Filter Tabs across Doctor Cabins */}
+      <div className="flex items-center gap-2 overflow-x-auto pb-1">
+        <button
+          type="button"
+          onClick={() => setSelectedDoctorFilter("ALL")}
+          className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer flex items-center gap-2 border ${
+            selectedDoctorFilter === "ALL"
+              ? "bg-teal-700 text-white border-teal-700 shadow-2xs"
+              : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
+          }`}
+        >
+          <span>All Doctor Cabins</span>
+          <span
+            className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+              selectedDoctorFilter === "ALL" ? "bg-teal-800 text-teal-100" : "bg-slate-100 text-slate-700"
+            }`}
+          >
+            {queueItems.length}
+          </span>
+        </button>
+
+        {doctors.map((d) => {
+          const docQueue = queueItems.filter(
+            (q) => (q.doctorId ?? q.doctor_id) === d.doctorId
+          );
+          const isSelected = selectedDoctorFilter === d.doctorId;
           return (
-            <div key={d.id} className="bg-white rounded-2xl border border-slate-200/90 shadow-xs overflow-hidden">
-              <div className="p-4 sm:p-5 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-50/50">
-                <div className="flex items-center gap-3">
-                  <Avatar name={d.name} size="md" className="bg-slate-800 text-white" />
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h3 className="text-sm sm:text-base font-bold text-slate-900">{d.name}</h3>
-                      <span className="text-[11px] font-semibold px-2 py-0.5 rounded-md bg-white border border-slate-200 text-slate-600">
-                        {d.room}
-                      </span>
-                    </div>
-                    <p className="text-xs text-teal-800 font-medium">{d.role}</p>
-                  </div>
-                </div>
- 
-                <div className="flex items-center gap-2">
-                  <span className={`text-xs font-semibold px-2.5 py-1 rounded-full border ${
-                    busy ? "bg-amber-50 text-amber-700 border-amber-200" : "bg-emerald-50 text-emerald-700 border-emerald-200"
-                  }`}>
-                    {busy ? "Cabin Busy • With Student" : "Cabin Available"}
-                  </span>
-                  <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-slate-100 text-slate-700 border border-slate-200">
-                    Queue: {waitingStudents.length} waiting
-                  </span>
-                </div>
-              </div>
- 
-              {activeConsultation && (
-                <div className="px-5 py-3.5 bg-teal-50/60 border-b border-teal-100 flex items-center justify-between gap-3 text-xs">
-                  <div className="flex items-center gap-2.5">
-                    <div className="p-1.5 rounded-lg bg-teal-700 text-white">
-                      <Stethoscope className="w-3.5 h-3.5" />
-                    </div>
-                    <div>
-                      <span className="text-teal-900 font-bold">Currently in consultation: </span>
-                      <span className="text-slate-900 font-semibold">{activeConsultation.name}</span>
-                      <span className="font-mono text-slate-500 ml-1.5 text-[11px]">({activeConsultation.rollNo})</span>
-                    </div>
-                  </div>
-                  <span className="text-[11px] text-teal-800 font-medium font-mono">
-                    Entered cabin at {hhmm(activeConsultation.cabinAt || activeConsultation.checkedIn)}
-                  </span>
-                </div>
-              )}
- 
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse text-xs">
-                  <thead>
-                    <tr className="border-b border-slate-100 text-slate-400 font-semibold bg-slate-50/30">
-                      <th className="py-3 px-4 w-14">#</th>
-                      <th className="py-3 px-4">Student</th>
-                      <th className="py-3 px-4">Roll Number</th>
-                      <th className="py-3 px-4">Complaint</th>
-                      <th className="py-3 px-4">Check-in</th>
-                      <th className="py-3 px-4">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {rows.map((v, i) => (
-                      <tr
-                        key={v.id}
-                        className={`transition-colors ${v.status === "cabin" ? "bg-teal-50/20 font-medium" : "hover:bg-slate-50/60"}`}
-                      >
-                        <td className="py-3 px-4 font-mono font-bold text-slate-400">{pad(i + 1)}</td>
-                        <td className="py-3 px-4">
-                          <div className="flex items-center gap-2.5">
-                            <Avatar name={v.name} size="sm" />
-                            <span className="font-bold text-slate-800">{v.name}</span>
-                          </div>
-                        </td>
-                        <td className="py-3 px-4 font-mono text-slate-600">{v.rollNo}</td>
-                        <td className="py-3 px-4 text-slate-600 max-w-xs truncate">{v.complaint || "OPD Checkup"}</td>
-                        <td className="py-3 px-4 font-mono text-slate-500">{hhmm(v.checkedIn)}</td>
-                        <td className="py-3 px-4"><Badge s={v.status} /></td>
-                      </tr>
-                    ))}
-                    {rows.length === 0 && (
-                      <tr>
-                        <td colSpan="6" className="py-8 text-center text-slate-400 text-xs">
-                          No active students in this doctor's queue.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+            <button
+              key={d.doctorId}
+              type="button"
+              onClick={() => setSelectedDoctorFilter(d.doctorId)}
+              className={`px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer flex items-center gap-2 border ${
+                isSelected
+                  ? "bg-teal-700 text-white border-teal-700 shadow-2xs"
+                  : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
+              }`}
+            >
+              <span>{d.name}</span>
+              <span
+                className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                  isSelected ? "bg-teal-800 text-teal-100" : "bg-slate-100 text-slate-700"
+                }`}
+              >
+                {docQueue.length}
+              </span>
+            </button>
           );
         })}
       </div>
+
+      {/* Error Banner with Retry */}
+      {error && (
+        <div className="p-4 rounded-2xl bg-rose-50 border border-rose-300 text-rose-900 text-xs flex items-center justify-between gap-3 shadow-2xs">
+          <div className="flex items-center gap-2.5">
+            <AlertCircle className="w-5 h-5 text-rose-600 shrink-0" />
+            <div>
+              <strong className="block font-bold">Queue Sync Error</strong>
+              <p className="mt-0.5 text-rose-800">{error}</p>
+            </div>
+          </div>
+          <button
+            onClick={() => loadData(false)}
+            className="px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-semibold text-xs transition-colors cursor-pointer shrink-0"
+          >
+            Retry Connection
+          </button>
+        </div>
+      )}
+
+      {/* Loading Skeleton */}
+      {loading && queueItems.length === 0 && (
+        <div className="space-y-4">
+          {[1, 2].map((i) => (
+            <div key={i} className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs animate-pulse space-y-4">
+              <div className="h-6 bg-slate-200 rounded w-1/3" />
+              <div className="h-10 bg-slate-100 rounded" />
+              <div className="h-20 bg-slate-50 rounded" />
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Empty Overall Queue */}
+      {!loading && queueItems.length === 0 && !error && (
+        <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs p-12 text-center flex flex-col items-center justify-center space-y-4">
+          <div className="h-16 w-16 rounded-full bg-teal-50 border border-teal-200 text-teal-700 flex items-center justify-center shadow-xs">
+            <Stethoscope className="w-8 h-8" />
+          </div>
+          <div>
+            <h3 className="text-base font-bold text-slate-900">All OPD Queues Clear</h3>
+            <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto">
+              There are currently no students waiting across doctor cabins. New check-ins submitted at the front desk will appear here automatically.
+            </p>
+          </div>
+          <div className="flex items-center gap-3 pt-2">
+            <button
+              onClick={() => loadData(false)}
+              className="px-4 py-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-semibold transition-colors cursor-pointer"
+            >
+              Refresh Queue
+            </button>
+            {setPage && (
+              <button
+                onClick={() => setPage("checkin")}
+                className="px-4 py-2 rounded-xl bg-teal-700 hover:bg-teal-800 text-white text-xs font-semibold transition-all shadow-xs cursor-pointer"
+              >
+                + Check in Student
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Doctor Cabins Sections */}
+      {displayedDoctors.map((d) => {
+        const rows = queueItems.filter(
+          (item) => (item.doctorId ?? item.doctor_id) === d.doctorId
+        );
+        const activeConsultation = rows.find(
+          (r) => (r.statusCode || r.status || "").toUpperCase() === "IN_CONSULTATION"
+        );
+        const waitingStudents = rows.filter(
+          (r) => (r.statusCode || r.status || "").toUpperCase() === "WAITING"
+        );
+        const isBusy = !!activeConsultation;
+
+        return (
+          <div key={d.doctorId} className="bg-white rounded-2xl border border-slate-200/90 shadow-xs overflow-hidden">
+            {/* Cabin Header */}
+            <div className="p-4 sm:p-5 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-50/50">
+              <div className="flex items-center gap-3">
+                <Avatar name={d.name} size="md" className="bg-slate-800 text-white" />
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-sm sm:text-base font-bold text-slate-900">{d.name}</h3>
+                    {d.room && (
+                      <span className="text-[11px] font-semibold px-2 py-0.5 rounded-md bg-white border border-slate-200 text-slate-600">
+                        {d.room}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-teal-800 font-medium">{d.specialty || "Physician"}</p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <span
+                  className={`text-xs font-semibold px-2.5 py-1 rounded-full border ${
+                    isBusy
+                      ? "bg-amber-50 text-amber-700 border-amber-200"
+                      : "bg-emerald-50 text-emerald-700 border-emerald-200"
+                  }`}
+                >
+                  {isBusy ? "Cabin Busy • In Consultation" : "Cabin Available"}
+                </span>
+                <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-slate-100 text-slate-700 border border-slate-200">
+                  Queue: {waitingStudents.length} waiting
+                </span>
+              </div>
+            </div>
+
+            {/* Active Consultation Highlight Banner */}
+            {activeConsultation && (
+              <div className="px-5 py-3.5 bg-teal-50/70 border-b border-teal-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-1.5 rounded-lg bg-teal-700 text-white shrink-0">
+                    <Stethoscope className="w-3.5 h-3.5" />
+                  </div>
+                  <div>
+                    <span className="text-teal-900 font-bold">Currently in consultation: </span>
+                    <span className="text-slate-900 font-semibold">{activeConsultation.name}</span>
+                    <span className="font-mono text-slate-500 ml-1.5 text-[11px]">
+                      ({activeConsultation.rollNumber || activeConsultation.rollNo})
+                    </span>
+                    {activeConsultation.complaint && (
+                      <span className="text-slate-600 ml-2 italic text-[11px]">
+                        — "{activeConsultation.complaint}"
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 font-mono text-[11px] text-teal-800 font-semibold">
+                  <span className="bg-teal-100/80 px-2 py-0.5 rounded">
+                    Token #{pad(activeConsultation.queueNo ?? activeConsultation.queue_number ?? 1)}
+                  </span>
+                  <span>
+                    Called: {activeConsultation.calledAt || activeConsultation.waitingSince || "—"}
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {/* Waiting Students Queue Table */}
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="border-b border-slate-100 text-slate-400 font-semibold bg-slate-50/30">
+                    <th className="py-3 px-4 w-16">Token</th>
+                    <th className="py-3 px-4">Student</th>
+                    <th className="py-3 px-4">Roll Number</th>
+                    <th className="py-3 px-4">Blood</th>
+                    <th className="py-3 px-4">Chief Complaint</th>
+                    <th className="py-3 px-4">Wait Time</th>
+                    <th className="py-3 px-4">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {waitingStudents.map((patient, i) => (
+                    <tr key={patient.queueEntryId || patient.visitId || i} className="hover:bg-slate-50/60 transition-colors">
+                      <td className="py-3 px-4 font-mono font-bold text-teal-800">
+                        #{pad(patient.queueNo ?? patient.queue_number ?? patient.sequence ?? i + 1)}
+                      </td>
+                      <td className="py-3 px-4">
+                        <div className="flex items-center gap-2.5">
+                          <Avatar name={patient.name} size="sm" />
+                          <span className="font-bold text-slate-800">{patient.name}</span>
+                        </div>
+                      </td>
+                      <td className="py-3 px-4 font-mono text-slate-600">
+                        {patient.rollNumber || patient.rollNo}
+                      </td>
+                      <td className="py-3 px-4">
+                        <span className="font-bold text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-600">
+                          {patient.bloodGroup || patient.blood || "—"}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 text-slate-600 max-w-xs truncate">
+                        {patient.complaint || "OPD Consultation"}
+                      </td>
+                      <td className="py-3 px-4 font-mono text-slate-500">
+                        {patient.waitingSince || (patient.checkInTime ? hhmm(patient.checkInTime) : "—")}
+                      </td>
+                      <td className="py-3 px-4">
+                        <span className="inline-flex items-center gap-1.5 font-semibold rounded-full border px-2.5 py-0.5 text-[11px] bg-amber-50 text-amber-700 border-amber-200/80">
+                          <span className="w-1.5 h-1.5 rounded-full bg-current opacity-70" />
+                          Waiting
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                  {waitingStudents.length === 0 && (
+                    <tr>
+                      <td colSpan="7" className="py-8 text-center text-slate-400 text-xs">
+                        No students currently waiting for {d.name}.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }

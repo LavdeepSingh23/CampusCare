@@ -38,22 +38,8 @@ const V = (id, rollNo, doctorId, queueNo, status, extra) => {
 
 function makeSeed() {
   return {
-    visits: [
-      V(1, "102403001", "kapoor", 1, "cabin", { complaint: "Seasonal allergic rhinitis & dry cough", checkedIn: ago(40), cabinAt: ago(3) }),
-      V(2, "102403112", "kapoor", 2, "waiting", { complaint: "Sports injury, right ankle sprain", checkedIn: ago(22) }),
-      V(3, "102403205", "kapoor", 3, "waiting", { complaint: "Routine hostel medical clearance & vision test", checkedIn: ago(16) }),
-      V(4, "102403348", "kapoor", 4, "waiting", { complaint: "Contact dermatitis on wrist", checkedIn: ago(9) }),
-      V(5, "102403230", "singh", 1, "dispensed", { complaint: "Cough & cold", checkedIn: ago(95), doneAt: ago(70), dispensedAt: ago(62), rxNo: 1041, rx: [{ med: "Cetirizine 10mg", freq: "0-0-1", days: 3, qty: 3, note: "Night" }], dispensing: { type: "Dispensed as prescribed", remarks: "" } }),
-      V(6, "102403177", "singh", 2, "done", { complaint: "Fever and body ache", checkedIn: ago(48), doneAt: ago(6), rxNo: 1042, diagnosis: "Viral fever", advice: "Rest, fluids. Review if fever lasts 48h.", rx: [{ med: "Paracetamol 500mg", freq: "1-0-1", days: 3, qty: 6, note: "After meals" }, { med: "Oral Rehydration Salts", freq: "SOS", days: 2, qty: 4, note: "In water" }] }),
-      V(7, "102403499", "singh", 3, "done", { complaint: "Acidity", checkedIn: ago(40), doneAt: ago(2), rxNo: 1043, diagnosis: "Hyperacidity", advice: "Avoid spicy food.", rx: [{ med: "Pantoprazole 40mg", freq: "1-0-0", days: 5, qty: 5, note: "Before breakfast" }] }),
-      V(8, "102403150", "singh", 4, "waiting", { complaint: "Headache", checkedIn: ago(19) }),
-      V(9, "102403160", "singh", 5, "waiting", { complaint: "Migraine", checkedIn: ago(11) }),
-    ],
-    log: [
-      { t: ago(2), kind: "CONSULTATION COMPLETED", text: "Simar Singh • Rx #1043" },
-      { t: ago(3), kind: "CONSULTATION STARTED", text: "Neha Kapoor • Dr Kapoor" },
-      { t: ago(9), kind: "RFID CHECK-IN", text: "Matha Naparin • Roll 102403348" },
-    ],
+    visits: [],
+    log: [],
   };
 }
 

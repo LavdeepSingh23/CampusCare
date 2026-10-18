@@ -43,7 +43,10 @@ import {
   fetchDoctorProfile,
   fetchDoctorQueue,
   fetchDoctorStats,
+  fetchActiveConsultation,
   fetchPatientSummary,
+  callNextPatient,
+  startConsultation,
   completeConsultation,
 } from '../../api'
 import { cn } from '../../lib/utils'
@@ -61,92 +64,6 @@ import {
   validatePrescriptionItem,
   validatePrescriptionDraft,
 } from '../../utils/prescriptionCalculations'
-
-// Initial patients queue matching hospital OPD workflow
-const INITIAL_DEMO_QUEUE = [
-  {
-    id: 1,
-    name: 'Neha Kapoor',
-    initials: 'NK',
-    rollNo: '102403001',
-    age: 20,
-    gender: 'Female',
-    bloodGroup: 'B+',
-    waitTime: '3 min',
-    status: 'In Consultation',
-    statusBadge: 'bg-teal-50 text-teal-700 border-teal-200',
-    avatarBg: 'bg-teal-700 text-white',
-    complaint: 'Seasonal allergic rhinitis & dry persistent cough',
-    history: 'Childhood asthma (mild). Penicillin allergy flagged.',
-    allergies: ['Penicillin', 'Dust mites'],
-    prescriptions: [
-      { name: 'Cetirizine 10mg', dosage: '0-0-1', timing: 'Night', duration: '5 days', instruction: 'after food', qty: 5 },
-      { name: 'Salbutamol Inhaler 100mcg', dosage: 'SOS', timing: 'As needed', duration: '30 days', instruction: '2 puffs upon wheezing', qty: 1 },
-    ],
-    vitals: { bp: '118/76', pulse: '72 bpm', temp: '98.4 °F', spo2: '99%' },
-  },
-  {
-    id: 2,
-    name: 'Kriti Sharma',
-    initials: 'KS',
-    rollNo: '102403112',
-    age: 21,
-    gender: 'Female',
-    bloodGroup: 'O+',
-    waitTime: '7 min',
-    status: 'Next in Line',
-    statusBadge: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-    avatarBg: 'bg-slate-700 text-white',
-    complaint: 'Sports injury — acute right ankle sprain during football',
-    history: 'Previous ligament strain in 2024. Normal bone alignment.',
-    allergies: ['None declared'],
-    prescriptions: [
-      { name: 'Ibuprofen 400mg', dosage: '1-0-1', timing: 'Morning & Night', duration: '3 days', instruction: 'after meals', qty: 6 },
-      { name: 'Crepe Bandage 10cm', dosage: 'OD', timing: 'Continuous', duration: '7 days', instruction: 'support during walking', qty: 1 },
-    ],
-    vitals: { bp: '124/82', pulse: '80 bpm', temp: '98.6 °F', spo2: '98%' },
-  },
-  {
-    id: 3,
-    name: 'Damanpreet Singh',
-    initials: 'DS',
-    rollNo: '102403205',
-    age: 19,
-    gender: 'Male',
-    bloodGroup: 'A+',
-    waitTime: '14 min',
-    status: 'Waiting',
-    statusBadge: 'bg-amber-50 text-amber-700 border-amber-200',
-    avatarBg: 'bg-amber-700 text-white',
-    complaint: 'Routine hostel medical clearance & vision test',
-    history: 'Normal medical fitness. Myopia with -1.5D correction.',
-    allergies: ['Sulfa drugs'],
-    prescriptions: [
-      { name: 'Becosules Multivitamin', dosage: '1-0-0', timing: 'Morning', duration: '30 days', instruction: 'after breakfast', qty: 30 },
-    ],
-    vitals: { bp: '116/74', pulse: '68 bpm', temp: '98.5 °F', spo2: '99%' },
-  },
-  {
-    id: 4,
-    name: 'Matha Naparin',
-    initials: 'MN',
-    rollNo: '102403348',
-    age: 22,
-    gender: 'Female',
-    bloodGroup: 'AB+',
-    waitTime: '20 min',
-    status: 'Waiting',
-    statusBadge: 'bg-amber-50 text-amber-700 border-amber-200',
-    avatarBg: 'bg-indigo-700 text-white',
-    complaint: 'Contact dermatitis on wrist from smartwatch strap',
-    history: 'Sensitive skin. No prior hospitalizations.',
-    allergies: ['Latex'],
-    prescriptions: [
-      { name: 'Hydrocortisone cream 1%', dosage: '1-0-1', timing: 'Morning & Night', duration: '5 days', instruction: 'apply topically', qty: 1 },
-    ],
-    vitals: { bp: '120/78', pulse: '76 bpm', temp: '98.2 °F', spo2: '99%' },
-  },
-]
 
 export default function Doctors_Dashboard() {
   const navigate = useNavigate()
@@ -166,9 +83,12 @@ export default function Doctors_Dashboard() {
     regNo: 'TIET-DOC-0104',
   })
 
-  // Patient Queue
-  const [patients, setPatients] = useState(INITIAL_DEMO_QUEUE)
-  const [selectedPatientId, setSelectedPatientId] = useState(1)
+  // Patient Queue (Strictly Authenticated Doctor Live OPD Queue)
+  const [patients, setPatients] = useState([])
+  const [selectedPatientId, setSelectedPatientId] = useState(null)
+  const [queueLoading, setQueueLoading] = useState(true)
+  const [queueError, setQueueError] = useState(null)
+  const [isCallingNext, setIsCallingNext] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [openAccordion, setOpenAccordion] = useState('history') // 'history' | 'allergies' | 'rx'
   const [actionAlert, setActionAlert] = useState(null)
@@ -198,7 +118,7 @@ export default function Doctors_Dashboard() {
 
   // Current Patient
   const selectedPatient = useMemo(() => {
-    return patients.find((p) => p.id === selectedPatientId) || patients[0] || INITIAL_DEMO_QUEUE[0]
+    return patients.find((p) => p.id === selectedPatientId) || patients[0] || null
   }, [patients, selectedPatientId])
 
   // Previous Prescriptions (strictly read-only past history from patient file)
@@ -251,7 +171,7 @@ export default function Doctors_Dashboard() {
     setCustomManualQty('')
   }
 
-  // Reset draft whenever selected patient or visit changes!
+  // Reset draft whenever selected patient changes
   useEffect(() => {
     resetPrescriptionDraft()
   }, [selectedPatient?.id])
@@ -272,112 +192,166 @@ export default function Doctors_Dashboard() {
     })
   }, [draftDiagnosis, selectedPatient, draftClinicalNotes, draftMedicines])
 
-  // Load real backend queue & stats
-  const loadBackendData = async () => {
-    if (!doctorId) return
-    setIsRefreshing(true)
+  // Load real backend queue & stats strictly for authenticated doctor
+  const loadBackendData = async (showLoading = true) => {
+    if (!doctorId) {
+      setQueueLoading(false)
+      return
+    }
+    if (showLoading) {
+      setIsRefreshing(true)
+    }
     try {
-      const prof = await fetchDoctorProfile(doctorId)
-      if (prof) {
-        setDoctorProfile((prev) => ({
-          ...prev,
-          name: prof.name || prev.name,
-          specialization: prof.specialization || prev.specialization,
-          shift: prof.shift !== 'Not set' ? prof.shift : prev.shift,
-          email: prof.email || prev.email,
-        }))
+      try {
+        const prof = await fetchDoctorProfile(doctorId)
+        if (prof) {
+          setDoctorProfile((prev) => ({
+            ...prev,
+            name: prof.name || prev.name,
+            specialization: prof.specialization || prev.specialization,
+            shift: prof.shift && prof.shift !== 'Not set' ? prof.shift : prev.shift,
+            email: prof.email || prev.email,
+            room: prof.room || prev.room,
+          }))
+        }
+      } catch {
+        // quiet fallback
       }
 
-      const stats = await fetchDoctorStats(doctorId)
-      if (stats && typeof stats.seenToday === 'number' && stats.seenToday > 0) {
-        setSeenCount(stats.seenToday)
+      try {
+        const stats = await fetchDoctorStats(doctorId)
+        if (stats && typeof stats.seenToday === 'number') {
+          setSeenCount(stats.seenToday)
+        }
+      } catch {
+        // quiet fallback
       }
 
+      // 1. Fetch strictly authenticated doctor queue
       const queueData = await fetchDoctorQueue(doctorId)
-      if (Array.isArray(queueData) && queueData.length > 0) {
-        const mapped = await Promise.all(
-          queueData.map(async (item, idx) => {
-            let summary = { allergies: 'None recorded', conditions: 'None recorded' }
-            try {
-              summary = await fetchPatientSummary(item.rollNumber)
-            } catch {
-              // fallback
-            }
 
-            const initials = item.name
-              ? item.name
-                  .split(' ')
-                  .map((w) => w[0])
-                  .join('')
-                  .slice(0, 2)
-                  .toUpperCase()
-              : 'ST'
+      // 2. Fetch active consultation state
+      let activeConsult = null
+      try {
+        activeConsult = await fetchActiveConsultation(doctorId)
+      } catch {
+        // quiet fallback
+      }
 
-            const isFirst = idx === 0
-            const status = isFirst ? 'In Consultation' : idx === 1 ? 'Next in Line' : 'Waiting'
-            const statusBadge = isFirst
-              ? 'bg-teal-50 text-teal-700 border-teal-200'
-              : idx === 1
-              ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-              : 'bg-amber-50 text-amber-700 border-amber-200'
+      if (Array.isArray(queueData)) {
+        if (queueData.length === 0) {
+          setPatients([])
+          setSelectedPatientId(null)
+          setQueueError(null)
+        } else {
+          const mapped = await Promise.all(
+            queueData.map(async (item, idx) => {
+              let summary = { allergies: 'None recorded', conditions: 'None recorded' }
+              const roll = item.rollNumber || item.roll_number
+              if (roll) {
+                try {
+                  summary = await fetchPatientSummary(roll)
+                } catch {
+                  // fallback
+                }
+              }
 
-            const allergiesList =
-              summary.allergies && summary.allergies !== 'None recorded'
-                ? summary.allergies.split(',').map((s) => s.trim())
-                : ['None declared']
+              const initials = item.name
+                ? item.name
+                    .split(' ')
+                    .map((w) => w[0])
+                    .join('')
+                    .slice(0, 2)
+                    .toUpperCase()
+                : 'ST'
 
-            return {
-              id: item.queueEntryId || item.visitId || idx + 10,
-              name: item.name,
-              initials,
-              rollNo: item.rollNumber,
-              age: item.age || 20,
-              gender: 'Student',
-              bloodGroup: item.bloodGroup || 'B+',
-              waitTime: item.waitingSince ? `${item.waitingSince}` : `${(idx + 1) * 6} min`,
-              status,
-              statusBadge,
-              avatarBg:
-                idx === 0
+              const rawStatus = (item.statusCode || item.status || '').toUpperCase()
+              const isInConsultation =
+                rawStatus === 'IN_CONSULTATION' ||
+                (activeConsult?.active &&
+                  (activeConsult.patient?.visitId === (item.visitId || item.visit_id) ||
+                    activeConsult.patient?.rollNumber === roll))
+
+              const status = isInConsultation
+                ? 'In Consultation'
+                : idx === 0 && !activeConsult?.active
+                ? 'Next in Line'
+                : 'Waiting'
+
+              const statusBadge = isInConsultation
+                ? 'bg-teal-50 text-teal-700 border-teal-200'
+                : status === 'Next in Line'
+                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                : 'bg-amber-50 text-amber-700 border-amber-200'
+
+              const allergiesList =
+                summary.allergies && summary.allergies !== 'None recorded'
+                  ? summary.allergies.split(',').map((s) => s.trim())
+                  : ['None declared']
+
+              return {
+                id: item.queueEntryId || item.visitId || idx + 10,
+                visitId: item.visitId || item.visit_id,
+                queueEntryId: item.queueEntryId || item.queue_entry_id,
+                queueNo: item.queueNo ?? item.queue_number ?? item.sequence ?? idx + 1,
+                name: item.name || item.student_name,
+                initials,
+                rollNo: roll,
+                age: item.age || 20,
+                gender: 'Student',
+                bloodGroup: item.bloodGroup || item.blood_group || 'B+',
+                waitTime: item.waitingSince ? `${item.waitingSince}` : `${(idx + 1) * 6} min`,
+                status,
+                statusCode: isInConsultation ? 'IN_CONSULTATION' : 'WAITING',
+                statusBadge,
+                avatarBg: isInConsultation
                   ? 'bg-teal-700 text-white'
                   : idx === 1
                   ? 'bg-slate-700 text-white'
                   : idx === 2
                   ? 'bg-amber-700 text-white'
                   : 'bg-indigo-700 text-white',
-              complaint:
-                summary.conditions && summary.conditions !== 'None recorded'
-                  ? summary.conditions
-                  : 'OPD Health Evaluation',
-              history: `Enrolled TIET Student. Blood Group: ${item.bloodGroup || 'B+'}, Age: ${item.age || 20}.`,
-              allergies: allergiesList,
-              prescriptions: [
-                { name: 'Paracetamol 500mg', dosage: '1-0-1', timing: 'Morning & Night', duration: '3 days', instruction: 'after meals', qty: 6 },
-              ],
-              vitals: { bp: '118/76', pulse: '72 bpm', temp: '98.4 °F', spo2: '99%' },
-            }
-          })
-        )
-
-        if (mapped.length < 3) {
-          const remaining = INITIAL_DEMO_QUEUE.filter(
-            (dq) => !mapped.some((bq) => bq.rollNo === dq.rollNo)
+                complaint:
+                  item.complaint ||
+                  (summary.conditions && summary.conditions !== 'None recorded'
+                    ? summary.conditions
+                    : 'OPD Health Evaluation'),
+                history: `TIET Student. Roll: ${roll}. Blood Group: ${item.bloodGroup || 'B+'}, Age: ${item.age || 20}.`,
+                allergies: allergiesList,
+                prescriptions: [
+                  { name: 'Paracetamol 500mg', dosage: '1-0-1', timing: 'Morning & Night', duration: '3 days', instruction: 'after meals', qty: 6 },
+                ],
+                vitals: { bp: '118/76', pulse: '72 bpm', temp: '98.4 °F', spo2: '99%' },
+              }
+            })
           )
-          setPatients([...mapped, ...remaining])
-        } else {
+
           setPatients(mapped)
+          setQueueError(null)
+
+          setSelectedPatientId((currentId) => {
+            if (currentId && mapped.some((p) => p.id === currentId)) return currentId
+            const inConsult = mapped.find((p) => p.status === 'In Consultation')
+            return inConsult ? inConsult.id : mapped[0]?.id || null
+          })
         }
-        if (mapped[0]) setSelectedPatientId(mapped[0].id)
       }
     } catch (err) {
-      console.warn('Backend sync failed, using reactive local state:', err)
+      console.warn('Backend sync failed:', err)
+      setQueueError(err.detail || err.message || 'Failed to sync with doctor queue service')
     } finally {
       setIsRefreshing(false)
+      setQueueLoading(false)
     }
   }
 
+  // Live polling every 4 seconds
   useEffect(() => {
-    loadBackendData()
+    loadBackendData(true)
+    const timer = setInterval(() => {
+      loadBackendData(false)
+    }, 4000)
+    return () => clearInterval(timer)
   }, [doctorId])
 
   // Filtered queue with status tab support
@@ -387,7 +361,7 @@ export default function Doctors_Dashboard() {
       const matchesSearch =
         !q ||
         p.name.toLowerCase().includes(q) ||
-        p.rollNo.toLowerCase().includes(q) ||
+        (p.rollNo && p.rollNo.toLowerCase().includes(q)) ||
         (p.complaint && p.complaint.toLowerCase().includes(q))
       if (!matchesSearch) return false
 
@@ -408,7 +382,7 @@ export default function Doctors_Dashboard() {
     return completedHistory.filter(
       (item) =>
         item.name.toLowerCase().includes(q) ||
-        item.rollNo.toLowerCase().includes(q) ||
+        (item.rollNo && item.rollNo.toLowerCase().includes(q)) ||
         (item.diagnosis && item.diagnosis.toLowerCase().includes(q)) ||
         (item.prescriptions && item.prescriptions.toLowerCase().includes(q))
     )
@@ -453,41 +427,48 @@ export default function Doctors_Dashboard() {
     return idx >= 0 ? idx : 0
   }, [navItems, activeTab])
 
-  // Call Next Student
-  const handleCallNext = () => {
-    const nextWaiting = patients.find(
-      (p) => p.status === 'Next in Line' || p.status === 'Waiting'
-    )
-    if (nextWaiting) {
-      setPatients((prev) =>
-        prev.map((p) => {
-          if (p.id === nextWaiting.id) {
-            return {
-              ...p,
-              status: 'In Consultation',
-              statusBadge: 'bg-teal-50 text-teal-700 border-teal-200',
-            }
-          }
-          if (p.status === 'In Consultation') {
-            return {
-              ...p,
-              status: 'Completed',
-              statusBadge: 'bg-slate-100 text-slate-700 border-slate-200',
-            }
-          }
-          return p
-        })
-      )
-      setSelectedPatientId(nextWaiting.id)
-      triggerToast(`Calling ${nextWaiting.name} (Roll #${nextWaiting.rollNo}) to Room ${doctorProfile.room}`)
-    } else {
-      triggerToast('All waiting students have been attended to!')
-    }
-  }
-
   const triggerToast = (msg) => {
     setActionAlert(msg)
     setTimeout(() => setActionAlert(null), 3500)
+  }
+
+  // Call Next Student (calls POST /api/doctor/{doctor_id}/call-next)
+  const handleCallNext = async () => {
+    if (!doctorId) return
+    setIsCallingNext(true)
+    try {
+      const res = await callNextPatient(doctorId)
+      if (res && (res.name || res.rollNumber)) {
+        triggerToast(`Called ${res.name || res.rollNumber} to Room ${doctorProfile.room} (Token #${res.queueNo ?? ''})`)
+      } else {
+        triggerToast(res?.message || 'Called next waiting student')
+      }
+      await loadBackendData(false)
+      setActiveTab('queue')
+    } catch (err) {
+      const msg = err.detail || err.message || 'No waiting patients'
+      if (err.status === 404 || msg.includes('404')) {
+        triggerToast('No waiting students left in queue')
+      } else if (err.status === 409 || msg.includes('already has an active consultation')) {
+        triggerToast('⚠️ Current consultation in progress. Complete before calling next.')
+      } else {
+        triggerToast(msg)
+      }
+    } finally {
+      setIsCallingNext(false)
+    }
+  }
+
+  // Start Consultation for a specific visit (POST /api/doctor/{doctor_id}/start-consultation/{visit_id})
+  const handleStartConsultation = async (visitId) => {
+    if (!doctorId || !visitId) return
+    try {
+      await startConsultation(doctorId, visitId)
+      triggerToast('Consultation started')
+      await loadBackendData(false)
+    } catch (err) {
+      triggerToast(err.detail || err.message || 'Could not start consultation')
+    }
   }
 
   // Add Drug from University Formulary Catalog
@@ -682,16 +663,22 @@ export default function Doctors_Dashboard() {
       if (!proceed) return
     }
 
-    if (doctorId) {
+    if (doctorId && selectedPatient) {
       try {
         await completeConsultation(doctorId, {
           roll_number: selectedPatient.rollNo,
           diagnosis: draftDiagnosis,
+          general: draftClinicalNotes || draftDietAdvice || 'General advice',
           clinical_notes: draftClinicalNotes || `Chief Complaint: ${selectedPatient.complaint}`,
           medicines: draftMedicines.map((m) => ({
             name: m.name,
             dosage: m.dosage,
             instructions: `${m.instruction} for ${m.duration} (Qty: ${m.qty})`,
+            note: m.instruction,
+            morning: m.timing?.toLowerCase().includes('morning') || false,
+            afternoon: m.timing?.toLowerCase().includes('afternoon') || false,
+            evening: m.timing?.toLowerCase().includes('evening') || false,
+            night: m.timing?.toLowerCase().includes('night') || false,
           })),
         })
       } catch (err) {
@@ -699,7 +686,7 @@ export default function Doctors_Dashboard() {
       }
     }
 
-    // Update local state
+    // Update local completed metrics & history
     setSeenCount((prev) => prev + 1)
     setCompletedHistory((prev) => [
       {
@@ -713,25 +700,10 @@ export default function Doctors_Dashboard() {
       ...prev,
     ])
 
-    setPatients((prev) =>
-      prev.map((p) =>
-        p.id === selectedPatient.id
-          ? {
-              ...p,
-              status: 'Completed',
-              statusBadge: 'bg-slate-100 text-slate-700 border-slate-200',
-              prescriptions: [...(p.prescriptions || []), ...draftMedicines],
-            }
-          : p
-      )
-    )
-
-    triggerToast(`Prescription #CC-${Math.floor(1000 + Math.random() * 9000)} dispatched to Campus Dispensary!`)
+    triggerToast(`Prescription dispatched to Campus Dispensary!`)
     resetPrescriptionDraft()
-    setTimeout(() => {
-      handleCallNext()
-      setActiveTab('queue')
-    }, 1500)
+    await loadBackendData(false)
+    setActiveTab('queue')
   }
 
   return (
@@ -977,13 +949,14 @@ export default function Doctors_Dashboard() {
               {/* Call Next Patient Big Action Button */}
               <div className="pt-4 border-t border-slate-100">
                 <motion.button
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
+                  whileHover={{ scale: isCallingNext ? 1 : 1.02 }}
+                  whileTap={{ scale: isCallingNext ? 1 : 0.98 }}
                   onClick={handleCallNext}
-                  className="w-full py-3 px-4 rounded-xl bg-teal-700 hover:bg-teal-800 text-white text-sm font-bold flex items-center justify-center gap-2 transition-all cursor-pointer shadow-sm hover:shadow-md"
+                  disabled={isCallingNext}
+                  className="w-full py-3 px-4 rounded-xl bg-teal-700 hover:bg-teal-800 disabled:opacity-60 disabled:cursor-not-allowed text-white text-sm font-bold flex items-center justify-center gap-2 transition-all cursor-pointer shadow-sm hover:shadow-md"
                 >
-                  <PhoneCall className="w-4 h-4" />
-                  <span>Call Next Student</span>
+                  <PhoneCall className={cn('w-4 h-4', isCallingNext && 'animate-spin')} />
+                  <span>{isCallingNext ? 'Calling Student...' : 'Call Next Student'}</span>
                 </motion.button>
               </div>
             </div>
@@ -1064,9 +1037,40 @@ export default function Doctors_Dashboard() {
 
                 {/* Patient Rows */}
                 <div className="space-y-2.5">
-                  {filteredPatients.length === 0 ? (
-                    <div className="text-center py-12 text-slate-400 text-xs">
-                      No student records found in this category
+                  {queueLoading && patients.length === 0 ? (
+                    <div className="py-12 flex flex-col items-center justify-center text-center space-y-3">
+                      <RefreshCw className="w-6 h-6 text-teal-600 animate-spin" />
+                      <p className="text-xs text-slate-500 font-medium">Syncing live queue from clinic server...</p>
+                    </div>
+                  ) : queueError && patients.length === 0 ? (
+                    <div className="py-8 px-4 rounded-xl bg-rose-50 border border-rose-200 text-center space-y-2">
+                      <AlertCircle className="w-6 h-6 text-rose-600 mx-auto" />
+                      <p className="text-xs font-semibold text-rose-900">Failed to load consultation queue</p>
+                      <p className="text-[11px] text-rose-700">{queueError}</p>
+                      <button
+                        onClick={loadBackendData}
+                        className="mt-2 px-3 py-1.5 rounded-lg bg-rose-700 hover:bg-rose-800 text-white text-xs font-semibold inline-flex items-center gap-1.5 transition-colors cursor-pointer"
+                      >
+                        <RefreshCw className="w-3.5 h-3.5" />
+                        <span>Retry Connection</span>
+                      </button>
+                    </div>
+                  ) : filteredPatients.length === 0 ? (
+                    <div className="text-center py-12 px-4 rounded-xl bg-slate-50/60 border border-dashed border-slate-200 space-y-2">
+                      <Stethoscope className="w-7 h-7 text-slate-300 mx-auto" />
+                      <p className="text-xs font-semibold text-slate-700">OPD Consultation Line Clear</p>
+                      <p className="text-[11px] text-slate-400">
+                        {patients.length === 0
+                          ? 'No students currently waiting for consultation.'
+                          : 'No students matching the current category filter.'}
+                      </p>
+                      <button
+                        onClick={loadBackendData}
+                        className="mt-2 px-3 py-1 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 text-slate-600 text-xs font-medium inline-flex items-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
+                      >
+                        <RefreshCw className="w-3 h-3 text-slate-400" />
+                        <span>Refresh Queue</span>
+                      </button>
                     </div>
                   ) : (
                     filteredPatients.map((patient, index) => {
@@ -1110,7 +1114,7 @@ export default function Doctors_Dashboard() {
                             </div>
                           </div>
 
-                          <div className="flex items-center gap-3">
+                          <div className="flex items-center gap-2.5">
                             <span className="text-xs text-slate-500 font-medium">
                               {patient.waitTime}
                             </span>
@@ -1119,6 +1123,19 @@ export default function Doctors_Dashboard() {
                             >
                               {patient.status}
                             </span>
+                            {(patient.status === 'Waiting' || patient.status === 'Next in Line') && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  handleStartConsultation(patient.visitId || patient.id)
+                                }}
+                                className="px-2.5 py-1 rounded-lg bg-teal-700 hover:bg-teal-800 text-white font-semibold text-[11px] transition-colors cursor-pointer shadow-2xs"
+                                title="Start consultation with this student"
+                              >
+                                Attend
+                              </button>
+                            )}
                           </div>
                         </motion.div>
                       )
@@ -1130,12 +1147,19 @@ export default function Doctors_Dashboard() {
               {/* Bottom Footer Line */}
               <div className="pt-3 mt-4 border-t border-slate-100 flex items-center justify-between text-xs text-slate-400">
                 <span>
-                  Active student:{' '}
-                  <strong className="text-slate-800 font-semibold">{selectedPatient.name}</strong> (Roll: {selectedPatient.rollNo})
+                  {selectedPatient ? (
+                    <>
+                      Active student:{' '}
+                      <strong className="text-slate-800 font-semibold">{selectedPatient.name}</strong> (Roll: {selectedPatient.rollNo})
+                    </>
+                  ) : (
+                    <span>No student actively selected</span>
+                  )}
                 </span>
                 <button
                   onClick={handleCallNext}
-                  className="text-teal-700 font-bold hover:underline cursor-pointer flex items-center gap-1"
+                  disabled={isCallingNext}
+                  className="text-teal-700 font-bold hover:underline cursor-pointer flex items-center gap-1 disabled:opacity-50"
                 >
                   <span>Call Next</span>
                   <ArrowRight className="w-3.5 h-3.5" />
@@ -1145,159 +1169,183 @@ export default function Doctors_Dashboard() {
 
             {/* ── COL 3: PATIENT CLINICAL CHART & QUICK RX (Span 4) ── */}
             <div className="lg:col-span-4 bg-white rounded-2xl p-5 border border-slate-200 shadow-xs flex flex-col justify-between min-h-[580px]">
-              <div>
-                {/* Header: Selected Patient */}
-                <div className="flex items-center justify-between pb-3 mb-3 border-b border-slate-100">
-                  <div className="flex items-center gap-3">
-                    <div
-                      className={`h-11 w-11 rounded-full ${selectedPatient.avatarBg} font-bold text-sm flex items-center justify-center shrink-0 shadow-xs`}
-                    >
-                      {selectedPatient.initials}
-                    </div>
-                    <div>
-                      <h3 className="font-bold text-slate-900 text-base">
-                        {selectedPatient.name}
-                      </h3>
-                      <p className="text-xs text-slate-400">
-                        Roll: {selectedPatient.rollNo} • Age: {selectedPatient.age} • Blood: {selectedPatient.bloodGroup}
-                      </p>
-                    </div>
+              {!selectedPatient ? (
+                <div className="my-auto text-center py-12 px-4 space-y-3">
+                  <div className="w-12 h-12 rounded-2xl bg-teal-50 border border-teal-100 flex items-center justify-center mx-auto text-teal-700">
+                    <User className="w-6 h-6" />
                   </div>
-                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 font-semibold">
-                    {selectedPatient.gender}
-                  </span>
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-800">No Student Selected</h3>
+                    <p className="text-xs text-slate-400 max-w-xs mx-auto mt-1">
+                      Select a student from the consultation line or call the next student to view vitals, allergies, and issue digital prescriptions.
+                    </p>
+                  </div>
+                  <button
+                    onClick={handleCallNext}
+                    disabled={isCallingNext}
+                    className="mt-2 px-4 py-2 rounded-xl bg-teal-700 hover:bg-teal-800 text-white text-xs font-bold inline-flex items-center gap-2 transition-colors cursor-pointer"
+                  >
+                    <PhoneCall className="w-3.5 h-3.5" />
+                    <span>Call Next Student</span>
+                  </button>
                 </div>
-
-                {/* 4-Metric Vitals Strip */}
-                <div className="grid grid-cols-4 gap-2 bg-slate-50 p-2.5 rounded-xl text-center text-xs text-slate-700 mb-4 border border-slate-100">
+              ) : (
+                <>
                   <div>
-                    <span className="text-slate-400 block text-[10px]">BP</span>
-                    <span className="font-bold text-slate-900">{selectedPatient.vitals.bp}</span>
-                  </div>
-                  <div>
-                    <span className="text-slate-400 block text-[10px]">Pulse</span>
-                    <span className="font-bold text-slate-900">{selectedPatient.vitals.pulse}</span>
-                  </div>
-                  <div>
-                    <span className="text-slate-400 block text-[10px]">SpO2</span>
-                    <span className="font-bold text-slate-900">{selectedPatient.vitals.spo2}</span>
-                  </div>
-                  <div>
-                    <span className="text-slate-400 block text-[10px]">Temp</span>
-                    <span className="font-bold text-slate-900">{selectedPatient.vitals.temp}</span>
-                  </div>
-                </div>
-
-                {/* Allergy Banner (Prominent Warning) */}
-                {selectedPatient.allergies.some((a) => a !== 'None declared') && (
-                  <div className="mb-4 p-2.5 rounded-xl bg-rose-50 border border-rose-200/80 flex items-start gap-2.5 text-xs text-rose-900">
-                    <ShieldAlert className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
-                    <div>
-                      <span className="font-bold block">ALLERGY WARNING:</span>
-                      <span>Known allergic reaction to: {selectedPatient.allergies.join(', ')}</span>
+                    {/* Header: Selected Patient */}
+                    <div className="flex items-center justify-between pb-3 mb-3 border-b border-slate-100">
+                      <div className="flex items-center gap-3">
+                        <div
+                          className={`h-11 w-11 rounded-full ${selectedPatient.avatarBg} font-bold text-sm flex items-center justify-center shrink-0 shadow-xs`}
+                        >
+                          {selectedPatient.initials}
+                        </div>
+                        <div>
+                          <h3 className="font-bold text-slate-900 text-base">
+                            {selectedPatient.name}
+                          </h3>
+                          <p className="text-xs text-slate-400">
+                            Roll: {selectedPatient.rollNo} • Age: {selectedPatient.age} • Blood: {selectedPatient.bloodGroup}
+                          </p>
+                        </div>
+                      </div>
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 font-semibold">
+                        {selectedPatient.gender}
+                      </span>
                     </div>
-                  </div>
-                )}
 
-                <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-2">
-                  Clinical Chart & History
-                </p>
+                    {/* 4-Metric Vitals Strip */}
+                    <div className="grid grid-cols-4 gap-2 bg-slate-50 p-2.5 rounded-xl text-center text-xs text-slate-700 mb-4 border border-slate-100">
+                      <div>
+                        <span className="text-slate-400 block text-[10px]">BP</span>
+                        <span className="font-bold text-slate-900">{selectedPatient.vitals.bp}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 block text-[10px]">Pulse</span>
+                        <span className="font-bold text-slate-900">{selectedPatient.vitals.pulse}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 block text-[10px]">SpO2</span>
+                        <span className="font-bold text-slate-900">{selectedPatient.vitals.spo2}</span>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 block text-[10px]">Temp</span>
+                        <span className="font-bold text-slate-900">{selectedPatient.vitals.temp}</span>
+                      </div>
+                    </div>
 
-                {/* Accordions */}
-                <div className="space-y-2 text-xs">
-                  {/* Diagnosis */}
-                  <div className="border border-slate-200 rounded-xl overflow-hidden bg-slate-50/50">
-                    <button
-                      onClick={() => setOpenAccordion((prev) => (prev === 'history' ? null : 'history'))}
-                      className="w-full flex items-center justify-between p-3 text-slate-800 font-semibold hover:bg-slate-100/70 transition-colors cursor-pointer"
-                    >
-                      <span>Diagnosis & Chief Complaint</span>
-                      <motion.div animate={{ rotate: openAccordion === 'history' ? 180 : 0 }}>
-                        <ChevronDown className="w-4 h-4 text-slate-400" />
-                      </motion.div>
-                    </button>
-                    <AnimatePresence initial={false}>
-                      {openAccordion === 'history' && (
-                        <motion.div
-                          initial={{ height: 0, opacity: 0 }}
-                          animate={{ height: 'auto', opacity: 1 }}
-                          exit={{ height: 0, opacity: 0 }}
-                          className="overflow-hidden"
+                    {/* Allergy Banner (Prominent Warning) */}
+                    {selectedPatient.allergies.some((a) => a !== 'None declared') && (
+                      <div className="mb-4 p-2.5 rounded-xl bg-rose-50 border border-rose-200/80 flex items-start gap-2.5 text-xs text-rose-900">
+                        <ShieldAlert className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                        <div>
+                          <span className="font-bold block">ALLERGY WARNING:</span>
+                          <span>Known allergic reaction to: {selectedPatient.allergies.join(', ')}</span>
+                        </div>
+                      </div>
+                    )}
+
+                    <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-2">
+                      Clinical Chart & History
+                    </p>
+
+                    {/* Accordions */}
+                    <div className="space-y-2 text-xs">
+                      {/* Diagnosis */}
+                      <div className="border border-slate-200 rounded-xl overflow-hidden bg-slate-50/50">
+                        <button
+                          onClick={() => setOpenAccordion((prev) => (prev === 'history' ? null : 'history'))}
+                          className="w-full flex items-center justify-between p-3 text-slate-800 font-semibold hover:bg-slate-100/70 transition-colors cursor-pointer"
                         >
-                          <div className="p-3 pt-0 text-xs text-slate-600 space-y-1.5 border-t border-slate-100">
-                            <div>
-                              <span className="font-semibold text-teal-900 block">Complaint:</span>
-                              <p className="text-slate-800">{selectedPatient.complaint}</p>
-                            </div>
-                            <div>
-                              <span className="font-semibold text-slate-700 block">Clinical History:</span>
-                              <p>{selectedPatient.history}</p>
-                            </div>
-                          </div>
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-                  </div>
-
-                  {/* Active Prescriptions */}
-                  <div className="border border-slate-200 rounded-xl overflow-hidden bg-slate-50/50">
-                    <button
-                      onClick={() => setOpenAccordion((prev) => (prev === 'rx' ? null : 'rx'))}
-                      className="w-full flex items-center justify-between p-3 text-slate-800 font-semibold hover:bg-slate-100/70 transition-colors cursor-pointer"
-                    >
-                      <span>Previous Prescriptions ({selectedPatient.prescriptions?.length || 0})</span>
-                      <motion.div animate={{ rotate: openAccordion === 'rx' ? 180 : 0 }}>
-                        <ChevronDown className="w-4 h-4 text-slate-400" />
-                      </motion.div>
-                    </button>
-                    <AnimatePresence initial={false}>
-                      {openAccordion === 'rx' && (
-                        <motion.div
-                          initial={{ height: 0, opacity: 0 }}
-                          animate={{ height: 'auto', opacity: 1 }}
-                          exit={{ height: 0, opacity: 0 }}
-                          className="overflow-hidden"
-                        >
-                          <div className="p-3 pt-0 text-xs text-slate-600 space-y-2 border-t border-slate-100">
-                            {selectedPatient.prescriptions.map((rx, idx) => (
-                              <div
-                                key={idx}
-                                className="flex items-start justify-between p-2 rounded-lg bg-white border border-slate-200"
-                              >
+                          <span>Diagnosis & Chief Complaint</span>
+                          <motion.div animate={{ rotate: openAccordion === 'history' ? 180 : 0 }}>
+                            <ChevronDown className="w-4 h-4 text-slate-400" />
+                          </motion.div>
+                        </button>
+                        <AnimatePresence initial={false}>
+                          {openAccordion === 'history' && (
+                            <motion.div
+                              initial={{ height: 0, opacity: 0 }}
+                              animate={{ height: 'auto', opacity: 1 }}
+                              exit={{ height: 0, opacity: 0 }}
+                              className="overflow-hidden"
+                            >
+                              <div className="p-3 pt-0 text-xs text-slate-600 space-y-1.5 border-t border-slate-100">
                                 <div>
-                                  <span className="font-bold text-slate-900 block">{rx.name}</span>
-                                  <span className="text-[11px] text-slate-500">{rx.instruction} ({rx.duration})</span>
+                                  <span className="font-semibold text-teal-900 block">Complaint:</span>
+                                  <p className="text-slate-800">{selectedPatient.complaint}</p>
                                 </div>
-                                <span className="text-[10px] px-2 py-0.5 rounded-md bg-teal-50 text-teal-800 font-bold border border-teal-100">
-                                  {rx.dosage}
-                                </span>
+                                <div>
+                                  <span className="font-semibold text-slate-700 block">Clinical History:</span>
+                                  <p>{selectedPatient.history}</p>
+                                </div>
                               </div>
-                            ))}
-                          </div>
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-                  </div>
-                </div>
-              </div>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                      </div>
 
-              {/* Direct Link to Open Full E-Prescription Studio */}
-              <div className="mt-5 pt-3 border-t border-slate-100 space-y-2">
-                <button
-                  onClick={() => setActiveTab('prescription')}
-                  className="w-full py-2.5 px-3 rounded-xl bg-teal-700 hover:bg-teal-800 text-white text-xs font-bold flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-xs"
-                >
-                  <Pill className="w-4 h-4" />
-                  <span>Write / Edit Prescription in Studio →</span>
-                </button>
-                <div className="flex items-center justify-between text-[11px] text-slate-400 px-1">
-                  <span className="flex items-center gap-1 text-emerald-700 font-semibold">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                    <span>TIET Verified Student</span>
-                  </span>
-                  <span>Health Centre RFID OK</span>
-                </div>
-              </div>
+                      {/* Active Prescriptions */}
+                      <div className="border border-slate-200 rounded-xl overflow-hidden bg-slate-50/50">
+                        <button
+                          onClick={() => setOpenAccordion((prev) => (prev === 'rx' ? null : 'rx'))}
+                          className="w-full flex items-center justify-between p-3 text-slate-800 font-semibold hover:bg-slate-100/70 transition-colors cursor-pointer"
+                        >
+                          <span>Previous Prescriptions ({selectedPatient.prescriptions?.length || 0})</span>
+                          <motion.div animate={{ rotate: openAccordion === 'rx' ? 180 : 0 }}>
+                            <ChevronDown className="w-4 h-4 text-slate-400" />
+                          </motion.div>
+                        </button>
+                        <AnimatePresence initial={false}>
+                          {openAccordion === 'rx' && (
+                            <motion.div
+                              initial={{ height: 0, opacity: 0 }}
+                              animate={{ height: 'auto', opacity: 1 }}
+                              exit={{ height: 0, opacity: 0 }}
+                              className="overflow-hidden"
+                            >
+                              <div className="p-3 pt-0 text-xs text-slate-600 space-y-2 border-t border-slate-100">
+                                {selectedPatient.prescriptions.map((rx, idx) => (
+                                  <div
+                                    key={idx}
+                                    className="flex items-start justify-between p-2 rounded-lg bg-white border border-slate-200"
+                                  >
+                                    <div>
+                                      <span className="font-bold text-slate-900 block">{rx.name}</span>
+                                      <span className="text-[11px] text-slate-500">{rx.instruction} ({rx.duration})</span>
+                                    </div>
+                                    <span className="text-[10px] px-2 py-0.5 rounded-md bg-teal-50 text-teal-800 font-bold border border-teal-100">
+                                      {rx.dosage}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Direct Link to Open Full E-Prescription Studio */}
+                  <div className="mt-5 pt-3 border-t border-slate-100 space-y-2">
+                    <button
+                      onClick={() => setActiveTab('prescription')}
+                      className="w-full py-2.5 px-3 rounded-xl bg-teal-700 hover:bg-teal-800 text-white text-xs font-bold flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-xs"
+                    >
+                      <Pill className="w-4 h-4" />
+                      <span>Write / Edit Prescription in Studio →</span>
+                    </button>
+                    <div className="flex items-center justify-between text-[11px] text-slate-400 px-1">
+                      <span className="flex items-center gap-1 text-emerald-700 font-semibold">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>TIET Verified Student</span>
+                      </span>
+                      <span>Health Centre RFID OK</span>
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         )}
@@ -1305,14 +1353,44 @@ export default function Doctors_Dashboard() {
         {/* ═══════════════════════════════════════════════════════════
             VIEW 2: E-PRESCRIPTION STUDIO (CLEAN 2-PANE CLINICAL WORKSTATION)
            ═══════════════════════════════════════════════════════════ */}
-        {activeTab === 'prescription' && (
+        {activeTab === 'prescription' && !selectedPatient && (
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-12 text-center space-y-4 max-w-md mx-auto my-12">
+            <div className="w-12 h-12 rounded-2xl bg-teal-50 border border-teal-100 flex items-center justify-center mx-auto text-teal-700">
+              <Pill className="w-6 h-6" />
+            </div>
+            <h2 className="text-base font-bold text-slate-800">No Student Selected for Prescription</h2>
+            <p className="text-xs text-slate-500">
+              Please select a student from the live consultation queue or call the next student to open their clinical workstation and draft prescriptions.
+            </p>
+            <div className="flex items-center justify-center gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setActiveTab('queue')}
+                className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold transition-colors cursor-pointer"
+              >
+                Return to Live Queue
+              </button>
+              <button
+                type="button"
+                onClick={handleCallNext}
+                disabled={isCallingNext}
+                className="px-4 py-2 rounded-xl bg-teal-700 hover:bg-teal-800 text-white text-xs font-bold inline-flex items-center gap-1.5 transition-colors cursor-pointer"
+              >
+                <PhoneCall className="w-3.5 h-3.5" />
+                <span>Call Next</span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'prescription' && selectedPatient && (
           <div className="space-y-5">
-            {/* ── TOP ACTION & PATIENT CONTEXT STRIP ── */}
-            <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-              <div className="flex items-center gap-3.5">
-                <div className="h-11 w-11 rounded-xl bg-teal-700 text-white flex items-center justify-center text-xl font-bold shadow-xs shrink-0">
-                  ℞
-                </div>
+              {/* ── TOP ACTION & PATIENT CONTEXT STRIP ── */}
+              <div className="bg-white rounded-2xl border border-slate-200 shadow-xs p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                <div className="flex items-center gap-3.5">
+                  <div className="h-11 w-11 rounded-xl bg-teal-700 text-white flex items-center justify-center text-xl font-bold shadow-xs shrink-0">
+                    ℞
+                  </div>
                 <div>
                   <div className="flex items-center gap-2 flex-wrap">
                     <h2 className="text-base font-bold text-slate-900 tracking-tight">

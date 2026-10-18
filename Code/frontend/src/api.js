@@ -91,7 +91,10 @@ async function request(path, options = {}) {
     } catch {
   
     }
-    throw new Error(`API ${res.status}: ${detail}`)
+    const err = new Error(detail ? (detail.startsWith('API ') ? detail : `API ${res.status}: ${detail}`) : `API ${res.status}: ${res.statusText}`)
+    err.status = res.status
+    err.detail = detail
+    throw err
   }
 
   if (res.status === 204) return null
@@ -345,13 +348,13 @@ export function fetchReceptionDoctors() {
   return request('/api/reception/doctors')
 }
 
-export function receptionCheckIn({ rollNumber, doctorId, complaint = '', via = 'MANUAL' }) {
-  return request('/api/reception/checkin', {
+export function receptionCheckIn({ rollNumber, roll_number, doctorId, doctor_id, complaint = '', via = 'MANUAL' }) {
+  return request('/api/reception/check-ins', {
     method: 'POST',
     body: JSON.stringify({
-      roll_number: rollNumber,
-      doctor_id: doctorId,
-      complaint,
+      roll_number: roll_number || rollNumber,
+      doctor_id: doctor_id || doctorId,
+      complaint: complaint || 'General Consultation',
       via
     })
   })
@@ -362,6 +365,10 @@ export function fetchReceptionQueue(doctorId = null) {
   return request(`/api/reception/queue${query}`)
 }
 
+export function fetchActiveConsultation(doctorId) {
+  return request(`/api/doctor/${doctorId}/active-consultation`)
+}
+
 export function callNextPatient(doctorId) {
   return request(`/api/doctor/${doctorId}/call-next`, {
     method: 'POST',
@@ -369,9 +376,13 @@ export function callNextPatient(doctorId) {
 }
 
 export function startConsultation(doctorId, visitId = null) {
-  return request(`/api/doctor/${doctorId}/start-consultation`, {
+  if (visitId) {
+    return request(`/api/doctor/${doctorId}/start-consultation/${visitId}`, {
+      method: 'POST',
+    })
+  }
+  return request(`/api/doctor/${doctorId}/call-next`, {
     method: 'POST',
-    body: JSON.stringify(visitId ? { visit_id: visitId } : {}),
   })
 }
 
