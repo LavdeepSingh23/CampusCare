@@ -83,25 +83,42 @@ def _connect_mysql():
     if ssl_ctx is not None:
         connect_kwargs["ssl"] = ssl_ctx
 
-    try:
-        connection = pymysql.connect(**connect_kwargs)
-        return connection
-    except pymysql.MySQLError as err:
-        logger.error(
-            "MySQL connection to %s:%s (database: %s) failed: %s",
-            config.DB_HOST,
-            config.DB_PORT,
-            config.DB_NAME,
-            err,
-        )
-        raise DatabaseConnectionError(
-            f"Failed to connect to MySQL database at {config.DB_HOST}:{config.DB_PORT}/{config.DB_NAME}: {err}"
-        ) from err
-    except Exception as err:
-        logger.error("Unexpected error connecting to MySQL database: %s", err)
-        raise DatabaseConnectionError(
-            f"Unexpected error connecting to MySQL database at {config.DB_HOST}: {err}"
-        ) from err
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            connection = pymysql.connect(**connect_kwargs)
+            return connection
+        except pymysql.MySQLError as err:
+            err_code = err.args[0] if getattr(err, "args", None) else None
+            is_transient = (
+                err_code in (2003, 2013)
+                or "getaddrinfo" in str(err)
+                or "timed out" in str(err)
+                or "lost connection" in str(err).lower()
+            )
+            if attempt < max_retries - 1 and is_transient:
+                import time
+                time.sleep(0.5 * (attempt + 1))
+                continue
+            logger.error(
+                "MySQL connection to %s:%s (database: %s) failed: %s",
+                config.DB_HOST,
+                config.DB_PORT,
+                config.DB_NAME,
+                err,
+            )
+            raise DatabaseConnectionError(
+                f"Failed to connect to MySQL database at {config.DB_HOST}:{config.DB_PORT}/{config.DB_NAME}: {err}"
+            ) from err
+        except Exception as err:
+            if attempt < max_retries - 1 and ("getaddrinfo" in str(err) or "timed out" in str(err)):
+                import time
+                time.sleep(0.5 * (attempt + 1))
+                continue
+            logger.error("Unexpected error connecting to MySQL database: %s", err)
+            raise DatabaseConnectionError(
+                f"Unexpected error connecting to MySQL database at {config.DB_HOST}: {err}"
+            ) from err
 
 
 def _connect_sqlite():

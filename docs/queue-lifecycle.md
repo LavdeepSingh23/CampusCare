@@ -92,7 +92,7 @@ The table below defines the strict synchronisation between `VISIT.status` and th
 | **Redirect to Doctor** | `WAITING_FOR_DOCTOR` | `WAITING` (new row, target doc) | `DOCTOR_REDIRECT` | Old row: `REDIRECTED` | `REDIRECTED` |
 | **Consultation Finished** | `WAITING_FOR_MEDICINE` | `COMPLETED` | Existing | `COMPLETED` (exited_at set) | `CONSULTATION_COMPLETED` |
 | **Medicine Dispensed** | `COMPLETED` | `COMPLETED` (unchanged) | Existing | Existing | `MEDICINE_DISPENSED` / `COMPLETED` |
-| **Visit Cancelled** | `CANCELLED` | `CANCELLED` | Existing | `CANCELLED` (exited_at set) | `COMPLETED` (cancelled) |
+| **Visit Cancelled** | `CANCELLED` | `CANCELLED` | Existing | `CANCELLED` (exited_at set) | `CANCELLED` |
 
 ---
 
@@ -127,18 +127,19 @@ stateDiagram-v2
 |---|---|---|---|---|
 | **Check-in** | *None (new visit)* | `WAITING_FOR_DOCTOR` | `RECEPTIONIST` | Creates `VISIT`, creates `QUEUE_ENTRY` (`WAITING`), logs `CHECKED_IN`. |
 | **Call Next** | `WAITING_FOR_DOCTOR` | `IN_CONSULTATION` | `DOCTOR` (matching `doctor_id`) | Sets `consultation_started_at = NOW()`, sets `called_at = NOW()`, logs `CONSULTATION_STARTED`. |
-| **No-Show** | `IN_CONSULTATION`, `WAITING_FOR_DOCTOR` | `NO_SHOW` | `DOCTOR` (matching `doctor_id`) | Sets `QUEUE_ENTRY.exit_reason = 'NO_SHOW'`, sets `exited_at = NOW()`, logs `NO_SHOW`. |
-| **Requeue** | `NO_SHOW` | `WAITING_FOR_DOCTOR` | `RECEPTIONIST` | Creates new `QUEUE_ENTRY` (`WAITING`, `NO_SHOW_RESCHEDULE`), allocates sequence, logs `QUEUED_JOINED_PATIENT`. |
-| **Redirect** | `WAITING_FOR_DOCTOR`, `IN_CONSULTATION` | `WAITING_FOR_DOCTOR` | `DOCTOR`, `RECEPTIONIST` | Exits old `QUEUE_ENTRY` (`REDIRECTED`), updates `VISIT.doctor_id`, creates new `QUEUE_ENTRY` under target doctor with reason `DOCTOR_REDIRECT`, logs `REDIRECTED`. |
+| **Start Consultation** | `WAITING_FOR_DOCTOR` | `IN_CONSULTATION` | `DOCTOR` (matching `doctor_id`) | Sets `consultation_started_at = NOW()`, sets `called_at = NOW()`, logs `CONSULTATION_STARTED`. Enforces 1 active consultation per doctor workstation. |
+| **No-Show** | `IN_CONSULTATION`, `WAITING_FOR_DOCTOR` | `NO_SHOW` | `DOCTOR` (matching `doctor_id`), `RECEPTIONIST` | Sets `QUEUE_ENTRY.exit_reason = 'NO_SHOW'`, sets `exited_at = NOW()`, logs `NO_SHOW`. Idempotent if already `NO_SHOW`. |
+| **Requeue** | `NO_SHOW` | `WAITING_FOR_DOCTOR` | `RECEPTIONIST` | Creates new `QUEUE_ENTRY` (`WAITING`, `NO_SHOW_RESCHEDULE`), allocates sequence, logs `QUEUED_JOINED_PATIENT`. Verifies target doctor availability and ensures no active visit conflict exists. |
+| **Redirect** | `WAITING_FOR_DOCTOR`, `IN_CONSULTATION` | `WAITING_FOR_DOCTOR` | `DOCTOR` (assigned), `RECEPTIONIST` | Exits old `QUEUE_ENTRY` (`REDIRECTED`), updates `VISIT.doctor_id`, creates new `QUEUE_ENTRY` under target doctor with reason `DOCTOR_REDIRECT`, logs `REDIRECTED`. |
 | **Complete Consultation** | `IN_CONSULTATION` | `WAITING_FOR_MEDICINE` | `DOCTOR` (matching `doctor_id`) | Inserts `CONSULTATION`, `PRESCRIPTION`, `PRESCRIPTION_ITEM`, `PRESCRIPTION_DOSE`, exits `QUEUE_ENTRY` (`COMPLETED`), sets `consultation_completed_at = NOW()`, logs `CONSULTATION_COMPLETED`. |
-| **Dispense** | `WAITING_FOR_MEDICINE` | `COMPLETED` | `RECEPTIONIST` | Sets `completed_at = NOW()`, logs `MEDICINE_DISPENSED` and `COMPLETED`. |
-| **Cancel** | `CHECKED_IN`, `WAITING_FOR_DOCTOR`, `IN_CONSULTATION`, `WAITING_FOR_MEDICINE`, `NO_SHOW` | `CANCELLED` | `RECEPTIONIST`, `DOCTOR` | Sets `cancelled_at = NOW()`, records `cancel_reason`, exits active `QUEUE_ENTRY` (`CANCELLED`), logs event. |
+| **Dispense** | `WAITING_FOR_MEDICINE` | `COMPLETED` | `RECEPTIONIST` | Sets `completed_at = NOW()`, logs `MEDICINE_DISPENSED` and `COMPLETED`. Idempotent if already `COMPLETED`. |
+| **Cancel** | `CHECKED_IN`, `WAITING_FOR_DOCTOR`, `IN_CONSULTATION`, `WAITING_FOR_MEDICINE`, `NO_SHOW` | `CANCELLED` | `RECEPTIONIST`, `DOCTOR` | Sets `cancelled_at = NOW()`, records `cancel_reason`, exits active `QUEUE_ENTRY` (`CANCELLED`), logs dedicated `CANCELLED` audit event. Blocked on `COMPLETED` visits (409). |
 
 ---
 
-## 5. Prevention of Conflicting Active Check-Ins
+## 5. Prevention of Conflicting Active Check-Ins & NO_SHOW Policy
 
-### Policy
+### Single Active Visit Rule
 A student is strictly prohibited from having more than one active clinic visit concurrently.
 
 **Active Visit States**:
@@ -151,10 +152,14 @@ A student is strictly prohibited from having more than one active clinic visit c
 **Terminal / Non-Conflicting States**:
 - `COMPLETED`
 - `CANCELLED`
-- `NO_SHOW` *(until explicitly requeued)*
+- `NO_SHOW`
+
+### Settled NO_SHOW Policy
+1. **New Check-Ins**: An unresolved `NO_SHOW` visit is terminal/inactive and **does not block** a subsequent check-in. If a student who was marked `NO_SHOW` in the morning returns in the afternoon and checks in, a new visit and queue entry are successfully created.
+2. **Requeue Protection**: If a receptionist attempts to `requeue` an old `NO_SHOW` visit while the student already has an active visit in progress (`CHECKED_IN`, `WAITING_FOR_DOCTOR`, `IN_CONSULTATION`, `WAITING_FOR_MEDICINE`), the requeue mutation is **strictly rejected with `HTTP 409 Conflict`**. Requeueing is only permitted when the student has no other active visit.
 
 ### Concurrency Protection Mechanism
-When check-in is initiated:
+When check-in or requeue is initiated:
 1. Lock student row in MySQL:
    ```sql
    SELECT roll_number FROM STUDENT WHERE roll_number = %s FOR UPDATE;
@@ -176,6 +181,8 @@ Every transition requires:
 1. `performed_by_user_id`: Strictly extracted from the authenticated JWT token claim (`sub`). It can never be passed or spoofed via the HTTP request body.
 2. `notes`: Concise audit description including the actor email, action reason, or doctor instructions.
 3. Timestamp: Captured at transaction commit time via MySQL `NOW()`.
+4. Dedicated `event_type`: Every lifecycle milestone maps to a distinct `VISIT_EVENT.event_type` ENUM value:
+   `('CHECKED_IN', 'QUEUED_JOINED_PATIENT', 'CALLED', 'NO_SHOW', 'REDIRECTED', 'PRESCRIPTION_CREATED', 'CONSULTATION_STARTED', 'CONSULTATION_COMPLETED', 'WAITING_FOR_MEDICINE', 'MEDICINE_DISPENSED', 'MEDICINE_NOT_COLLECTED', 'COMPLETED', 'CANCELLED')`.
 
 ---
 
@@ -183,39 +190,377 @@ Every transition requires:
 
 The API strictly delineates privileges between Receptionists, Doctors, and shared Staff roles. No user can act outside their validated token claims:
 
-| Endpoint | Method | Authorized Role | Guard / Dependency | Identity Source | Purpose |
-|---|---|---|---|---|---|
-| `/api/doctor/{doctor_id}/queue` | `GET` | `DOCTOR` | `get_current_doctor` + `require_own_doctor_id` | Server Token (`doctor_id`) | Reads the doctor's queue (`IN_CONSULTATION` first, then `WAITING` by sequence). Cross-doctor access blocked (403). |
-| `/api/doctor/{doctor_id}/active-consultation` | `GET` | `DOCTOR` | `get_current_doctor` + `require_own_doctor_id` | Server Token (`doctor_id`) | Dedicated endpoint returning the active consultation session (`IN_CONSULTATION`) or `active=false`. |
-| `/api/doctor/{doctor_id}/stats` | `GET` | `DOCTOR` | `get_current_doctor` + `require_own_doctor_id` | Server Token (`doctor_id`) | Returns waiting count, seen today count, total today. |
-| `/api/doctor/{doctor_id}/call-next` | `POST` | `DOCTOR` | `get_current_doctor` + `require_own_doctor_id` | Server Token (`doctor_id`, `sub`) | Advances next waiting patient to `IN_CONSULTATION`. Idempotent if consultation already active. |
-| `/api/doctor/{doctor_id}/complete` | `POST` | `DOCTOR` | `get_current_doctor` + `require_own_doctor_id` | Server Token (`doctor_id`, `sub`) | Finalizes diagnosis and prescriptions; moves visit to `WAITING_FOR_MEDICINE` and queue entry to `COMPLETED`. |
-| `/api/doctor/{doctor_id}/no-show/{visit_id}` | `POST` | `DOCTOR` | `get_current_doctor` + `require_own_doctor_id` | Server Token (`doctor_id`, `sub`) | Marks active visit as `NO_SHOW`. Validates visit is assigned to this doctor. |
-| `/api/queue/checkin` | `POST` | `RECEPTIONIST` | `get_current_receptionist` | Server Token (`sub`) | Checks student into doctor's queue. Enforces single active visit policy. Retries on transient deadlock. |
-| `/api/queue/{visit_id}/dispense` | `POST` | `RECEPTIONIST` | `get_current_receptionist` | Server Token (`sub`) | Confirms pharmacy dispensing, moves visit to `COMPLETED`. Idempotent if already completed. |
-| `/api/queue/{visit_id}/requeue` | `POST` | `RECEPTIONIST` | `get_current_receptionist` | Server Token (`sub`) | Requeues a `NO_SHOW` visit with reason `NO_SHOW_RESCHEDULE`. |
-| `/api/queue/{visit_id}/redirect` | `POST` | `STAFF` (Doctor/Receptionist) | `get_current_staff` | Server Token (`sub`) | Triage / doctor referral. Retires old queue entry as `REDIRECTED`, assigns new doctor. |
-| `/api/queue/{visit_id}/cancel` | `POST` | `STAFF` (Doctor/Receptionist) | `get_current_staff` | Server Token (`sub`) | Cancels active visit with reason. Blocked on completed visits (409). |
-| `/api/queue/live` | `GET` | `STAFF` (Doctor/Receptionist) | `get_current_staff` | Server Token (`sub`) | Live clinic-wide OPD monitor across all active doctors. Students blocked (403). |
+| Endpoint | Method | Status | Authorized Role | Guard / Dependency | Identity Source | Purpose |
+|---|---|---|---|---|---|---|
+| `/api/reception/check-ins` | `POST` | **Canonical** | `RECEPTIONIST` | `get_current_receptionist` | Token `sub` | Primary check-in route. Creates `VISIT`, allocates sequence under doctor lock, logs audit. |
+| `/api/reception/checkin` | `POST` | *Alias* | `RECEPTIONIST` | `get_current_receptionist` | Token `sub` | Backwards-compatible alias for `/check-ins`. |
+| `/api/queue/checkin` | `POST` | *Deprecated Alias* | `RECEPTIONIST` | `get_current_receptionist` | Token `sub` | Legacy check-in route maintained for backwards compatibility. |
+| `/api/reception/queue` | `GET` | **Canonical** | `RECEPTIONIST` | `get_current_receptionist` | Token `sub` | Multi-doctor queue view showing active patients across doctors. Optional `?doctor_id=...` filter. |
+| `/api/doctor/{doctor_id}/queue` | `GET` | **Canonical** | `DOCTOR`, `RECEPTIONIST` | `get_current_staff` | Token `sub`, `doctor_id` | Reads doctor's queue line (`IN_CONSULTATION` first, then `WAITING`). Doctors isolated to own queue (403); Receptionist view any doctor. |
+| `/api/doctor/{doctor_id}/active-consultation` | `GET` | **Canonical** | `DOCTOR` | `get_current_doctor` + `require_own_doctor_id` | Token `doctor_id` | Returns active consultation session or `{ "active": false }`. |
+| `/api/doctor/{doctor_id}/stats` | `GET` | **Canonical** | `DOCTOR` | `get_current_doctor` + `require_own_doctor_id` | Token `doctor_id` | Returns waiting count, seen today count, total today. |
+| `/api/doctor/{doctor_id}/call-next` | `POST` | **Canonical** | `DOCTOR` | `get_current_doctor` + `require_own_doctor_id` | Token `doctor_id`, `sub` | Advances next waiting patient to `IN_CONSULTATION`. Serialized via doctor workstation lock; idempotent if consultation already active. |
+| `/api/doctor/{doctor_id}/start-consultation` | `POST` | **Canonical** | `DOCTOR` | `get_current_doctor` + `require_own_doctor_id` | Token `doctor_id`, `sub` | Explicitly starts consultation for specific `visit_id` (or next if omitted). Enforces mutual exclusion per workstation. |
+| `/api/doctor/{doctor_id}/start-consultation/{visit_id}` | `POST` | *Path Alias* | `DOCTOR` | `get_current_doctor` + `require_own_doctor_id` | Token `doctor_id`, `sub` | Convenience path-parameter route for starting consultation. |
+| `/api/queue/{visit_id}/start-consultation` | `POST` | *Alias* | `DOCTOR` | `get_current_doctor` | Token `doctor_id`, `sub` | Doctor endpoint to explicitly start consultation on visit assigned to caller. |
+| `/api/doctor/{doctor_id}/complete` | `POST` | **Canonical** | `DOCTOR` | `get_current_doctor` + `require_own_doctor_id` | Token `doctor_id`, `sub` | Finalizes diagnosis and prescriptions; moves visit to `WAITING_FOR_MEDICINE` and queue entry to `COMPLETED`. |
+| `/api/doctor/{doctor_id}/no-show/{visit_id}` | `POST` | **Canonical** | `DOCTOR` | `get_current_doctor` + `require_own_doctor_id` | Token `doctor_id`, `sub` | Marks active visit as `NO_SHOW`. Validates visit is assigned to this doctor. Idempotent. |
+| `/api/queue/{visit_id}/no-show` | `POST` | *Staff Route* | `STAFF` (Doctor/Receptionist) | `get_current_staff` | Token `sub` | Marks active visit as `NO_SHOW`. Validates doctor assignment if caller is doctor. |
+| `/api/queue/{visit_id}/requeue` | `POST` | **Canonical** | `RECEPTIONIST` | `get_current_receptionist` | Token `sub` | Requeues a `NO_SHOW` visit with reason `NO_SHOW_RESCHEDULE`. Validates target doctor availability and active visit conflict. |
+| `/api/queue/{visit_id}/redirect` | `POST` | **Canonical** | `STAFF` (Doctor/Receptionist) | `get_current_staff` | Token `sub` | Triage / doctor referral. Retires old queue entry as `REDIRECTED`, assigns new doctor. Validates availability. |
+| `/api/doctor/{doctor_id}/redirect/{visit_id}` | `POST` | *Doctor Route* | `DOCTOR` | `get_current_doctor` + `require_own_doctor_id` | Token `doctor_id`, `sub` | Redirects patient assigned to this doctor to another doctor. |
+| `/api/queue/{visit_id}/dispense` | `POST` | **Canonical** | `RECEPTIONIST` | `get_current_receptionist` | Token `sub` | Confirms pharmacy dispensing, moves visit to `COMPLETED`. Idempotent if already completed. |
+| `/api/queue/{visit_id}/cancel` | `POST` | **Canonical** | `STAFF` (Doctor/Receptionist) | `get_current_staff` | Token `sub` | Cancels active visit with reason. Blocked on completed visits (409). Logs dedicated `CANCELLED` audit event. |
+| `/api/queue/live` | `GET` | **Canonical** | `STAFF` (Doctor/Receptionist) | `get_current_staff` | Token `sub` | Live clinic-wide OPD monitor across all active doctors. Students blocked (403). |
 
 ---
 
-## 8. Idempotency Guarantees & Verification Protocol
+## 8. Consultation-Start Behavior Specification
 
-### Idempotency Behavior
-1. **`call-next`**:
-   - The query filters strictly by `WHERE qe.doctor_id = %s AND qe.status = 'IN_CONSULTATION' LIMIT 1`.
-   - If an active consultation exists, the method returns `{"status": "already_in_consultation", ...}` immediately.
-   - It **never** causes a second patient to enter consultation, and **never** returns another doctor's patient session.
-2. **`dispense`**:
-   - The method reads `VISIT.status`. If already `COMPLETED`, it immediately returns `{"status": "already_completed", ...}`.
-   - It **does not insert** redundant `MEDICINE_DISPENSED` or `COMPLETED` audit rows into `VISIT_EVENT` on retries.
-   - If the original dispense transaction failed or rolled back, the status remains `WAITING_FOR_MEDICINE`, allowing subsequent retries to commit cleanly.
+### Call Next vs Explicit Start Consultation
+1. **`POST /api/doctor/{doctor_id}/call-next`**:
+   - Automatically selects the next eligible patient ordered by `queue_sequence ASC, entered_at ASC LIMIT 1`.
+   - Transitions `QUEUE_ENTRY` and `VISIT` to `IN_CONSULTATION`.
+   - **Idempotency**: If the doctor already has an active consultation in progress, it safely returns the existing consultation session without mutating records or skipping queued patients.
+2. **`POST /api/doctor/{doctor_id}/start-consultation`** (Body: `{"visit_id": 123}`):
+   - Targets a specific visit assigned to this doctor.
+   - **Workstation Mutual Exclusion**: If the doctor currently has an active consultation with a *different* visit, the request is immediately rejected with `HTTP 409 Conflict` (`"Doctor #X already has an active consultation with visit #Y"`).
+   - If called repeatedly on the *same* visit, it is idempotent and returns `{"status": "already_in_consultation", ...}`.
+3. **Concurrency Serialization**:
+   - Both endpoints acquire `SELECT doctor_id FROM DOCTOR WHERE doctor_id = %s FOR UPDATE` inside the database transaction before inspecting queue state.
+   - Parallel clicks or rapid double-taps serialize on the workstation lock, guaranteeing that under no circumstances can two active consultations exist for the same doctor.
 
-### Environment & Test Isolation Rules
-1. **Live Database Target**: All tests execute against Aiven MySQL 8.4.8 (`campuscare_dev`). SQLite fallbacks are strictly disabled.
-2. **Test Isolation**: All test students use the reserved prefix `TEST_STU_%` and test accounts `test_stu_%@thapar.edu`.
-3. **Cascading Teardown**: Setup and teardown delete test visits and cascade to `QUEUE_ENTRY`, `VISIT_EVENT`, `CONSULTATION`, `PRESCRIPTION`, and test `STUDENT`/`USER_ACCOUNT` rows without touching any real patient records.
-4. **Persistent Verification**: Tests directly query the MySQL database with SQL assertions (`SELECT status FROM VISIT`, `SELECT status FROM QUEUE_ENTRY`, `SELECT event_type FROM VISIT_EVENT`), verifying persisted relational state rather than relying solely on HTTP responses.
-5. **Real OS Concurrency**: Parallel requests are dispatched using Python's `ThreadPoolExecutor(max_workers=5)` to test real InnoDB row locking and race-condition resistance.
+---
+
+## 9. Published Request and Response Schemas
+
+### 1. Check-In
+- **Route**: `POST /api/reception/check-ins` (Alias: `POST /api/reception/checkin`)
+- **Auth**: Receptionist Token (`Authorization: Bearer <token>`)
+- **Request Body**:
+  ```json
+  {
+    "roll_number": "CS21B045",       // string, required (or "rollNumber")
+    "doctor_id": 1,                   // integer, required (or "doctorId")
+    "complaint": "Persistent cough",  // string, optional (max 300 chars)
+    "via": "MANUAL"                   // string, optional ("MANUAL" | "RFID", default: "MANUAL")
+  }
+  ```
+- **Success Response (201 Created)**:
+  ```json
+  {
+    "visit_id": 105,
+    "visitId": 105,
+    "queue_number": 3,
+    "queueNo": 3,
+    "sequence": 3,
+    "doctor_id": 1,
+    "doctorId": 1,
+    "status": "WAITING_FOR_DOCTOR",
+    "position": 2,
+    "name": "Aarav Mehta",
+    "roll_number": "CS21B045",
+    "rollNumber": "CS21B045",
+    "queue_entry_id": 105,
+    "queueEntryId": 105
+  }
+  ```
+- **Error Responses**:
+  - `401 Unauthorized`: Missing or invalid Bearer token.
+  - `403 Forbidden`: Authenticated user is not a receptionist.
+  - `404 Not Found`: Student or Doctor does not exist.
+  - `409 Conflict`: Student already has an active visit, or doctor is marked UNAVAILABLE today.
+  - `422 Unprocessable Entity`: Missing required `roll_number` or `doctor_id`.
+
+### 2. Reception Queue View
+- **Route**: `GET /api/reception/queue?doctor_id=1` (`doctor_id` query param optional)
+- **Auth**: Receptionist Token
+- **Success Response (200 OK)**:
+  ```json
+  [
+    {
+      "queueEntryId": 105,
+      "queue_entry_id": 105,
+      "visitId": 105,
+      "visit_id": 105,
+      "rollNumber": "CS21B045",
+      "roll_number": "CS21B045",
+      "name": "Aarav Mehta",
+      "student_name": "Aarav Mehta",
+      "bloodGroup": "O+",
+      "blood_group": "O+",
+      "doctorId": 1,
+      "doctor_id": 1,
+      "doctorName": "Dr Neha Kapoor",
+      "doctor_name": "Dr Neha Kapoor",
+      "doctorEmail": "neha.kapoor@campuscare.edu",
+      "doctor_email": "neha.kapoor@campuscare.edu",
+      "specialty": "General Physician",
+      "room": "Room 104",
+      "queueNo": 3,
+      "queue_number": 3,
+      "queue_sequence": 3,
+      "status": "Waiting",
+      "statusCode": "WAITING",
+      "queueStatus": "WAITING",
+      "visitStatus": "WAITING_FOR_DOCTOR",
+      "checkInTime": "2026-10-18T10:15:00",
+      "checkedInAt": "2026-10-18T10:15:00",
+      "enteredAt": "2026-10-18T10:15:00",
+      "waitingSince": "10:15 AM",
+      "calledAt": null,
+      "complaint": "Persistent cough"
+    }
+  ]
+  ```
+
+### 3. Doctor Call Next
+- **Route**: `POST /api/doctor/{doctor_id}/call-next`
+- **Auth**: Doctor Token (matching `doctor_id`)
+- **Request Body**: None
+- **Success Response (200 OK)**:
+  ```json
+  {
+    "status": "called",              // or "already_in_consultation"
+    "queueEntryId": 105,
+    "queue_entry_id": 105,
+    "visitId": 105,
+    "visit_id": 105,
+    "rollNumber": "CS21B045",
+    "roll_number": "CS21B045",
+    "name": "Aarav Mehta",
+    "sequence": 3,
+    "queueNo": 3,
+    "queue_number": 3,
+    "doctorId": 1,
+    "doctor_id": 1
+  }
+  ```
+- **Error Responses**:
+  - `403 Forbidden`: Doctor authenticated as a different doctor ID.
+  - `404 Not Found`: No patients currently waiting in queue.
+
+### 4. Doctor Start Consultation
+- **Route**: `POST /api/doctor/{doctor_id}/start-consultation`
+- **Auth**: Doctor Token (matching `doctor_id`)
+- **Request Body**:
+  ```json
+  {
+    "visit_id": 105                  // integer, optional (omitted = advance next waiting)
+  }
+  ```
+- **Success Response (200 OK)**:
+  ```json
+  {
+    "status": "in_consultation",     // or "already_in_consultation"
+    "queueEntryId": 105,
+    "visitId": 105,
+    "rollNumber": "CS21B045",
+    "name": "Aarav Mehta",
+    "sequence": 3,
+    "queueNo": 3,
+    "doctorId": 1
+  }
+  ```
+- **Error Responses**:
+  - `409 Conflict`: Doctor already has an active consultation with another visit, or target visit is in an invalid status.
+
+### 5. Complete Consultation
+- **Route**: `POST /api/doctor/{doctor_id}/complete`
+- **Auth**: Doctor Token (matching `doctor_id`)
+- **Request Body**:
+  ```json
+  {
+    "roll_number": "CS21B045",       // string, required
+    "diagnosis": "Acute Bronchitis", // string, required
+    "general": "Rest and steam",     // string, optional
+    "medicines": [                    // array, required
+      {
+        "name": "Amoxicillin 500mg", // string, required
+        "note": "After meals",       // string, optional
+        "morning": true,              // boolean, optional
+        "afternoon": false,          // boolean, optional
+        "evening": true,             // boolean, optional
+        "night": false               // boolean, optional
+      }
+    ]
+  }
+  ```
+- **Success Response (200 OK)**:
+  ```json
+  {
+    "status": "ok",
+    "visitId": 105,
+    "consultationId": 42,
+    "prescriptionId": 38
+  }
+  ```
+
+### 6. Dispense Medication
+- **Route**: `POST /api/queue/{visit_id}/dispense`
+- **Auth**: Receptionist Token
+- **Request Body**:
+  ```json
+  {
+    "remarks": "Medicines dispensed" // string, optional
+  }
+  ```
+- **Success Response (200 OK)**:
+  ```json
+  {
+    "status": "dispensed",           // or "already_completed"
+    "visitId": 105,
+    "rollNumber": "CS21B045"
+  }
+  ```
+- **Error Responses**:
+  - `409 Conflict`: Visit is not in `WAITING_FOR_MEDICINE` status.
+
+### 7. Mark No-Show
+- **Route**: `POST /api/doctor/{doctor_id}/no-show/{visit_id}` (or `POST /api/queue/{visit_id}/no-show`)
+- **Auth**: Doctor Token (matching `doctor_id`) or Staff Token
+- **Request Body**:
+  ```json
+  {
+    "reason": "Student absent"       // string, optional
+  }
+  ```
+- **Success Response (200 OK)**:
+  ```json
+  {
+    "status": "no_show",             // or "already_no_show"
+    "visitId": 105,
+    "rollNumber": "CS21B045",
+    "doctorId": 1
+  }
+  ```
+- **Error Responses**:
+  - `409 Conflict`: Visit is in `COMPLETED`, `CANCELLED`, or `WAITING_FOR_MEDICINE`.
+
+### 8. Requeue Patient
+- **Route**: `POST /api/queue/{visit_id}/requeue`
+- **Auth**: Receptionist Token
+- **Request Body**:
+  ```json
+  {
+    "target_doctor_id": 1,           // integer, required
+    "reason": "Patient arrived"      // string, optional
+  }
+  ```
+- **Success Response (200 OK)**:
+  ```json
+  {
+    "status": "requeued",
+    "visitId": 105,
+    "queueEntryId": 112,
+    "queueNo": 5,
+    "doctorId": 1,
+    "rollNumber": "CS21B045"
+  }
+  ```
+- **Error Responses**:
+  - `409 Conflict`: Visit is not in `NO_SHOW`, or target doctor is unavailable, or student has another active visit in progress.
+
+### 9. Redirect Patient
+- **Route**: `POST /api/queue/{visit_id}/redirect` (or `POST /api/doctor/{doctor_id}/redirect/{visit_id}`)
+- **Auth**: Staff Token (Doctor/Receptionist)
+- **Request Body**:
+  ```json
+  {
+    "target_doctor_id": 2,           // integer, required
+    "reason": "Specialist referral"  // string, optional
+  }
+  ```
+- **Success Response (200 OK)**:
+  ```json
+  {
+    "status": "redirected",
+    "visitId": 105,
+    "oldDoctorId": 1,
+    "newDoctorId": 2,
+    "newQueueNo": 4,
+    "queueEntryId": 113,
+    "rollNumber": "CS21B045"
+  }
+  ```
+
+### 10. Cancel Visit
+- **Route**: `POST /api/queue/{visit_id}/cancel`
+- **Auth**: Staff Token (Doctor/Receptionist)
+- **Request Body**:
+  ```json
+  {
+    "reason": "Emergency departure"  // string, optional
+  }
+  ```
+- **Success Response (200 OK)**:
+  ```json
+  {
+    "status": "cancelled",           // or "already_cancelled"
+    "visitId": 105,
+    "rollNumber": "CS21B045"
+  }
+  ```
+- **Error Responses**:
+  - `409 Conflict`: Cannot cancel an already `COMPLETED` visit.
+
+---
+
+## 10. Database & Queue Edge-Case Architecture (Priority 2 Guarantees)
+
+### 1. Unified Queue Numbering Across All Entry Paths
+- **Entry Paths**: Patient queues can be entered through three operations:
+  1. Initial check-in (`check_in_student`)
+  2. Requeue from no-show (`requeue_patient`)
+  3. Referral or transfer redirect (`redirect_patient`)
+- **Concurrency & Locking Contract**:
+  All three paths execute within an explicit database transaction and acquire an exclusive row lock on the target doctor:
+  ```sql
+  SELECT doctor_id FROM DOCTOR WHERE doctor_id = %s FOR UPDATE;
+  ```
+  While holding this lock, the next sequence is allocated:
+  ```sql
+  SELECT COALESCE(MAX(queue_sequence), 0) + 1 AS next_seq
+  FROM QUEUE_ENTRY
+  WHERE doctor_id = %s AND DATE(entered_at) = CURDATE();
+  ```
+- **Monotonic & Gap Invariants**: Sequence numbers are strictly unique and monotonically increasing per doctor per date. Gaps resulting from cancellations, redirects, or rollbacks are natural and preserved to avoid invalidating physical tokens.
+
+### 2. Safe Redirect During Consultation
+- **Session Retirement**: When a doctor redirects a student currently in consultation:
+  1. The active `QUEUE_ENTRY` is retired with `status = 'REDIRECTED'`, `exited_at = NOW()`, and `exit_reason = 'REDIRECTED'`.
+  2. The referring doctor's active workstation is freed (`active = False`), enabling the doctor to immediately call their next waiting patient.
+  3. The `VISIT.doctor_id` is updated to the target doctor.
+  4. A new `QUEUE_ENTRY` is created in the target doctor's queue with `status = 'WAITING'`, `entry_reason = 'DOCTOR_REDIRECT'`, and the target doctor's next sequence number.
+  5. An atomic audit event `REDIRECTED` is written to `VISIT_EVENT` noting the source doctor and destination doctor.
+
+### 3. Concurrency-Safe Doctor Availability Validation
+- **Validation Point**: Check-in, requeue, and redirect all strictly validate target doctor availability on `CURDATE()`.
+- **Race Condition Protection**: The availability lookup acquires a row lock:
+  ```sql
+  SELECT is_available FROM DOCTOR_AVAILABILITY 
+  WHERE doctor_id = %s AND date = CURDATE() FOR UPDATE;
+  ```
+  If an availability toggle is happening concurrently, the queue mutation waits for the lock, guaranteeing that patients are never placed into an unavailable doctor's queue.
+
+### 4. Strict Transaction Rollback & Zero Partial Updates
+- Every state-changing operation executes inside a managed transaction context.
+- If any step fails (e.g. invalid status transition, database foreign key violation, unexpected exception), the entire transaction rolls back via `conn.rollback()`.
+- No partial mutations are committed to `VISIT`, `QUEUE_ENTRY`, `CONSULTATION`, `PRESCRIPTION`, or `VISIT_EVENT`.
+
+### 5. Complete Idempotency Guarantees
+- **Call-Next Idempotency**: If a doctor retries `call-next` while they already have an active consultation (`IN_CONSULTATION`), the endpoint does not advance or skip any waiting students. It safely returns the existing active consultation session.
+- **Dispense Idempotency**: If pharmacy retries dispensing an already completed visit (`COMPLETED`), the endpoint returns `status = 'already_completed'` and does not append duplicate `MEDICINE_DISPENSED` audit records.
+- **Cancel & No-Show Idempotency**: Repeated cancellation or no-show requests return `already_cancelled` / `already_no_show` safely without state corruption.
+
+### 6. Token-Derived Audit Consistency
+- Every state change records exactly one `VISIT_EVENT` row.
+- Performer identity (`performed_by_user_id`) is strictly extracted from the cryptographically verified JWT token (`current_user["id"]` / `sub`), never from client body fields or query parameters.
+
+### 7. Uniform Active Visit Constraints
+- **Active Statuses**: `CHECKED_IN`, `WAITING_FOR_DOCTOR`, `CALLED`, `IN_CONSULTATION`, `WAITING_FOR_MEDICINE`. A student with any of these statuses cannot be checked in again (enforced with `409 Conflict`).
+- **Terminal Statuses**: `COMPLETED`, `CANCELLED`, `NO_SHOW`. A student whose previous visit is terminal is eligible for a new check-in.
+- **Requeue Conflict Guard**: A `NO_SHOW` visit cannot be requeued if the student has subsequently begun a new active visit.
+
+
 

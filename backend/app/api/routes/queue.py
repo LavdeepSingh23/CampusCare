@@ -5,8 +5,10 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.core.database import get_db_connection
 from app.core.deps import (
+    CurrentDoctor,
     CurrentReceptionist,
     CurrentUser,
+    get_current_doctor,
     get_current_receptionist,
     get_current_staff,
 )
@@ -160,7 +162,7 @@ def requeue_visit(
     except ql.ResourceNotFoundError as exc:
         connection.rollback()
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
-    except ql.InvalidTransitionError as exc:
+    except (ql.InvalidTransitionError, ql.DoctorUnavailableError, ql.ActiveVisitConflictError) as exc:
         connection.rollback()
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
     except Exception as exc:
@@ -181,15 +183,55 @@ def redirect_visit(
 ):
     """
     Staff operation: Redirects an active visit to another doctor's line.
+    If caller is a DOCTOR, verifies the visit belongs to their clinic.
     """
     connection = get_db_connection()
     try:
+        curr_doc = staff.doctor_id if staff.role == "DOCTOR" else None
         result = ql.redirect_patient(
             conn=connection,
             visit_id=visit_id,
             target_doctor_id=payload.target_doctor_id,
             performed_by_user_id=staff.user_id,
+            current_doctor_id=curr_doc,
             reason=payload.reason or "Clinical referral",
+        )
+        connection.commit()
+        return result
+    except ql.ResourceNotFoundError as exc:
+        connection.rollback()
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+    except (ql.InvalidTransitionError, ql.DoctorUnavailableError) as exc:
+        connection.rollback()
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
+    except Exception as exc:
+        connection.rollback()
+        logger.error("Redirect transaction failed: %s", exc, exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to redirect visit: {exc}")
+    finally:
+        connection.close()
+
+
+@router.post("/{visit_id}/no-show")
+def mark_no_show_queue(
+    visit_id: int,
+    payload: Optional[ActionReasonRequest] = None,
+    staff: CurrentUser = Depends(get_current_staff),
+):
+    """
+    Staff operation: Marks an active or waiting visit as NO_SHOW.
+    If caller is a DOCTOR, verifies the visit is assigned to their clinic.
+    """
+    connection = get_db_connection()
+    try:
+        doc_id = staff.doctor_id if staff.role == "DOCTOR" else None
+        reason = payload.reason if payload and payload.reason else "Patient did not report when called"
+        result = ql.mark_no_show(
+            conn=connection,
+            visit_id=visit_id,
+            doctor_id=doc_id,
+            performed_by_user_id=staff.user_id,
+            reason=reason,
         )
         connection.commit()
         return result
@@ -201,8 +243,40 @@ def redirect_visit(
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
     except Exception as exc:
         connection.rollback()
-        logger.error("Redirect transaction failed: %s", exc, exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to redirect visit: {exc}")
+        logger.error("No-show transaction failed: %s", exc, exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to mark no-show: {exc}")
+    finally:
+        connection.close()
+
+
+@router.post("/{visit_id}/start-consultation")
+def start_consultation_queue(
+    visit_id: int,
+    current: CurrentDoctor = Depends(get_current_doctor),
+):
+    """
+    Doctor workstation operation: Explicitly starts consultation for a specific visit assigned to this doctor.
+    """
+    connection = get_db_connection()
+    try:
+        result = ql.start_consultation(
+            conn=connection,
+            doctor_id=current.doctor_id,
+            visit_id=visit_id,
+            performed_by_user_id=current.user_id,
+        )
+        connection.commit()
+        return result
+    except ql.ResourceNotFoundError as exc:
+        connection.rollback()
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+    except ql.InvalidTransitionError as exc:
+        connection.rollback()
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
+    except Exception as exc:
+        connection.rollback()
+        logger.error("Start consultation transaction failed: %s", exc, exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to start consultation: {exc}")
     finally:
         connection.close()
 

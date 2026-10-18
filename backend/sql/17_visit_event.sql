@@ -8,7 +8,7 @@ CREATE TABLE VISIT_EVENT (
     event_type            ENUM('CHECKED_IN', 'QUEUED_JOINED_PATIENT', 'CALLED', 'NO_SHOW', 'REDIRECTED',
                                 'PRESCRIPTION_CREATED', 'CONSULTATION_STARTED', 'CONSULTATION_COMPLETED',
                                 'WAITING_FOR_MEDICINE', 'MEDICINE_DISPENSED', 'MEDICINE_NOT_COLLECTED',
-                                'COMPLETED') NOT NULL,
+                                'COMPLETED', 'CANCELLED') NOT NULL,
     performed_by_user_id  BIGINT NOT NULL,
     created_at             DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     notes                  VARCHAR(500) NULL,

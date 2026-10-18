@@ -13,6 +13,11 @@ from app.api.routes.doctor import (
     update_condition,
     update_medication,
     complete_consultation,
+    call_next_student,
+    mark_doctor_patient_no_show,
+    start_doctor_consultation,
+    start_doctor_consultation_by_id,
+    redirect_doctor_patient,
 )
 
 __all__ = [
@@ -27,4 +32,9 @@ __all__ = [
     "update_condition",
     "update_medication",
     "complete_consultation",
+    "call_next_student",
+    "mark_doctor_patient_no_show",
+    "start_doctor_consultation",
+    "start_doctor_consultation_by_id",
+    "redirect_doctor_patient",
 ]

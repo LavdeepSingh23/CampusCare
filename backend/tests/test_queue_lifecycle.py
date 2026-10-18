@@ -434,6 +434,11 @@ def test_cancel_visit_lifecycle():
             qe = cur.fetchone()
             assert qe["status"] == "CANCELLED"
             assert qe["exit_reason"] == "CANCELLED"
+
+            cur.execute("SELECT event_type, notes FROM VISIT_EVENT WHERE visit_id = %s ORDER BY event_id DESC LIMIT 1", (visit_id,))
+            ve = cur.fetchone()
+            assert ve["event_type"] == "CANCELLED"
+            assert "emergency lecture" in (ve["notes"] or "")
     finally:
         conn.close()
 
@@ -666,9 +671,10 @@ def test_doctor_queue_read_and_authorization_boundaries():
     assert cross_read.status_code == 403, f"Expected 403 for cross-doctor queue read, got {cross_read.status_code}"
     assert "another doctor's workstation" in cross_read.json().get("detail", "")
 
-    # 4. Receptionist attempts to fetch Doctor 2's queue -> 403 Forbidden
+    # 4. Receptionist fetches Doctor 2's queue -> 200 OK (receptionist has multi-doctor permissions)
     rec_read = client.get("/api/doctor/2/queue", headers={"Authorization": f"Bearer {rec_token}"})
-    assert rec_read.status_code == 403, f"Expected 403 when Receptionist queries doctor queue, got {rec_read.status_code}"
+    assert rec_read.status_code == 200, f"Expected 200 when Receptionist queries doctor queue, got {rec_read.status_code}"
+    assert any(p["rollNumber"] == roll for p in rec_read.json()), "Patient not found in receptionist read of doctor queue"
 
     # 5. Doctor 2 checks active consultation before calling -> active=False
     active_before = client.get("/api/doctor/2/active-consultation", headers={"Authorization": f"Bearer {doc2_token}"})

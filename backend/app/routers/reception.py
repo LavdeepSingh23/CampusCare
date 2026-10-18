@@ -10,12 +10,13 @@ Everything is authorized on the server: only a valid RECEPTIONIST token works.
 """
 import logging
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
 from app.core.database import get_db_connection
 from app.core.deps import CurrentReceptionist, get_current_receptionist
 from app.core.util import display_name_from_email
+from app.services import queue_lifecycle as ql
 
 logger = logging.getLogger(__name__)
 
@@ -32,10 +33,30 @@ ACTIVE_VISIT_STATES = (
 
 
 class CheckInRequest(BaseModel):
-    roll_number: str = Field(min_length=1, max_length=30)
-    doctor_id: int
+    roll_number: Optional[str] = Field(default=None, max_length=30)
+    rollNumber: Optional[str] = Field(default=None, max_length=30)
+    doctor_id: Optional[int] = None
+    doctorId: Optional[int] = None
     complaint: Optional[str] = Field(default=None, max_length=300)
     via: str = "MANUAL"  # "RFID" when card tap is active
+
+    def get_roll_number(self) -> str:
+        val = self.roll_number or self.rollNumber
+        if not val or not val.strip():
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Student identifier (roll_number / rollNumber) is required",
+            )
+        return val.strip()
+
+    def get_doctor_id(self) -> int:
+        val = self.doctor_id if self.doctor_id is not None else self.doctorId
+        if val is None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Selected doctor (doctor_id / doctorId) is required",
+            )
+        return val
 
 
 def _active_visit(cursor, roll_number: str):
@@ -136,130 +157,200 @@ def list_doctors(_: CurrentReceptionist = Depends(get_current_receptionist)):
 
 
 # ── 3. check-in: visit + queue entry in ONE transaction ────────────────
-@router.post("/checkin", status_code=201)
+@router.post("/check-ins", status_code=status.HTTP_201_CREATED)
+@router.post("/checkin", status_code=status.HTTP_201_CREATED)
 def check_in(body: CheckInRequest, me: CurrentReceptionist = Depends(get_current_receptionist)):
-    roll_number = body.roll_number.strip()
-    conn = get_db_connection()
-    try:
-        with conn.cursor() as cur:
-            # Lock student row so two simultaneous check-ins serialize.
-            cur.execute(
-                "SELECT roll_number, full_name, status FROM STUDENT WHERE roll_number = %s FOR UPDATE"
-                if _is_mysql(conn)
-                else "SELECT roll_number, full_name, status FROM STUDENT WHERE roll_number = %s",
-                (roll_number,),
+    """
+    Task 5.1 Check-in Endpoint:
+    - Authenticates the receptionist via server-validated JWT.
+    - Validates student identifier and selected doctor.
+    - Validates doctor availability rules on CURDATE().
+    - Enforces single active visit policy (rejects 409 Conflict).
+    - Allocates server-side sequence safely under exclusive doctor row lock.
+    - Creates VISIT, QUEUE_ENTRY, and VISIT_EVENT atomically.
+    - Retries transparently on transient MySQL deadlocks.
+    - Returns persisted visit_id, queue_number, doctor_id, and status.
+    """
+    roll_number = body.get_roll_number()
+    doctor_id = body.get_doctor_id()
+
+    max_retries = 3
+    for attempt in range(max_retries):
+        conn = get_db_connection()
+        try:
+            result = ql.check_in_student(
+                conn=conn,
+                roll_number=roll_number,
+                doctor_id=doctor_id,
+                performed_by_user_id=me.user_id,
+                complaint=body.complaint,
+                via=body.via,
             )
-            st = cur.fetchone()
-            if not st:
-                raise HTTPException(status.HTTP_404_NOT_FOUND, "Record not found")
-            if st.get("status") == "INACTIVE":
-                raise HTTPException(status.HTTP_403_FORBIDDEN, "Student record is inactive")
-
-            if _active_visit(cur, roll_number):
-                raise HTTPException(status.HTTP_409_CONFLICT, "Student is already in the queue")
-
-            cur.execute("SELECT doctor_id FROM DOCTOR WHERE doctor_id = %s", (body.doctor_id,))
-            if not cur.fetchone():
-                raise HTTPException(status.HTTP_404_NOT_FOUND, "Doctor not found")
-            cur.execute(
-                """SELECT status FROM DOCTOR_AVAILABILITY
-                   WHERE doctor_id = %s AND availability_date = CURDATE() LIMIT 1""",
-                (body.doctor_id,),
+            conn.commit()
+            return {
+                "visit_id": result["visitId"],
+                "visitId": result["visitId"],
+                "queue_number": result["queueNo"],
+                "queueNo": result["queueNo"],
+                "sequence": result["queueNo"],
+                "doctor_id": result["doctorId"],
+                "doctorId": result["doctorId"],
+                "status": result["status"],
+                "position": result["position"],
+                "name": result["name"],
+                "roll_number": result["rollNumber"],
+                "rollNumber": result["rollNumber"],
+                "queue_entry_id": result["queueEntryId"],
+                "queueEntryId": result["queueEntryId"],
+            }
+        except ql.ResourceNotFoundError as exc:
+            conn.rollback()
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+        except ql.ActiveVisitConflictError as exc:
+            conn.rollback()
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
+        except ql.DoctorUnavailableError as exc:
+            conn.rollback()
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
+        except ql.InvalidTransitionError as exc:
+            conn.rollback()
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+        except Exception as exc:
+            conn.rollback()
+            is_deadlock = hasattr(exc, "args") and len(exc.args) > 0 and exc.args[0] == 1213
+            if is_deadlock and attempt < max_retries - 1:
+                import time
+                time.sleep(0.05 * (attempt + 1))
+                continue
+            logger.error("Reception check-in transaction error for roll %s: %s", roll_number, exc, exc_info=True)
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Could not complete check-in: {exc}",
             )
-            av = cur.fetchone()
-            if av and av["status"] == "UNAVAILABLE":
-                raise HTTPException(status.HTTP_409_CONFLICT, "Doctor is not available today")
-
-            cur.execute(
-                "INSERT INTO VISIT (roll_number, doctor_id, status) VALUES (%s, %s, 'WAITING_FOR_DOCTOR')",
-                (roll_number, body.doctor_id),
-            )
-            visit_id = cur.lastrowid
-
-            # Next sequence number for this doctor today.
-            cur.execute(
-                """SELECT COALESCE(MAX(queue_sequence), 0) + 1 AS nxt FROM QUEUE_ENTRY
-                   WHERE doctor_id = %s AND DATE(entered_at) = CURDATE()""",
-                (body.doctor_id,),
-            )
-            seq_row = cur.fetchone()
-            seq = seq_row["nxt"] if seq_row else 1
-
-            cur.execute(
-                """INSERT INTO QUEUE_ENTRY
-                     (visit_id, doctor_id, queue_sequence, status, queue_data, entry_reason)
-                   VALUES (%s, %s, %s, 'WAITING', NOW(), 'INITIAL_CHECKIN')""",
-                (visit_id, body.doctor_id, seq),
-            )
-
-            note = f"{body.via} check-in" + (f" - {body.complaint}" if body.complaint else "")
-            cur.execute(
-                """INSERT INTO VISIT_EVENT (visit_id, event_type, performed_by_user_id, notes)
-                   VALUES (%s, 'CHECKED_IN', %s, %s)""",
-                (visit_id, me.user_id, note[:500]),
-            )
-
-            cur.execute(
-                "SELECT COUNT(*) AS n FROM QUEUE_ENTRY WHERE doctor_id = %s AND status = 'WAITING'",
-                (body.doctor_id,),
-            )
-            position = cur.fetchone()["n"]
-        conn.commit()
-    except HTTPException:
-        conn.rollback()
-        raise
-    except Exception as exc:
-        conn.rollback()
-        logger.error("Reception check-in transaction error for roll %s: %s", roll_number, exc, exc_info=True)
-        raise HTTPException(
-            status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Could not complete check-in: {exc}",
-        )
-    finally:
-        conn.close()
-
-    return {
-        "visitId": visit_id,
-        "queueNo": seq,
-        "position": position,
-        "doctorId": body.doctor_id,
-        "name": st["full_name"],
-        "status": "WAITING",
-    }
+        finally:
+            conn.close()
 
 
 # ── 4. live queue for the front-desk screen (poll every few seconds) ───
 @router.get("/queue")
-def front_desk_queue(_: CurrentReceptionist = Depends(get_current_receptionist)):
+def front_desk_queue(
+    doctor_id: Optional[int] = Query(None, description="Optional doctor ID filter"),
+    _: CurrentReceptionist = Depends(get_current_receptionist),
+):
+    """
+    Receptionist queue view: Returns active queue entries across all doctors,
+    or filtered for a specific doctor if `doctor_id` is provided.
+    Each entry includes visit, student, doctor, queue sequence, status, and check-in time.
+    """
     conn = get_db_connection()
     try:
         with conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT qe.queue_entry_id, qe.doctor_id, qe.queue_sequence, qe.entered_at,
-                       v.visit_id, v.roll_number, st.full_name
+            sql = """
+                SELECT qe.queue_entry_id, qe.doctor_id, qe.queue_sequence, qe.entered_at, qe.called_at,
+                       qe.status AS queue_status, qe.entry_reason,
+                       v.visit_id, v.roll_number, v.status AS visit_status, v.checked_in_at,
+                       st.full_name, st.blood_group,
+                       ua.email AS doctor_email,
+                       sp.name AS specialty,
+                       (SELECT ve.notes FROM VISIT_EVENT ve
+                        WHERE ve.visit_id = v.visit_id AND ve.event_type = 'CHECKED_IN'
+                        ORDER BY ve.event_id DESC LIMIT 1) AS checkin_notes
                 FROM QUEUE_ENTRY qe
                 JOIN VISIT v ON v.visit_id = qe.visit_id
                 JOIN STUDENT st ON st.roll_number = v.roll_number
-                WHERE qe.status = 'WAITING'
-                ORDER BY qe.doctor_id, qe.queue_sequence
-                """
-            )
+                JOIN DOCTOR d ON d.doctor_id = qe.doctor_id
+                JOIN STAFF s ON s.staff_id = d.staff_id
+                JOIN USER_ACCOUNT ua ON ua.user_id = s.user_id
+                LEFT JOIN SPECIALTY sp ON sp.specialty_id = d.specialty_id
+                WHERE qe.status IN ('WAITING', 'IN_CONSULTATION')
+            """
+            params = []
+            if doctor_id is not None:
+                sql += " AND qe.doctor_id = %s"
+                params.append(doctor_id)
+
+            sql += " ORDER BY qe.doctor_id, FIELD(qe.status, 'IN_CONSULTATION', 'WAITING'), qe.queue_sequence ASC, qe.entered_at ASC"
+
+            cur.execute(sql, tuple(params))
             rows = cur.fetchall()
     finally:
         conn.close()
-    return [
-        {
+
+    result = []
+    for r in rows:
+        raw_name = display_name_from_email(r["doctor_email"])
+        doc_name = raw_name if raw_name.startswith("Dr ") else f"Dr {raw_name}"
+
+        # Extract chief complaint if recorded at check-in
+        complaint = ""
+        notes = r.get("checkin_notes")
+        if notes:
+            if " - " in notes:
+                complaint = notes.split(" - ", 1)[1].strip()
+            elif not any(term in notes.lower() for term in ("check-in", "checkin")):
+                complaint = notes.strip()
+        if not complaint and r.get("entry_reason") and r["entry_reason"] != "INITIAL_CHECKIN":
+            complaint = r["entry_reason"]
+
+        chk_time = r.get("checked_in_at") or r.get("entered_at")
+        chk_iso = chk_time.isoformat() if chk_time else None
+        entered_iso = r["entered_at"].isoformat() if r.get("entered_at") else None
+        called_iso = r["called_at"].isoformat() if r.get("called_at") else None
+        waiting_since = r["entered_at"].strftime("%I:%M %p") if r.get("entered_at") else None
+        called_at = r["called_at"].strftime("%I:%M %p") if r.get("called_at") else None
+
+        result.append({
+            # Identifiers
             "queueEntryId": r["queue_entry_id"],
+            "queue_entry_id": r["queue_entry_id"],
             "visitId": r["visit_id"],
-            "doctorId": r["doctor_id"],
-            "queueNo": r["queue_sequence"],
+            "visit_id": r["visit_id"],
             "rollNumber": r["roll_number"],
+            "roll_number": r["roll_number"],
+            "rollNo": r["roll_number"],
             "name": r["full_name"],
-            "waitingSince": r["entered_at"].strftime("%I:%M %p") if r["entered_at"] else None,
-        }
-        for r in rows
-    ]
+            "student_name": r["full_name"],
+            "bloodGroup": r.get("blood_group"),
+            "blood_group": r.get("blood_group"),
+
+            # Doctor Information
+            "doctorId": r["doctor_id"],
+            "doctor_id": r["doctor_id"],
+            "doctorName": doc_name,
+            "doctor_name": doc_name,
+            "doctorEmail": r["doctor_email"],
+            "doctor_email": r["doctor_email"],
+            "specialty": r.get("specialty") or "General Physician",
+            "room": f"Room {103 + r['doctor_id']}",
+
+            # Queue Sequence and Status
+            "queueNo": r["queue_sequence"],
+            "queue_number": r["queue_sequence"],
+            "queue_sequence": r["queue_sequence"],
+            "status": "In Consultation" if r["queue_status"] == "IN_CONSULTATION" else "Waiting",
+            "statusCode": r["queue_status"],
+            "status_code": r["queue_status"],
+            "queueStatus": r["queue_status"],
+            "queue_status": r["queue_status"],
+            "visitStatus": r["visit_status"],
+            "visit_status": r["visit_status"],
+
+            # Timing
+            "checkInTime": chk_iso,
+            "check_in_time": chk_iso,
+            "checkedInAt": chk_iso,
+            "checked_in_at": chk_iso,
+            "enteredAt": entered_iso,
+            "entered_at": entered_iso,
+            "waitingSince": waiting_since,
+            "calledAt": called_at,
+            "called_at": called_iso,
+
+            # Clinical details
+            "complaint": complaint,
+        })
+
+    return result
 
 
 def _is_mysql(conn) -> bool:

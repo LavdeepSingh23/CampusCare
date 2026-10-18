@@ -118,11 +118,12 @@ def check_in_student(
         if not doctor:
             raise ResourceNotFoundError(f"Doctor #{doctor_id} not found.")
 
+        lock_avail = " FOR UPDATE" if _is_mysql(conn) else ""
         cur.execute(
-            """
+            f"""
             SELECT status FROM DOCTOR_AVAILABILITY
             WHERE doctor_id = %s AND availability_date = CURDATE()
-            LIMIT 1
+            LIMIT 1{lock_avail}
             """,
             (doctor_id,),
         )
@@ -210,9 +211,19 @@ def call_next_patient(
     """
     Called by a doctor to advance their queue and start consultation.
     If the doctor already has a patient in consultation, returns existing session (idempotent).
+    Safe against concurrent requests via doctor row locking.
     """
     with conn.cursor() as cur:
-        # Check if already in consultation
+        # 1. Lock doctor row first to serialize call-next operations for this doctor
+        if _is_mysql(conn):
+            cur.execute("SELECT doctor_id FROM DOCTOR WHERE doctor_id = %s FOR UPDATE", (doctor_id,))
+        else:
+            cur.execute("SELECT doctor_id FROM DOCTOR WHERE doctor_id = %s", (doctor_id,))
+        doctor_row = cur.fetchone()
+        if not doctor_row:
+            raise ResourceNotFoundError(f"Doctor #{doctor_id} not found.")
+
+        # 2. Check if already in consultation
         cur.execute(
             """
             SELECT qe.queue_entry_id, qe.queue_sequence, v.visit_id, v.roll_number, st.full_name
@@ -229,13 +240,20 @@ def call_next_patient(
             return {
                 "status": "already_in_consultation",
                 "queueEntryId": existing["queue_entry_id"],
+                "queue_entry_id": existing["queue_entry_id"],
                 "visitId": existing["visit_id"],
+                "visit_id": existing["visit_id"],
                 "rollNumber": existing["roll_number"],
+                "roll_number": existing["roll_number"],
                 "name": existing["full_name"],
                 "sequence": existing["queue_sequence"],
+                "queueNo": existing["queue_sequence"],
+                "queue_number": existing["queue_sequence"],
+                "doctorId": doctor_id,
+                "doctor_id": doctor_id,
             }
 
-        # Fetch next waiting patient in line
+        # 3. Fetch next waiting patient in line
         lock_clause = " FOR UPDATE" if _is_mysql(conn) else ""
         cur.execute(
             f"""
@@ -255,6 +273,10 @@ def call_next_patient(
 
         queue_entry_id = next_patient["queue_entry_id"]
         visit_id = next_patient["visit_id"]
+
+        # Lock the visit row
+        if _is_mysql(conn):
+            cur.execute("SELECT visit_id, status FROM VISIT WHERE visit_id = %s FOR UPDATE", (visit_id,))
 
         # Advance QUEUE_ENTRY to IN_CONSULTATION
         cur.execute(
@@ -288,17 +310,159 @@ def call_next_patient(
     return {
         "status": "called",
         "queueEntryId": queue_entry_id,
+        "queue_entry_id": queue_entry_id,
         "visitId": visit_id,
+        "visit_id": visit_id,
         "rollNumber": next_patient["roll_number"],
+        "roll_number": next_patient["roll_number"],
         "name": next_patient["full_name"],
         "sequence": next_patient["queue_sequence"],
+        "queueNo": next_patient["queue_sequence"],
+        "queue_number": next_patient["queue_sequence"],
+        "doctorId": doctor_id,
+        "doctor_id": doctor_id,
+    }
+
+
+def start_consultation(
+    conn,
+    doctor_id: int,
+    visit_id: int,
+    performed_by_user_id: int,
+) -> Dict[str, Any]:
+    """
+    Explicitly starts consultation for a specific visit assigned to the doctor.
+    Safe against concurrent requests via doctor and visit row-locking.
+    """
+    with conn.cursor() as cur:
+        # 1. Lock doctor row first to serialize transitions for this doctor
+        if _is_mysql(conn):
+            cur.execute("SELECT doctor_id FROM DOCTOR WHERE doctor_id = %s FOR UPDATE", (doctor_id,))
+        else:
+            cur.execute("SELECT doctor_id FROM DOCTOR WHERE doctor_id = %s", (doctor_id,))
+        doctor_row = cur.fetchone()
+        if not doctor_row:
+            raise ResourceNotFoundError(f"Doctor #{doctor_id} not found.")
+
+        # 2. Check if this doctor currently has ANY active consultation
+        cur.execute(
+            """
+            SELECT qe.queue_entry_id, qe.queue_sequence, v.visit_id, v.roll_number, st.full_name
+            FROM QUEUE_ENTRY qe
+            JOIN VISIT v ON v.visit_id = qe.visit_id
+            JOIN STUDENT st ON st.roll_number = v.roll_number
+            WHERE qe.doctor_id = %s AND qe.status = 'IN_CONSULTATION'
+            LIMIT 1
+            """,
+            (doctor_id,),
+        )
+        active_consult = cur.fetchone()
+        if active_consult:
+            if active_consult["visit_id"] == visit_id:
+                # Idempotent call for the same consultation session
+                return {
+                    "status": "already_in_consultation",
+                    "queueEntryId": active_consult["queue_entry_id"],
+                    "queue_entry_id": active_consult["queue_entry_id"],
+                    "visitId": active_consult["visit_id"],
+                    "visit_id": active_consult["visit_id"],
+                    "rollNumber": active_consult["roll_number"],
+                    "roll_number": active_consult["roll_number"],
+                    "name": active_consult["full_name"],
+                    "sequence": active_consult["queue_sequence"],
+                    "queueNo": active_consult["queue_sequence"],
+                    "queue_number": active_consult["queue_sequence"],
+                    "doctorId": doctor_id,
+                    "doctor_id": doctor_id,
+                }
+            else:
+                raise InvalidTransitionError(
+                    f"Doctor #{doctor_id} already has an active consultation with visit #{active_consult['visit_id']}. "
+                    "Complete or finalize the active consultation before starting another."
+                )
+
+        # 3. Lock target visit and its active queue entry
+        lock_clause = " FOR UPDATE" if _is_mysql(conn) else ""
+        cur.execute(
+            f"""
+            SELECT v.visit_id, v.roll_number, v.doctor_id, v.status AS visit_status,
+                   qe.queue_entry_id, qe.queue_sequence, qe.status AS queue_status, st.full_name
+            FROM VISIT v
+            JOIN STUDENT st ON st.roll_number = v.roll_number
+            LEFT JOIN QUEUE_ENTRY qe ON qe.visit_id = v.visit_id AND qe.status IN ('WAITING', 'IN_CONSULTATION')
+            WHERE v.visit_id = %s{lock_clause}
+            """,
+            (visit_id,),
+        )
+        row = cur.fetchone()
+        if not row:
+            raise ResourceNotFoundError(f"Visit #{visit_id} not found.")
+
+        if row["doctor_id"] != doctor_id:
+            raise InvalidTransitionError(
+                f"Cannot start consultation: Visit #{visit_id} is assigned to Doctor #{row['doctor_id']}, not Doctor #{doctor_id}."
+            )
+
+        if row["visit_status"] in ("COMPLETED", "CANCELLED", "NO_SHOW", "WAITING_FOR_MEDICINE"):
+            raise InvalidTransitionError(
+                f"Cannot start consultation for visit #{visit_id} in status '{row['visit_status']}'."
+            )
+
+        if not row.get("queue_entry_id"):
+            raise InvalidTransitionError(f"Visit #{visit_id} has no active waiting queue entry.")
+
+        queue_entry_id = row["queue_entry_id"]
+
+        # 4. Advance QUEUE_ENTRY to IN_CONSULTATION
+        cur.execute(
+            """
+            UPDATE QUEUE_ENTRY
+            SET status = 'IN_CONSULTATION', called_at = NOW()
+            WHERE queue_entry_id = %s
+            """,
+            (queue_entry_id,),
+        )
+
+        # 5. Advance VISIT to IN_CONSULTATION
+        cur.execute(
+            """
+            UPDATE VISIT
+            SET status = 'IN_CONSULTATION', consultation_started_at = NOW()
+            WHERE visit_id = %s
+            """,
+            (visit_id,),
+        )
+
+        # 6. Audit log in VISIT_EVENT
+        cur.execute(
+            """
+            INSERT INTO VISIT_EVENT (visit_id, event_type, performed_by_user_id, notes)
+            VALUES (%s, 'CONSULTATION_STARTED', %s, %s)
+            """,
+            (visit_id, performed_by_user_id, f"Consultation explicitly started by Doctor #{doctor_id}"),
+        )
+
+    return {
+        "status": "in_consultation",
+        "queueEntryId": queue_entry_id,
+        "queue_entry_id": queue_entry_id,
+        "visitId": visit_id,
+        "visit_id": visit_id,
+        "rollNumber": row["roll_number"],
+        "roll_number": row["roll_number"],
+        "name": row["full_name"],
+        "sequence": row["queue_sequence"],
+        "queueNo": row["queue_sequence"],
+        "queue_number": row["queue_sequence"],
+        "doctorId": doctor_id,
+        "doctor_id": doctor_id,
     }
 
 
 def mark_no_show(
     conn,
     visit_id: int,
-    doctor_id: int,
+    doctor_id: Optional[int],
     performed_by_user_id: int,
     reason: str = "Patient did not report to cabin when called",
 ) -> Dict[str, Any]:
@@ -323,14 +487,20 @@ def mark_no_show(
             raise ResourceNotFoundError(f"Visit #{visit_id} not found.")
 
         if row["visit_status"] == "NO_SHOW":
-            return {"status": "already_no_show", "visitId": visit_id}
+            return {
+                "status": "already_no_show",
+                "visitId": visit_id,
+                "visit_id": visit_id,
+                "rollNumber": row["roll_number"],
+                "roll_number": row["roll_number"],
+            }
 
         if row["visit_status"] in ("COMPLETED", "CANCELLED", "WAITING_FOR_MEDICINE"):
             raise InvalidTransitionError(
                 f"Cannot mark visit in status '{row['visit_status']}' as no-show."
             )
 
-        if row["doctor_id"] != doctor_id:
+        if doctor_id is not None and row["doctor_id"] != doctor_id:
             raise InvalidTransitionError("Cannot mark no-show for a patient assigned to another doctor.")
 
         # Update active queue entry if one exists
@@ -362,7 +532,11 @@ def mark_no_show(
     return {
         "status": "no_show",
         "visitId": visit_id,
+        "visit_id": visit_id,
         "rollNumber": row["roll_number"],
+        "roll_number": row["roll_number"],
+        "doctorId": row["doctor_id"],
+        "doctor_id": row["doctor_id"],
     }
 
 
@@ -396,6 +570,13 @@ def requeue_patient(
         if _is_mysql(conn):
             cur.execute("SELECT roll_number FROM STUDENT WHERE roll_number = %s FOR UPDATE", (visit["roll_number"],))
 
+        # Check for any active visit conflicts
+        active_conflict = get_active_visit_for_student(cur, visit["roll_number"], for_update=True)
+        if active_conflict and active_conflict["visit_id"] != visit_id:
+            raise ActiveVisitConflictError(
+                f"Cannot requeue: Student '{visit['roll_number']}' already has an active visit in progress (Visit #{active_conflict['visit_id']}, Status: {active_conflict['status']})."
+            )
+
         # Lock target doctor record
         if _is_mysql(conn):
             cur.execute("SELECT doctor_id FROM DOCTOR WHERE doctor_id = %s FOR UPDATE", (target_doctor_id,))
@@ -404,6 +585,20 @@ def requeue_patient(
         doc = cur.fetchone()
         if not doc:
             raise ResourceNotFoundError(f"Target doctor #{target_doctor_id} not found.")
+
+        # Check target doctor availability
+        lock_avail = " FOR UPDATE" if _is_mysql(conn) else ""
+        cur.execute(
+            f"""
+            SELECT availability_id, status FROM DOCTOR_AVAILABILITY
+            WHERE doctor_id = %s AND availability_date = CURDATE()
+            LIMIT 1{lock_avail}
+            """,
+            (target_doctor_id,),
+        )
+        avail = cur.fetchone()
+        if avail and avail.get("status") and avail["status"].upper() == "UNAVAILABLE":
+            raise DoctorUnavailableError(f"Doctor #{target_doctor_id} is marked UNAVAILABLE today.")
 
         # Allocate sequence under doctor lock
         seq = allocate_next_queue_sequence(cur, target_doctor_id, conn)
@@ -441,10 +636,16 @@ def requeue_patient(
     return {
         "status": "requeued",
         "visitId": visit_id,
+        "visit_id": visit_id,
         "queueEntryId": new_queue_entry_id,
+        "queue_entry_id": new_queue_entry_id,
         "queueNo": seq,
+        "queue_number": seq,
+        "sequence": seq,
         "doctorId": target_doctor_id,
+        "doctor_id": target_doctor_id,
         "rollNumber": visit["roll_number"],
+        "roll_number": visit["roll_number"],
     }
 
 
@@ -453,6 +654,7 @@ def redirect_patient(
     visit_id: int,
     target_doctor_id: int,
     performed_by_user_id: int,
+    current_doctor_id: Optional[int] = None,
     reason: str = "Doctor referral / triage redirect",
 ) -> Dict[str, Any]:
     """
@@ -475,6 +677,9 @@ def redirect_patient(
         if not row:
             raise InvalidTransitionError(f"No active queue entry found for visit #{visit_id} to redirect.")
 
+        if current_doctor_id is not None and row["doctor_id"] != current_doctor_id:
+            raise InvalidTransitionError("Doctor can only redirect visits assigned to their own clinic.")
+
         if row["doctor_id"] == target_doctor_id:
             raise InvalidTransitionError("Target doctor cannot be the same as current doctor.")
 
@@ -486,6 +691,20 @@ def redirect_patient(
         target_doc = cur.fetchone()
         if not target_doc:
             raise ResourceNotFoundError(f"Target doctor #{target_doctor_id} not found.")
+
+        # Check target doctor availability
+        lock_avail = " FOR UPDATE" if _is_mysql(conn) else ""
+        cur.execute(
+            f"""
+            SELECT availability_id, status FROM DOCTOR_AVAILABILITY
+            WHERE doctor_id = %s AND availability_date = CURDATE()
+            LIMIT 1{lock_avail}
+            """,
+            (target_doctor_id,),
+        )
+        avail = cur.fetchone()
+        if avail and avail.get("status") and avail["status"].upper() == "UNAVAILABLE":
+            raise DoctorUnavailableError(f"Doctor #{target_doctor_id} is marked UNAVAILABLE today.")
 
         # Exit old queue entry
         cur.execute(
@@ -522,22 +741,37 @@ def redirect_patient(
         )
 
         # Audit log in VISIT_EVENT
+        if row.get("queue_status") == "IN_CONSULTATION":
+            audit_note = f"Redirected during consultation from Doctor #{row['doctor_id']} to Doctor #{target_doctor_id}: {reason}"
+        else:
+            audit_note = f"Redirected from Doctor #{row['doctor_id']} to Doctor #{target_doctor_id}: {reason}"
+
         cur.execute(
             """
             INSERT INTO VISIT_EVENT (visit_id, event_type, performed_by_user_id, notes)
             VALUES (%s, 'REDIRECTED', %s, %s)
             """,
-            (visit_id, performed_by_user_id, f"Redirected to Doctor #{target_doctor_id}: {reason}"[:500]),
+            (visit_id, performed_by_user_id, audit_note[:500]),
         )
 
     return {
         "status": "redirected",
         "visitId": visit_id,
+        "visit_id": visit_id,
         "oldDoctorId": row["doctor_id"],
+        "old_doctor_id": row["doctor_id"],
         "newDoctorId": target_doctor_id,
+        "new_doctor_id": target_doctor_id,
+        "doctorId": target_doctor_id,
+        "doctor_id": target_doctor_id,
         "newQueueNo": seq,
+        "new_queue_no": seq,
+        "queueNo": seq,
+        "queue_number": seq,
         "queueEntryId": new_queue_entry_id,
+        "queue_entry_id": new_queue_entry_id,
         "rollNumber": row["roll_number"],
+        "roll_number": row["roll_number"],
     }
 
 
@@ -782,7 +1016,7 @@ def cancel_visit(
         cur.execute(
             """
             INSERT INTO VISIT_EVENT (visit_id, event_type, performed_by_user_id, notes)
-            VALUES (%s, 'COMPLETED', %s, %s)
+            VALUES (%s, 'CANCELLED', %s, %s)
             """,
             (visit_id, performed_by_user_id, f"Cancelled: {cancel_reason}"[:500]),
         )

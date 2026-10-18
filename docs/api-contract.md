@@ -1,0 +1,672 @@
+# CampusCare API Integration Contract
+
+> **Target Audience**: Frontend Engineers, Integration Partners, and Backend Developers.  
+> **Environment**: CampusCare Clinic Management System (FastAPI + MySQL / Aiven Cloud).  
+> **Status**: Frozen & Implemented. All endpoints documented herein are verified by automated backend and integration tests.
+
+---
+
+## 1. Core Integration Principles
+
+### 1.1 Server-Authoritative State & Queue Numbering
+- **Never Spoof or Client-Generate Sequence Numbers**: Queue sequence numbers (`queueNo` / `queue_sequence`) and visit IDs (`visitId` / `visit_id`) are exclusively generated and allocated by the server within serialized database transactions holding doctor row locks (`SELECT doctor_id FROM DOCTOR ... FOR UPDATE`).
+- **Gaps in Sequences**: Sequence numbers are strictly unique and monotonically increasing per doctor per calendar date. Sequence gaps resulting from cancellations, redirects, or rollbacks are natural and intentional; frontends must never re-index or re-number displayed tokens.
+
+### 1.2 Dual-Cased JSON Serialization
+To prevent integration breaks between JavaScript frontend conventions (`camelCase`) and Python/SQL backend conventions (`snake_case`), all queue and reception responses provide **both casings** simultaneously:
+```json
+{
+  "visitId": 105,
+  "visit_id": 105,
+  "queueNo": 3,
+  "queue_number": 3,
+  "queue_sequence": 3,
+  "rollNumber": "CS21B045",
+  "roll_number": "CS21B045",
+  "doctor_id": 1,
+  "doctorId": 1,
+  "status": "Waiting"
+}
+```
+Frontend developers may safely access either `item.visitId` or `item.visit_id`.
+
+### 1.3 Authentication & Header Format
+All authenticated endpoints require an `Authorization` header containing a valid Bearer JWT:
+```http
+Authorization: Bearer <access_token>
+```
+The token is obtained via `POST /api/auth/login`. Tokens encode the user's role (`DOCTOR`, `RECEPTIONIST`, or `STUDENT`), `user_id`, `staff_id`, and `doctor_id`. The backend derives actor identity exclusively from the validated token.
+
+---
+
+## 2. Standardized Error Handling
+
+All error responses from FastAPI and CampusCare services follow a uniform structure:
+
+```json
+{
+  "detail": "Human-readable explanation of the error"
+}
+```
+
+Or for internal database-level faults:
+```json
+{
+  "error": "ActiveVisitConflictError",
+  "message": "Student CS21B045 already has an active visit (visit_id=105, status=WAITING_FOR_DOCTOR).",
+  "detail": "Cannot create a new visit until the active visit is completed or cancelled.",
+  "path": "/api/reception/check-ins"
+}
+```
+
+### 2.1 HTTP Status Code Directory
+
+| HTTP Status | Semantic Meaning | Common Causes in CampusCare | Frontend Action |
+|---|---|---|---|
+| **`200 OK`** | Success | Request succeeded. | Update UI state with response data. |
+| **`201 Created`** | Created | Check-in created new visit + queue entry. | Display allocated token & position to staff. |
+| **`400 Bad Request`** | Client Payload Error | Malformed JSON or invalid transition attempt. | Display validation error message. |
+| **`401 Unauthorized`** | Missing or Expired Token | Token missing, signature invalid, or expired. | Clear local session; redirect to `/login`. |
+| **`403 Forbidden`** | Insufficient Role Privileges | Doctor accessing another doctor's workstation; student accessing staff queue. | Show "Access Denied: unauthorized workstation". |
+| **`404 Not Found`** | Missing Resource | Student roll number, doctor ID, or visit ID does not exist in DB. | Display "Record not found". |
+| **`409 Conflict`** | Lifecycle Conflict | Duplicate active visit, unavailable doctor, or invalid status transition. | Display specific error message without logging out. |
+| **`422 Unprocessable`** | Missing Required Field | Missing `roll_number` or `doctor_id` in request body. | Highlight missing input field in form. |
+| **`500 Internal Error`** | Server / Database Error | Unexpected database failure or deadlock exhaustion. | Show "System error. Please retry shortly." |
+| **`503 Service Unavailable`** | DB Unreachable | Aiven MySQL rejected connections or timed out. | Show "Service temporarily offline." |
+
+### 2.2 Domain Conflict Strings (HTTP 409)
+The frontend can check `error.message` or `error.response.data.detail` against these standard patterns:
+- **`Student ... already has an active visit`**: Student is currently in queue or consultation.
+- **`Doctor ... is unavailable on ...`**: Selected doctor has an active `UNAVAILABLE` record today.
+- **`Doctor already has an active consultation in progress`**: Doctor must finish or redirect current patient before calling another.
+- **`Cannot transition visit ... from COMPLETED`**: Transition attempted on terminal visit.
+- **`Visit ... is not in NO_SHOW status`**: Requeue attempted on non-no-show visit.
+
+---
+
+## 3. Patient & Queue Record Data Contracts
+
+### 3.1 Patient Display Fields in Queue Rows
+When displaying queue tables for front desk or doctor queues, each patient item contains the following verified fields:
+
+| Field (`camelCase` / `snake_case`) | Type | Nullable | Description | Example |
+|---|---|---|---|---|
+| `visitId` / `visit_id` | `int` | No | Overarching clinic visit identifier. | `105` |
+| `queueEntryId` / `queue_entry_id` | `int` | No | Current doctor queue record identifier. | `240` |
+| `rollNumber` / `roll_number` / `rollNo` | `string` | No | Student unique university roll number. | `"CS21B045"` |
+| `name` / `student_name` | `string` | No | Student full display name. | `"Aarav Mehta"` |
+| `bloodGroup` / `blood_group` | `string` | Yes | Student blood group. | `"O+"` |
+| `age` | `int` | Yes | Calculated age based on date of birth. | `21` |
+| `doctorId` / `doctor_id` | `int` | No | Assigned doctor ID. | `1` |
+| `doctorName` / `doctor_name` | `string` | Yes | Assigned doctor's formatted name. | `"Dr. Neha Kapoor"` |
+| `doctorEmail` / `doctor_email` | `string` | Yes | Assigned doctor's campus email. | `"nkapoor@thapar.edu"` |
+| `specialty` | `string` | Yes | Doctor's medical specialty. | `"General Physician"` |
+| `room` | `string` | Yes | Assigned clinic examination room. | `"Room 104"` |
+| `queueNo` / `queue_number` / `sequence` | `int` | No | Daily queue sequence number for this doctor. | `4` |
+| `status` | `string` | No | Human-readable UI status (`"Waiting"` or `"In Consultation"`). | `"Waiting"` |
+| `statusCode` / `queue_status` | `string` | No | Machine-readable status of the queue entry. | `"WAITING"` or `"IN_CONSULTATION"` |
+| `visitStatus` / `visit_status` | `string` | No | Overarching visit status. | `"WAITING_FOR_DOCTOR"`, `"IN_CONSULTATION"` |
+| `checkInTime` / `checkedInAt` | `string` (ISO) | Yes | Timestamp when student checked in. | `"2026-10-18T10:15:00"` |
+| `waitingSince` | `string` | Yes | Formatted local check-in time for UI cards. | `"10:15 AM"` |
+| `calledAt` / `called_at` | `string` | Yes | Timestamp/time when called into consultation. | `"10:32 AM"` |
+| `complaint` | `string` | Yes | Chief complaint or entry reason. | `"Fever & persistent cough"` |
+
+### 3.2 Student Privacy & Data Minimization Rules
+To comply with medical confidentiality and student data protection:
+- **Do NOT expose in queue rows**: Full home addresses, guardian phone numbers, GPA/grades, full date of birth, emergency contact notes, or past medical records.
+- **Detailed Clinical History**: Medical conditions, past prescriptions, and active allergies are strictly quarantined to the doctor consultation endpoints (`/api/patient/{roll_number}/summary` and `/api/patient/{roll_number}/history`) and are never included in front-desk public queue lists.
+
+---
+
+## 4. Canonical Route Directory & Implementation Matrix
+
+| Operation | Canonical Route | Alternative / Deprecated Aliases | Implemented? |
+|---|---|---|---|
+| **Receptionist Check-In** | `POST /api/reception/check-ins` | `POST /api/reception/checkin`<br>`POST /api/queue/checkin` | **YES** |
+| **Front-Desk Queue View** | `GET /api/reception/queue` | `GET /api/queue/live` | **YES** |
+| **Reception Doctors List** | `GET /api/reception/doctors` | — | **YES** |
+| **Reception Student Lookup** | `GET /api/reception/students/{roll_number}` | — | **YES** |
+| **Doctor Own Queue** | `GET /api/doctor/{doctor_id}/queue` | — | **YES** |
+| **Doctor Active Consultation** | `GET /api/doctor/{doctor_id}/active-consultation` | — | **YES** |
+| **Doctor Call Next** | `POST /api/doctor/{doctor_id}/call-next` | `POST /api/doctor/{doctor_id}/start-consultation` (without body) | **YES** |
+| **Doctor Start Consultation** | `POST /api/doctor/{doctor_id}/start-consultation/{visit_id}` | `POST /api/queue/{visit_id}/start-consultation` | **YES** |
+| **Complete Consultation** | `POST /api/doctor/{doctor_id}/complete` | — | **YES** |
+| **Mark Patient No-Show** | `POST /api/doctor/{doctor_id}/no-show/{visit_id}` | `POST /api/queue/{visit_id}/no-show` | **YES** |
+| **Requeue Patient** | `POST /api/queue/{visit_id}/requeue` | — | **YES** |
+| **Redirect Patient** | `POST /api/queue/{visit_id}/redirect` | `POST /api/doctor/{doctor_id}/redirect/{visit_id}` | **YES** |
+| **Dispense Medication** | `POST /api/queue/{visit_id}/dispense` | — | **YES** |
+| **Cancel Visit** | `POST /api/queue/{visit_id}/cancel` | — | **YES** |
+| **Doctor Daily Stats** | `GET /api/doctor/{doctor_id}/stats` | — | **YES** |
+| **Patient Medical Summary** | `GET /api/patient/{roll_number}/summary` | — | **YES** |
+| **Patient Medical History** | `GET /api/patient/{roll_number}/history` | — | **YES** |
+| **Staff Authentication** | `POST /api/auth/login` | — | **YES** |
+| *Student Self-Checkin Kiosk* | *`POST /api/kiosk/check-in`* | — | *PLANNED* |
+| *Real-time WebSocket Push* | *`WS /api/ws/queue`* | — | *PLANNED* |
+
+---
+
+## 5. Detailed Endpoint Specifications
+
+### 5.1 Authentication: Staff Login
+
+- **Route**: `POST /api/auth/login`
+- **Authorization**: Public (No auth header required)
+- **Request Body**:
+  ```json
+  {
+    "email": "reception@thapar.edu", // string, required
+    "password": "Password123!"       // string, required
+  }
+  ```
+- **Success Response (`200 OK`)**:
+  ```json
+  {
+    "access_token": "eyJhbGciOi...",
+    "token_type": "bearer",
+    "role": "RECEPTIONIST",          // "DOCTOR" or "RECEPTIONIST"
+    "name": "Front Desk Reception",
+    "doctor_id": null,               // int for doctors, null for receptionists
+    "specialty": null                // string for doctors, null for receptionists
+  }
+  ```
+- **Error Responses**:
+  - `401 Unauthorized`: Incorrect email or password.
+  - `403 Forbidden`: Account is inactive or disabled.
+- **Retry Safety**: Safe and idempotent.
+
+---
+
+### 5.2 Reception: Student Check-In (Canonical)
+
+- **Route**: `POST /api/reception/check-ins`  
+  *(Aliases: `POST /api/reception/checkin`, `POST /api/queue/checkin`)*
+- **Authorization**: `RECEPTIONIST` role only.
+- **Request Body**:
+  ```json
+  {
+    "roll_number": "CS21B045",                  // string, required (or rollNumber)
+    "doctor_id": 1,                             // int, required (or doctorId)
+    "complaint": "Persistent cough and fever",  // string, optional (default: "General Consultation")
+    "via": "MANUAL"                             // string, optional: "MANUAL" or "RFID"
+  }
+  ```
+- **Success Response (`201 Created`)**:
+  ```json
+  {
+    "visitId": 105,
+    "visit_id": 105,
+    "queueNo": 4,
+    "queue_number": 4,
+    "sequence": 4,
+    "doctorId": 1,
+    "doctor_id": 1,
+    "status": "Waiting",
+    "position": 3,
+    "name": "Aarav Mehta",
+    "rollNumber": "CS21B045",
+    "roll_number": "CS21B045",
+    "queueEntryId": 240,
+    "queue_entry_id": 240
+  }
+  ```
+- **Error Responses**:
+  - `401 Unauthorized`: Missing or invalid token.
+  - `403 Forbidden`: Caller is a DOCTOR or STUDENT.
+  - `404 Not Found`: Student roll number or doctor ID does not exist.
+  - `409 Conflict`: 
+    - Student already has an active visit in progress.
+    - Selected doctor is unavailable today (`DOCTOR_AVAILABILITY`).
+  - `422 Unprocessable Entity`: Missing `roll_number` or `doctor_id`.
+- **Side Effects**:
+  - Inserts new row in `VISIT` (`status = 'WAITING_FOR_DOCTOR'`, `checked_in_at = NOW()`).
+  - Inserts new row in `QUEUE_ENTRY` (`status = 'WAITING'`, `queue_sequence = next_seq`, `entry_reason = 'INITIAL_CHECKIN'`).
+  - Inserts audit row in `VISIT_EVENT` (`event_type = 'CHECKED_IN'`).
+- **Retry Safety**: **Non-idempotent**. Retrying check-in for the same student while the first visit is waiting returns `409 Conflict` (Single Active Visit constraint).
+
+---
+
+### 5.3 Reception: Overall Queue View
+
+- **Route**: `GET /api/reception/queue`  
+  *(Optional Filter: `GET /api/reception/queue?doctor_id=1`)*
+- **Authorization**: `RECEPTIONIST` role only.
+- **Request Parameters**:
+  - `doctor_id` (`int`, query param, optional): When provided, restricts results to that doctor. When omitted, returns active queues across all doctors.
+- **Success Response (`200 OK`)**:
+  ```json
+  [
+    {
+      "queueEntryId": 240,
+      "queue_entry_id": 240,
+      "visitId": 105,
+      "visit_id": 105,
+      "rollNumber": "CS21B045",
+      "roll_number": "CS21B045",
+      "rollNo": "CS21B045",
+      "name": "Aarav Mehta",
+      "student_name": "Aarav Mehta",
+      "bloodGroup": "O+",
+      "blood_group": "O+",
+      "doctorId": 1,
+      "doctor_id": 1,
+      "doctorName": "Dr. Neha Kapoor",
+      "doctor_name": "Dr. Neha Kapoor",
+      "doctorEmail": "nkapoor@thapar.edu",
+      "specialty": "General Physician",
+      "room": "Room 104",
+      "queueNo": 1,
+      "queue_number": 1,
+      "queue_sequence": 1,
+      "status": "In Consultation",
+      "statusCode": "IN_CONSULTATION",
+      "queueStatus": "IN_CONSULTATION",
+      "queue_status": "IN_CONSULTATION",
+      "visitStatus": "IN_CONSULTATION",
+      "visit_status": "IN_CONSULTATION",
+      "checkInTime": "2026-10-18T10:15:00",
+      "waitingSince": "10:15 AM",
+      "calledAt": "10:32 AM",
+      "called_at": "2026-10-18T10:32:00",
+      "complaint": "Persistent cough"
+    }
+  ]
+  ```
+- **Error Responses**:
+  - `401 Unauthorized`: Missing or invalid token.
+  - `403 Forbidden`: Non-receptionist token.
+- **Retry Safety**: Safe, read-only idempotency.
+
+---
+
+### 5.4 Doctor: Individual Doctor Queue
+
+- **Route**: `GET /api/doctor/{doctor_id}/queue`
+- **Authorization**: 
+  - `DOCTOR`: Authenticated doctor ID must strictly match `{doctor_id}`.
+  - `RECEPTIONIST`: Permitted for triage and coordination.
+  - `STUDENT`: `403 Forbidden`.
+- **Success Response (`200 OK`)**:
+  Same patient item structure as Section 5.3, containing entries where `status IN ('IN_CONSULTATION', 'WAITING')`.
+- **Error Responses**:
+  - `401 Unauthorized`: Missing or expired token.
+  - `403 Forbidden`: Doctor attempting to access another doctor's queue (`current.doctor_id != doctor_id`).
+- **Retry Safety**: Safe, read-only idempotency.
+
+---
+
+### 5.5 Doctor: Active Consultation Status
+
+- **Route**: `GET /api/doctor/{doctor_id}/active-consultation`
+- **Authorization**: Doctor workstation token (matches `{doctor_id}`).
+- **Success Response (`200 OK`) — Active Patient**:
+  ```json
+  {
+    "active": true,
+    "patient": {
+      "queueEntryId": 240,
+      "visitId": 105,
+      "rollNumber": "CS21B045",
+      "name": "Aarav Mehta",
+      "queueNo": 1,
+      "calledAt": "10:32 AM",
+      "age": 21,
+      "bloodGroup": "O+"
+    }
+  }
+  ```
+- **Success Response (`200 OK`) — Workstation Idle**:
+  ```json
+  {
+    "active": false,
+    "patient": null
+  }
+  ```
+- **Error Responses**:
+  - `401 Unauthorized`: Invalid/missing token.
+  - `403 Forbidden`: Non-doctor caller or accessing another doctor's workstation.
+- **Retry Safety**: Safe, read-only idempotency.
+
+---
+
+### 5.6 Doctor: Call Next Eligible Student
+
+- **Route**: `POST /api/doctor/{doctor_id}/call-next`
+- **Authorization**: Doctor workstation token (matches `{doctor_id}`).
+- **Request Body**: Empty or `{}`.
+- **Success Response (`200 OK`)**:
+  ```json
+  {
+    "status": "in_consultation",       // or "already_in_consultation"
+    "queueEntryId": 240,
+    "visitId": 105,
+    "rollNumber": "CS21B045",
+    "name": "Aarav Mehta",
+    "queueNo": 2,
+    "message": "Called Aarav Mehta for consultation"
+  }
+  ```
+- **Error Responses**:
+  - `401 Unauthorized`: Missing or expired token.
+  - `403 Forbidden`: Cross-doctor call attempt.
+  - `404 Not Found`: No waiting patients left in this doctor's queue.
+- **Side Effects**:
+  - Advances highest-priority `WAITING` entry to `IN_CONSULTATION`.
+  - Sets `called_at = NOW()`.
+  - Sets `VISIT.status = 'IN_CONSULTATION'` and `consultation_started_at = NOW()`.
+  - Inserts `VISIT_EVENT` (`event_type = 'CONSULTATION_STARTED'`).
+- **Retry Safety**: **Idempotent**. If called while a consultation is already active, returns `"already_in_consultation"` with the existing patient without skipping or advancing subsequent students.
+
+---
+
+### 5.7 Doctor: Start Consultation by Specific Visit ID
+
+- **Route**: `POST /api/doctor/{doctor_id}/start-consultation/{visit_id}`  
+  *(Alias: `POST /api/queue/{visit_id}/start-consultation`)*
+- **Authorization**: Doctor workstation token (matches `{doctor_id}`).
+- **Request Body**: Empty or `{}`.
+- **Success Response (`200 OK`)**: Same schema as `call-next`.
+- **Error Responses**:
+  - `404 Not Found`: Visit does not exist or is not assigned to this doctor.
+  - `409 Conflict`: 
+    - Doctor already has a *different* active consultation in progress.
+    - Visit is not in `WAITING_FOR_DOCTOR` or `CALLED` state.
+- **Retry Safety**: **Idempotent** for the same active visit.
+
+---
+
+### 5.8 Doctor: Complete Consultation & Write Prescription
+
+- **Route**: `POST /api/doctor/{doctor_id}/complete`
+- **Authorization**: Doctor workstation token (matches `{doctor_id}`).
+- **Request Body**:
+  ```json
+  {
+    "roll_number": "CS21B045",       // string, required
+    "diagnosis": "Acute Bronchitis", // string, required
+    "general": "Rest for 3 days",    // string, optional (clinical notes & advice)
+    "medicines": [                   // array, optional
+      {
+        "name": "Paracetamol 500mg", // string, required
+        "note": "After food",        // string, optional
+        "morning": true,             // boolean, optional
+        "afternoon": false,          // boolean, optional
+        "evening": true,             // boolean, optional
+        "night": false               // boolean, optional
+      }
+    ]
+  }
+  ```
+- **Success Response (`200 OK`)**:
+  ```json
+  {
+    "status": "completed",
+    "visitId": 105,
+    "consultationId": 82,
+    "prescriptionId": 45,
+    "rollNumber": "CS21B045"
+  }
+  ```
+- **Error Responses**:
+  - `404 Not Found`: No active consultation found for student and doctor.
+  - `409 Conflict`: Visit is not in `IN_CONSULTATION` state.
+- **Side Effects**:
+  - Inserts `CONSULTATION` row (`diagnosis`, `clinical_notes`).
+  - Inserts `PRESCRIPTION` and `PRESCRIPTION_ITEM` rows if medicines provided.
+  - Retires `QUEUE_ENTRY` (`status = 'COMPLETED'`, `exited_at = NOW()`, `exit_reason = 'COMPLETED'`).
+  - Updates `VISIT` (`status = 'WAITING_FOR_MEDICINE'`, `consultation_completed_at = NOW()`).
+  - Inserts `VISIT_EVENT` (`event_type = 'CONSULTATION_COMPLETED'`).
+- **Retry Safety**: **Non-idempotent**. Once completed, the visit transitions to `WAITING_FOR_MEDICINE` and subsequent retries reject with `404` or `409`.
+
+---
+
+### 5.9 Doctor & Staff: Mark Patient No-Show
+
+- **Route**: `POST /api/doctor/{doctor_id}/no-show/{visit_id}`  
+  *(Alias: `POST /api/queue/{visit_id}/no-show`)*
+- **Authorization**: Doctor workstation token (matches `{doctor_id}`) or Staff token.
+- **Request Body**:
+  ```json
+  {
+    "reason": "Student absent after 3 announcements" // string, optional
+  }
+  ```
+- **Success Response (`200 OK`)**:
+  ```json
+  {
+    "status": "no_show",               // or "already_no_show"
+    "visitId": 105,
+    "rollNumber": "CS21B045",
+    "doctorId": 1
+  }
+  ```
+- **Error Responses**:
+  - `404 Not Found`: Visit does not exist.
+  - `409 Conflict`: Cannot mark no-show on an already `COMPLETED` or `CANCELLED` visit.
+- **Side Effects**:
+  - Sets `QUEUE_ENTRY.status = 'NO_SHOW'` (`exited_at = NOW()`, `exit_reason = 'NO_SHOW'`).
+  - Sets `VISIT.status = 'NO_SHOW'`.
+  - Frees doctor workstation if patient was currently in consultation.
+  - Inserts `VISIT_EVENT` (`event_type = 'NO_SHOW'`).
+- **Retry Safety**: **Idempotent**. Retrying returns `status = 'already_no_show'` without duplicating audit records.
+
+---
+
+### 5.10 Reception: Requeue Patient After No-Show
+
+- **Route**: `POST /api/queue/{visit_id}/requeue`
+- **Authorization**: `RECEPTIONIST` role only.
+- **Request Body**:
+  ```json
+  {
+    "target_doctor_id": 1,           // int, required
+    "reason": "Student arrived late" // string, optional
+  }
+  ```
+- **Success Response (`200 OK`)**:
+  ```json
+  {
+    "status": "requeued",
+    "visitId": 105,
+    "queueEntryId": 245,
+    "queueNo": 7,
+    "doctorId": 1,
+    "rollNumber": "CS21B045"
+  }
+  ```
+- **Error Responses**:
+  - `404 Not Found`: Visit or doctor does not exist.
+  - `409 Conflict`:
+    - Visit is not currently in `NO_SHOW` status.
+    - Student has started a new active visit in the meantime.
+    - Target doctor is unavailable today.
+- **Side Effects**:
+  - Sets `VISIT.status = 'WAITING_FOR_DOCTOR'`.
+  - Creates new `QUEUE_ENTRY` (`status = 'WAITING'`, `entry_reason = 'NO_SHOW_RESCHEDULE'`, `queue_sequence = next_seq`).
+  - Inserts `VISIT_EVENT` (`event_type = 'QUEUED_JOINED_PATIENT'`).
+- **Retry Safety**: **Non-idempotent**. Retrying an already requeued visit returns `409 Conflict` because the status is no longer `NO_SHOW`.
+
+---
+
+### 5.11 Staff: Redirect Patient to Another Doctor
+
+- **Route**: `POST /api/queue/{visit_id}/redirect`  
+  *(Alias: `POST /api/doctor/{doctor_id}/redirect/{visit_id}`)*
+- **Authorization**: Staff token (`DOCTOR` or `RECEPTIONIST`). If caller is a DOCTOR, verifies visit belongs to their clinic.
+- **Request Body**:
+  ```json
+  {
+    "target_doctor_id": 2,                      // int, required
+    "reason": "Specialist orthopedic referral"  // string, optional
+  }
+  ```
+- **Success Response (`200 OK`)**:
+  ```json
+  {
+    "status": "redirected",
+    "visitId": 105,
+    "oldDoctorId": 1,
+    "newDoctorId": 2,
+    "newQueueNo": 5,
+    "queueEntryId": 246,
+    "rollNumber": "CS21B045"
+  }
+  ```
+- **Error Responses**:
+  - `404 Not Found`: Visit or target doctor not found.
+  - `409 Conflict`: Target doctor is unavailable, or visit is already terminal (`COMPLETED` / `CANCELLED`).
+- **Side Effects**:
+  - Retires old `QUEUE_ENTRY` (`status = 'REDIRECTED'`, `exited_at = NOW()`, `exit_reason = 'REDIRECTED'`).
+  - If redirected during active consultation, frees the referring doctor's workstation.
+  - Sets `VISIT.doctor_id = target_doctor_id` and `VISIT.status = 'WAITING_FOR_DOCTOR'`.
+  - Creates new `QUEUE_ENTRY` under target doctor with their next sequence number.
+  - Inserts `VISIT_EVENT` (`event_type = 'REDIRECTED'`).
+- **Retry Safety**: **Non-idempotent**. Subsequent call redirects the visit again to the specified doctor.
+
+---
+
+### 5.12 Reception: Dispense Medicine & Discharge Patient
+
+- **Route**: `POST /api/queue/{visit_id}/dispense`
+- **Authorization**: `RECEPTIONIST` role only.
+- **Request Body**:
+  ```json
+  {
+    "remarks": "Medication handed to patient with dosage instructions" // string, optional
+  }
+  ```
+- **Success Response (`200 OK`)**:
+  ```json
+  {
+    "status": "dispensed",           // or "already_completed"
+    "visitId": 105,
+    "rollNumber": "CS21B045"
+  }
+  ```
+- **Error Responses**:
+  - `404 Not Found`: Visit does not exist.
+  - `409 Conflict`: Visit is not in `WAITING_FOR_MEDICINE` status.
+- **Side Effects**:
+  - Updates `VISIT.status = 'COMPLETED'` and `completed_at = NOW()`.
+  - Inserts `VISIT_EVENT` (`event_type = 'MEDICINE_DISPENSED'`).
+- **Retry Safety**: **Idempotent**. Retrying an already dispensed visit safely returns `status = 'already_completed'` without writing duplicate audit records.
+
+---
+
+### 5.13 Staff: Cancel Visit
+
+- **Route**: `POST /api/queue/{visit_id}/cancel`
+- **Authorization**: Staff token (`DOCTOR` or `RECEPTIONIST`).
+- **Request Body**:
+  ```json
+  {
+    "reason": "Student left for scheduled exam" // string, optional
+  }
+  ```
+- **Success Response (`200 OK`)**:
+  ```json
+  {
+    "status": "cancelled",                      // or "already_cancelled"
+    "visitId": 105,
+    "rollNumber": "CS21B045"
+  }
+  ```
+- **Error Responses**:
+  - `404 Not Found`: Visit does not exist.
+  - `409 Conflict`: Cannot cancel an already `COMPLETED` visit.
+- **Side Effects**:
+  - Sets `VISIT.status = 'CANCELLED'` and `cancelled_at = NOW()`.
+  - Retires any active `QUEUE_ENTRY` (`status = 'CANCELLED'`, `exited_at = NOW()`).
+  - Frees doctor workstation if visit was in consultation.
+  - Inserts `VISIT_EVENT` (`event_type = 'CANCELLED'`).
+- **Retry Safety**: **Idempotent**. Retrying returns `status = 'already_cancelled'` without duplicate events.
+
+---
+
+### 5.14 Reception: Available Doctors Directory
+
+- **Route**: `GET /api/reception/doctors`
+- **Authorization**: `RECEPTIONIST` role only.
+- **Success Response (`200 OK`)**:
+  ```json
+  [
+    {
+      "doctorId": 1,
+      "name": "Dr. Neha Kapoor",
+      "specialty": "General Physician",
+      "room": "Room 104",
+      "waiting": 3,
+      "queueCount": 3,
+      "available": true
+    },
+    {
+      "doctorId": 2,
+      "name": "Dr. Rajesh Sharma",
+      "specialty": "Orthopedics",
+      "room": "Room 105",
+      "waiting": 0,
+      "queueCount": 0,
+      "available": false
+    }
+  ]
+  ```
+- **Retry Safety**: Safe, read-only.
+
+---
+
+### 5.15 Reception: Student Quick Lookup
+
+- **Route**: `GET /api/reception/students/{roll_number}`
+- **Authorization**: `RECEPTIONIST` role only.
+- **Success Response (`200 OK`)**:
+  ```json
+  {
+    "rollNumber": "CS21B045",
+    "name": "Aarav Mehta",
+    "bloodGroup": "O+",
+    "blood": "O+",
+    "allergies": "Penicillin (Severe)",
+    "alreadyInQueue": true,
+    "activeVisitStatus": "WAITING_FOR_DOCTOR",
+    "program": "B.Tech",
+    "dept": "",
+    "semester": null
+  }
+  ```
+- **Error Responses**:
+  - `404 Not Found`: `"Record not found"` (Student roll number not registered).
+  - `403 Forbidden`: Student record is marked `INACTIVE`.
+- **Retry Safety**: Safe, read-only.
+
+---
+
+## 6. Frontend State Machine Integration Guide
+
+```mermaid
+stateDiagram-v2
+    [*] --> CHECKED_IN: POST /api/reception/check-ins
+    CHECKED_IN --> WAITING_FOR_DOCTOR: Automatically set at Check-in
+    
+    WAITING_FOR_DOCTOR --> IN_CONSULTATION: POST /api/doctor/{id}/call-next
+    WAITING_FOR_DOCTOR --> NO_SHOW: POST /api/doctor/{id}/no-show/{visit_id}
+    WAITING_FOR_DOCTOR --> CANCELLED: POST /api/queue/{visit_id}/cancel
+    WAITING_FOR_DOCTOR --> WAITING_FOR_DOCTOR: POST /api/queue/{visit_id}/redirect
+
+    IN_CONSULTATION --> WAITING_FOR_MEDICINE: POST /api/doctor/{id}/complete
+    IN_CONSULTATION --> NO_SHOW: POST /api/doctor/{id}/no-show/{visit_id}
+    IN_CONSULTATION --> WAITING_FOR_DOCTOR: POST /api/doctor/{id}/redirect/{visit_id}
+    IN_CONSULTATION --> CANCELLED: POST /api/queue/{visit_id}/cancel
+
+    NO_SHOW --> WAITING_FOR_DOCTOR: POST /api/queue/{visit_id}/requeue
+    NO_SHOW --> CANCELLED: POST /api/queue/{visit_id}/cancel
+
+    WAITING_FOR_MEDICINE --> COMPLETED: POST /api/queue/{visit_id}/dispense
+    
+    COMPLETED --> [*]
+    CANCELLED --> [*]
+```
+
+### 6.1 Polling Recommendations
+- **Reception Desk Dashboard**: Poll `GET /api/reception/queue` every **3 to 5 seconds**.
+- **Doctor Waiting List**: Poll `GET /api/doctor/{doctor_id}/queue` every **3 to 5 seconds**.
+- **Doctor Active Consultation Widget**: Read from `GET /api/doctor/{doctor_id}/active-consultation` or trigger immediately following `call-next`, `complete`, or `no-show` user actions.
+

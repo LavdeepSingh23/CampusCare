@@ -357,6 +357,47 @@ export function receptionCheckIn({ rollNumber, doctorId, complaint = '', via = '
   })
 }
 
-export function fetchReceptionQueue() {
-  return request('/api/reception/queue')
+export function fetchReceptionQueue(doctorId = null) {
+  const query = doctorId ? `?doctor_id=${encodeURIComponent(doctorId)}` : ''
+  return request(`/api/reception/queue${query}`)
+}
+
+export function callNextPatient(doctorId) {
+  return request(`/api/doctor/${doctorId}/call-next`, {
+    method: 'POST',
+  })
+}
+
+export function startConsultation(doctorId, visitId = null) {
+  return request(`/api/doctor/${doctorId}/start-consultation`, {
+    method: 'POST',
+    body: JSON.stringify(visitId ? { visit_id: visitId } : {}),
+  })
+}
+
+export function markNoShow(doctorId, visitId, reason = null) {
+  return request(`/api/doctor/${doctorId}/no-show/${visitId}`, {
+    method: 'POST',
+    body: JSON.stringify(reason ? { reason } : {}),
+  })
+}
+
+export function requeuePatient(visitId, targetDoctorId, reason = 'Patient arrived after no-show') {
+  return request(`/api/queue/${visitId}/requeue`, {
+    method: 'POST',
+    body: JSON.stringify({
+      target_doctor_id: targetDoctorId,
+      reason,
+    }),
+  })
+}
+
+export function redirectPatient(visitId, targetDoctorId, reason = 'Clinical referral') {
+  return request(`/api/queue/${visitId}/redirect`, {
+    method: 'POST',
+    body: JSON.stringify({
+      target_doctor_id: targetDoctorId,
+      reason,
+    }),
+  })
 }

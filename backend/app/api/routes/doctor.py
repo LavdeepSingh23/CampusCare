@@ -1,12 +1,15 @@
 from datetime import date, datetime
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field
 
 from app.core.database import get_db_connection
 from app.core.deps import (
     CurrentDoctor,
     CurrentUser,
     get_current_doctor,
+    get_current_staff,
     get_current_user,
     require_own_doctor_id,
 )
@@ -158,25 +161,48 @@ def get_doctor_profile(doctor_id: int, current: CurrentDoctor = Depends(get_curr
 
 
 @router.get("/doctor/{doctor_id}/queue")
-def get_doctor_queue(doctor_id: int, current: CurrentDoctor = Depends(get_current_doctor)):
+def get_doctor_queue(
+    doctor_id: int,
+    current: CurrentUser = Depends(get_current_staff),
+):
     """
-    Doctor-only endpoint: Returns the doctor's queue (both the patient currently in consultation and waiting patients).
-    Enforces that doctors can only view their own queue line.
+    Doctor queue endpoint:
+    - Doctors are strictly authorized to view only their own queue line (cross-doctor access is 403 Forbidden).
+    - Receptionists are authorized to view any doctor's queue line to assist with coordination and triage.
+    - Students are rejected with 403 Forbidden; unauthenticated callers receive 401 Unauthorized.
     """
-    require_own_doctor_id(doctor_id, current)
+    if current.role == "DOCTOR":
+        if current.doctor_id != doctor_id:
+            raise HTTPException(
+                status_code=403,
+                detail="Access forbidden: You are not authorized to view or modify another doctor's workstation.",
+            )
+    elif current.role == "RECEPTIONIST":
+        # Receptionists have permission to view any doctor's queue
+        pass
+    else:
+        raise HTTPException(
+            status_code=403,
+            detail="Access forbidden: Medical staff or receptionist privileges required.",
+        )
 
     connection = get_db_connection()
     try:
         with connection.cursor() as cursor:
             cursor.execute(
                 """
-                SELECT qe.queue_entry_id, qe.entered_at, qe.called_at, qe.status, qe.queue_sequence,
-                       v.visit_id, v.roll_number, st.full_name, st.date_of_birth, st.blood_group
+                SELECT qe.queue_entry_id, qe.doctor_id, qe.queue_sequence, qe.status AS queue_status,
+                       qe.entered_at, qe.called_at, qe.entry_reason,
+                       v.visit_id, v.roll_number, v.status AS visit_status, v.checked_in_at,
+                       st.full_name, st.date_of_birth, st.blood_group,
+                       (SELECT ve.notes FROM VISIT_EVENT ve
+                        WHERE ve.visit_id = v.visit_id AND ve.event_type = 'CHECKED_IN'
+                        ORDER BY ve.event_id DESC LIMIT 1) AS checkin_notes
                 FROM QUEUE_ENTRY qe
                 JOIN VISIT v ON v.visit_id = qe.visit_id
                 JOIN STUDENT st ON st.roll_number = v.roll_number
                 WHERE qe.doctor_id = %s AND qe.status IN ('IN_CONSULTATION', 'WAITING')
-                ORDER BY FIELD(qe.status, 'IN_CONSULTATION', 'WAITING'), qe.queue_sequence ASC
+                ORDER BY FIELD(qe.status, 'IN_CONSULTATION', 'WAITING'), qe.queue_sequence ASC, qe.entered_at ASC
                 """,
                 (doctor_id,),
             )
@@ -184,22 +210,71 @@ def get_doctor_queue(doctor_id: int, current: CurrentDoctor = Depends(get_curren
     finally:
         connection.close()
 
-    return [
-        {
+    result = []
+    for r in rows:
+        # Extract chief complaint if recorded at check-in
+        complaint = ""
+        notes = r.get("checkin_notes")
+        if notes:
+            if " - " in notes:
+                complaint = notes.split(" - ", 1)[1].strip()
+            elif not any(term in notes.lower() for term in ("check-in", "checkin")):
+                complaint = notes.strip()
+        if not complaint and r.get("entry_reason") and r["entry_reason"] != "INITIAL_CHECKIN":
+            complaint = r["entry_reason"]
+
+        chk_time = r.get("checked_in_at") or r.get("entered_at")
+        chk_iso = chk_time.isoformat() if chk_time else None
+        entered_iso = r["entered_at"].isoformat() if r.get("entered_at") else None
+        called_iso = r["called_at"].isoformat() if r.get("called_at") else None
+        waiting_since = r["entered_at"].strftime("%I:%M %p") if r.get("entered_at") else None
+        called_at = r["called_at"].strftime("%I:%M %p") if r.get("called_at") else None
+
+        result.append({
+            # Identifiers
             "queueEntryId": r["queue_entry_id"],
+            "queue_entry_id": r["queue_entry_id"],
             "visitId": r["visit_id"],
+            "visit_id": r["visit_id"],
+            "doctorId": doctor_id,
+            "doctor_id": doctor_id,
             "rollNumber": r["roll_number"],
+            "roll_number": r["roll_number"],
+            "rollNo": r["roll_number"],
             "name": r["full_name"],
-            "status": "In Consultation" if r["status"] == "IN_CONSULTATION" else "Waiting",
-            "statusCode": r["status"],
+            "student_name": r["full_name"],
+            "bloodGroup": r.get("blood_group"),
+            "blood_group": r.get("blood_group"),
+            "age": _calculate_age(r.get("date_of_birth")),
+
+            # Status & Queue sequence
+            "status": "In Consultation" if r["queue_status"] == "IN_CONSULTATION" else "Waiting",
+            "statusCode": r["queue_status"],
+            "status_code": r["queue_status"],
+            "queueStatus": r["queue_status"],
+            "queue_status": r["queue_status"],
+            "visitStatus": r["visit_status"],
+            "visit_status": r["visit_status"],
             "queueNo": r["queue_sequence"],
-            "waitingSince": r["entered_at"].strftime("%I:%M %p") if r["entered_at"] else None,
-            "calledAt": r["called_at"].strftime("%I:%M %p") if r.get("called_at") else None,
-            "age": _calculate_age(r["date_of_birth"]),
-            "bloodGroup": r["blood_group"],
-        }
-        for r in rows
-    ]
+            "queue_number": r["queue_sequence"],
+            "queue_sequence": r["queue_sequence"],
+
+            # Timing
+            "checkInTime": chk_iso,
+            "check_in_time": chk_iso,
+            "checkedInAt": chk_iso,
+            "checked_in_at": chk_iso,
+            "enteredAt": entered_iso,
+            "entered_at": entered_iso,
+            "waitingSince": waiting_since,
+            "calledAt": called_at,
+            "called_at": called_iso,
+
+            # Clinical details
+            "complaint": complaint,
+        })
+
+    return result
 
 
 @router.get("/doctor/{doctor_id}/active-consultation")
@@ -630,6 +705,129 @@ def mark_doctor_patient_no_show(
     except Exception as exc:
         connection.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to mark no-show: {exc}")
+    finally:
+        connection.close()
+
+
+# ── start consultation ──────────────────────────────────────────────────
+
+class StartConsultationRequest(BaseModel):
+    visit_id: Optional[int] = Field(None, description="Specific visit ID to start consultation for (if omitted, advances next waiting student)")
+
+
+@router.post("/doctor/{doctor_id}/start-consultation")
+def start_doctor_consultation(
+    doctor_id: int,
+    payload: Optional[StartConsultationRequest] = None,
+    current: CurrentDoctor = Depends(get_current_doctor),
+):
+    """
+    Doctor workstation operation: Starts consultation for a specific visit or advances next.
+    Safe against concurrent requests via doctor workstation locking.
+    """
+    require_own_doctor_id(doctor_id, current)
+    connection = get_db_connection()
+    try:
+        if payload and payload.visit_id:
+            res = ql.start_consultation(
+                conn=connection,
+                doctor_id=doctor_id,
+                visit_id=payload.visit_id,
+                performed_by_user_id=current.user_id,
+            )
+        else:
+            res = ql.call_next_patient(
+                conn=connection,
+                doctor_id=doctor_id,
+                performed_by_user_id=current.user_id,
+            )
+        connection.commit()
+        return res
+    except ql.ResourceNotFoundError as exc:
+        connection.rollback()
+        raise HTTPException(status_code=404, detail=str(exc))
+    except ql.InvalidTransitionError as exc:
+        connection.rollback()
+        raise HTTPException(status_code=409, detail=str(exc))
+    except Exception as exc:
+        connection.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to start consultation: {exc}")
+    finally:
+        connection.close()
+
+
+@router.post("/doctor/{doctor_id}/start-consultation/{visit_id}")
+def start_doctor_consultation_by_id(
+    doctor_id: int,
+    visit_id: int,
+    current: CurrentDoctor = Depends(get_current_doctor),
+):
+    """
+    Doctor workstation operation: Starts consultation for a specific visit by path parameter.
+    """
+    require_own_doctor_id(doctor_id, current)
+    connection = get_db_connection()
+    try:
+        res = ql.start_consultation(
+            conn=connection,
+            doctor_id=doctor_id,
+            visit_id=visit_id,
+            performed_by_user_id=current.user_id,
+        )
+        connection.commit()
+        return res
+    except ql.ResourceNotFoundError as exc:
+        connection.rollback()
+        raise HTTPException(status_code=404, detail=str(exc))
+    except ql.InvalidTransitionError as exc:
+        connection.rollback()
+        raise HTTPException(status_code=409, detail=str(exc))
+    except Exception as exc:
+        connection.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to start consultation: {exc}")
+    finally:
+        connection.close()
+
+
+# ── redirect patient ───────────────────────────────────────────────────
+
+class DoctorRedirectRequest(BaseModel):
+    target_doctor_id: int = Field(..., description="Target doctor to redirect patient to")
+    reason: Optional[str] = Field("Doctor clinical referral", description="Reason for redirect")
+
+
+@router.post("/doctor/{doctor_id}/redirect/{visit_id}")
+def redirect_doctor_patient(
+    doctor_id: int,
+    visit_id: int,
+    payload: DoctorRedirectRequest,
+    current: CurrentDoctor = Depends(get_current_doctor),
+):
+    """
+    Doctor operation: Redirects an active or waiting visit from this doctor to another doctor.
+    """
+    require_own_doctor_id(doctor_id, current)
+    connection = get_db_connection()
+    try:
+        res = ql.redirect_patient(
+            conn=connection,
+            visit_id=visit_id,
+            target_doctor_id=payload.target_doctor_id,
+            performed_by_user_id=current.user_id,
+            current_doctor_id=doctor_id,
+            reason=payload.reason or "Doctor clinical referral",
+        )
+        connection.commit()
+        return res
+    except ql.ResourceNotFoundError as exc:
+        connection.rollback()
+        raise HTTPException(status_code=404, detail=str(exc))
+    except (ql.InvalidTransitionError, ql.DoctorUnavailableError) as exc:
+        connection.rollback()
+        raise HTTPException(status_code=409, detail=str(exc))
+    except Exception as exc:
+        connection.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to redirect patient: {exc}")
     finally:
         connection.close()
 
