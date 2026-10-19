@@ -37,6 +37,8 @@ import {
   Filter,
   AlertCircle,
   CheckCircle2 as CheckSuccess,
+  Download,
+  Loader2,
 } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import {
@@ -45,10 +47,12 @@ import {
   fetchDoctorStats,
   fetchActiveConsultation,
   fetchPatientSummary,
+  fetchPatientHistory,
   callNextPatient,
   startConsultation,
   completeConsultation,
 } from '../../api'
+import { generatePrescriptionPdf } from '../../utils/prescriptionPdf'
 import { cn } from '../../lib/utils'
 import {
   MEDICINE_FORMULARY,
@@ -121,10 +125,41 @@ export default function Doctors_Dashboard() {
     return patients.find((p) => p.id === selectedPatientId) || patients[0] || null
   }, [patients, selectedPatientId])
 
+  // Real patient history state (loaded dynamically for the selected patient)
+  const [patientHistory, setPatientHistory] = useState([])
+  useEffect(() => {
+    if (selectedPatient?.rollNo) {
+      fetchPatientHistory(selectedPatient.rollNo)
+        .then((hist) => setPatientHistory(Array.isArray(hist) ? hist : []))
+        .catch(() => setPatientHistory([]))
+    } else {
+      setPatientHistory([])
+    }
+  }, [selectedPatient?.rollNo])
+
   // Previous Prescriptions (strictly read-only past history from patient file)
   const previousPrescriptions = useMemo(() => {
-    return selectedPatient?.prescriptions || []
-  }, [selectedPatient])
+    if (patientHistory && patientHistory.length > 0) {
+      const past = []
+      patientHistory.forEach((h) => {
+        if (Array.isArray(h.medicines)) {
+          h.medicines.forEach((m) => {
+            past.push({
+              name: m.name,
+              dosage: m.timing || '1-0-1',
+              timing: m.timing || 'As advised',
+              duration: '3 days',
+              instruction: m.note || 'after meals',
+              date: h.date,
+              diagnosis: h.diagnosis,
+            })
+          })
+        }
+      })
+      return past
+    }
+    return []
+  }, [patientHistory])
 
   // Distinct Draft Consultation State (Cleanly separated from past records & chief complaint)
   const [draftDiagnosis, setDraftDiagnosis] = useState('')
@@ -132,6 +167,12 @@ export default function Doctors_Dashboard() {
   const [draftDietAdvice, setRxDietAdvice] = useState('Adequate hydration, warm saline gargles, avoid cold beverages.')
   const [draftFollowUp, setRxFollowUp] = useState('Review in 3 days if symptoms persist.')
   const [draftMedicines, setDraftMedicines] = useState([])
+
+  // Finalization and submission state
+  const [isFinalizing, setIsFinalizing] = useState(false)
+  const [serverError, setServerError] = useState(null)
+  const [showReviewModal, setShowReviewModal] = useState(false)
+  const [finalizeSuccessData, setFinalizeSuccessData] = useState(null)
 
   // Formulary Catalog Browsing State
   const [formularySearch, setFormularySearch] = useState('')
@@ -169,12 +210,15 @@ export default function Doctors_Dashboard() {
     setCustomDuration('5 days')
     setCustomInstruction('after food')
     setCustomManualQty('')
+    setServerError(null)
   }
 
-  // Reset draft whenever selected patient changes
+  // Reset draft whenever selected patient or visit changes
   useEffect(() => {
     resetPrescriptionDraft()
-  }, [selectedPatient?.id])
+    setServerError(null)
+    setFinalizeSuccessData(null)
+  }, [selectedPatient?.visitId, selectedPatient?.rollNo, selectedPatient?.id])
 
   // Real-time formulary search filtering
   const filteredFormulary = useMemo(() => {
@@ -318,9 +362,7 @@ export default function Doctors_Dashboard() {
                     : 'OPD Health Evaluation'),
                 history: `TIET Student. Roll: ${roll}. Blood Group: ${item.bloodGroup || 'B+'}, Age: ${item.age || 20}.`,
                 allergies: allergiesList,
-                prescriptions: [
-                  { name: 'Paracetamol 500mg', dosage: '1-0-1', timing: 'Morning & Night', duration: '3 days', instruction: 'after meals', qty: 6 },
-                ],
+                prescriptions: [], // loaded dynamically from patient history
                 vitals: { bp: '118/76', pulse: '72 bpm', temp: '98.4 °F', spo2: '99%' },
               }
             })
@@ -636,23 +678,130 @@ export default function Doctors_Dashboard() {
     )
   }
 
-  // Complete Consultation & Dispatch Rx
+  // Build payload strictly adhering to Phase 6 contract
+  const buildFinalizePayload = () => {
+    const visitId = selectedPatient?.visitId
+    const rollNumber = selectedPatient?.rollNo
+    const diagnosis = draftDiagnosis.trim()
+    const reasonForVisit = selectedPatient?.complaint || 'General Consultation'
+    const clinicalNotes = draftClinicalNotes.trim() || `Chief Complaint: ${selectedPatient?.complaint || 'General evaluation'}`
+    const generalInstructions = [
+      draftDietAdvice ? `Diet/Lifestyle: ${draftDietAdvice}` : '',
+      draftFollowUp ? `Follow-up: ${draftFollowUp}` : '',
+    ].filter(Boolean).join('\n') || 'Take medicines as prescribed.'
+
+    const medicines = draftMedicines.map((m) => {
+      const durParsed = parseDurationInDays(m.duration)
+      const durationDays = durParsed && durParsed.days ? durParsed.days : 5
+
+      const sched = parseDosageSchedule(m.dosage)
+      const isMorning = sched.morning || Boolean(m.timing?.toLowerCase().includes('morning'))
+      const isAfternoon = sched.afternoon || Boolean(m.timing?.toLowerCase().includes('afternoon') || m.timing?.toLowerCase().includes('noon'))
+      const isNight = sched.night || Boolean(m.timing?.toLowerCase().includes('night'))
+      const isEvening = Boolean(m.timing?.toLowerCase().includes('evening'))
+
+      const lowerInst = (m.instruction || '').toLowerCase()
+      let mealRelation = 'AFTER_MEAL'
+      if (lowerInst.includes('before')) {
+        mealRelation = 'BEFORE_MEAL'
+      } else if (lowerInst.includes('with') || lowerInst.includes('during')) {
+        mealRelation = 'WITH_MEAL'
+      } else if (lowerInst.includes('empty')) {
+        mealRelation = 'BEFORE_MEAL'
+      } else if (lowerInst.includes('any')) {
+        mealRelation = 'ANY_TIME'
+      }
+
+      const unit = m.unit || (m.category === 'Syrup' ? 'ml' : m.category === 'Capsule' ? 'capsule' : 'tablet')
+      const doses = []
+      if (isMorning) doses.push({ time_of_day: 'MORNING', dose_quantity: 1.0, dose_unit: unit })
+      if (isAfternoon) doses.push({ time_of_day: 'AFTERNOON', dose_quantity: 1.0, dose_unit: unit })
+      if (isEvening && !isNight) doses.push({ time_of_day: 'EVENING', dose_quantity: 1.0, dose_unit: unit })
+      if (isNight) doses.push({ time_of_day: 'NIGHT', dose_quantity: 1.0, dose_unit: unit })
+      if (doses.length === 0) doses.push({ time_of_day: 'MORNING', dose_quantity: 1.0, dose_unit: unit })
+
+      return {
+        name: m.name,
+        medicine_name: m.name,
+        strength: m.strength || null,
+        dosage_form: m.category || 'Tablet',
+        category: m.category || 'Tablet',
+        route: m.category === 'Syrup' ? 'Oral' : m.category === 'Drops' ? 'Ophthalmic/Otic' : 'Oral',
+        duration_value: durationDays,
+        duration_unit: 'DAY',
+        duration: m.duration || `${durationDays} days`,
+        meal_relation: mealRelation,
+        special_instructions: m.instruction ? `${m.instruction} for ${m.duration || `${durationDays} days`}` : 'As advised',
+        morning: isMorning,
+        afternoon: isAfternoon,
+        evening: isEvening,
+        night: isNight,
+        dosage: m.dosage || '1-0-1',
+        dose_quantity: m.qty ? parseFloat(m.qty) : 1.0,
+        dose_unit: unit,
+        doses,
+      }
+    })
+
+    return {
+      visit_id: visitId,
+      roll_number: rollNumber,
+      diagnosis,
+      reason_for_visit: reasonForVisit,
+      clinical_notes: clinicalNotes,
+      general_instructions: generalInstructions,
+      general: generalInstructions,
+      medicines,
+    }
+  }
+
+  // Open Prescription Review modal before final submission
+  const handleOpenReview = () => {
+    if (!selectedPatient) {
+      triggerToast('⚠️ Please select a patient first')
+      return
+    }
+    if (!draftDiagnosis.trim()) {
+      triggerToast('⚠️ Please enter a clinical diagnosis before reviewing')
+      setServerError('Clinical diagnosis is required before finalization.')
+      return
+    }
+    if (draftMedicines.length === 0) {
+      triggerToast('⚠️ Please prescribe at least one medicine item')
+      setServerError('At least one prescribed medicine item is required.')
+      return
+    }
+    const hasInvalidQty = draftMedicines.some((m) => !m.qty || m.qty <= 0)
+    if (hasInvalidQty) {
+      triggerToast('⚠️ Please ensure every prescribed medication has a positive quantity (> 0)')
+      setServerError('Every prescribed medication must have a valid quantity (> 0).')
+      return
+    }
+    setServerError(null)
+    setShowReviewModal(true)
+  }
+
+  // Complete Consultation & Dispatch Rx (Atomic Finalization)
   const handleCompleteAndDispatch = async () => {
+    if (isFinalizing) return
     if (!selectedPatient) return
 
     if (!draftDiagnosis.trim()) {
       triggerToast('⚠️ Please enter a clinical diagnosis before dispatching')
+      setServerError('Clinical diagnosis is required.')
       return
     }
 
     if (draftMedicines.length === 0) {
       triggerToast('⚠️ Please prescribe at least one medicine or record prescription items')
+      setServerError('At least one prescribed medicine item is required.')
       return
     }
 
     const hasInvalidQty = draftMedicines.some((m) => !m.qty || m.qty <= 0)
     if (hasInvalidQty) {
       triggerToast('⚠️ Please ensure every prescribed medication has a positive quantity (> 0)')
+      setServerError('Every prescribed medication must have a valid quantity (> 0).')
       return
     }
 
@@ -663,54 +812,74 @@ export default function Doctors_Dashboard() {
       if (!proceed) return
     }
 
-    if (doctorId && selectedPatient) {
+    setIsFinalizing(true)
+    setServerError(null)
+
+    try {
+      const payload = buildFinalizePayload()
+      const res = await completeConsultation(doctorId, payload)
+
+      // Task 7: Generate PDF only after the server confirms finalization!
+      let pdfDoc = null
       try {
-        await completeConsultation(doctorId, {
-          visit_id: selectedPatient.visitId,
-          roll_number: selectedPatient.rollNo,
-          diagnosis: draftDiagnosis,
-          reason_for_visit: selectedPatient.complaint || 'General Consultation',
-          general: draftClinicalNotes || draftDietAdvice || 'General advice',
-          general_instructions: draftClinicalNotes || draftDietAdvice || 'General advice',
-          clinical_notes: draftClinicalNotes || `Chief Complaint: ${selectedPatient.complaint}`,
-          medicines: draftMedicines.map((m) => ({
-            name: m.name,
-            dosage: m.dosage,
-            strength: m.strength || null,
-            dosage_form: m.category || null,
-            duration: m.duration || null,
-            instructions: `${m.instruction} for ${m.duration} (Qty: ${m.qty})`,
-            special_instructions: `${m.instruction} for ${m.duration} (Qty: ${m.qty})`,
-            note: m.instruction,
-            morning: m.timing?.toLowerCase().includes('morning') || false,
-            afternoon: m.timing?.toLowerCase().includes('afternoon') || false,
-            evening: m.timing?.toLowerCase().includes('evening') || false,
-            night: m.timing?.toLowerCase().includes('night') || false,
-          })),
+        pdfDoc = generatePrescriptionPdf({
+          prescription: res,
+          doctor: doctorProfile,
+          patient: selectedPatient,
+          medicines: draftMedicines,
+          autoDownload: true,
         })
-      } catch (err) {
-        console.warn('Backend complete consultation status:', err)
+      } catch (pdfErr) {
+        console.warn('PDF generation error:', pdfErr)
       }
-    }
 
-    // Update local completed metrics & history
-    setSeenCount((prev) => prev + 1)
-    setCompletedHistory((prev) => [
-      {
-        id: Date.now(),
-        name: selectedPatient.name,
+      const savedRxId = res?.prescription_id || res?.prescriptionId || `RX-${Date.now().toString().slice(-4)}`
+      const completedRecord = {
+        prescriptionId: savedRxId,
+        visitId: res?.visit_id || res?.visitId || selectedPatient.visitId,
+        patientName: selectedPatient.name,
         rollNo: selectedPatient.rollNo,
-        completedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         diagnosis: draftDiagnosis,
-        prescriptions: draftMedicines.map((m) => m.name).join(', ') || 'General Consultation',
-      },
-      ...prev,
-    ])
+        medicines: [...draftMedicines],
+        completedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        finalizedAt: res?.finalized_at || res?.finalizedAt || new Date().toISOString(),
+        pdfDoc,
+      }
 
-    triggerToast(`Prescription dispatched to Campus Dispensary!`)
-    resetPrescriptionDraft()
-    await loadBackendData(false)
-    setActiveTab('queue')
+      setFinalizeSuccessData(completedRecord)
+      setShowReviewModal(false)
+
+      // Update local completed metrics & history
+      setSeenCount((prev) => prev + 1)
+      setCompletedHistory((prev) => [
+        {
+          id: Date.now(),
+          prescriptionId: savedRxId,
+          name: selectedPatient.name,
+          rollNo: selectedPatient.rollNo,
+          completedAt: completedRecord.completedAt,
+          diagnosis: draftDiagnosis,
+          prescriptions: draftMedicines.map((m) => m.name).join(', ') || 'General Consultation',
+          medicines: [...draftMedicines],
+          visitId: selectedPatient.visitId,
+        },
+        ...prev,
+      ])
+
+      triggerToast(`Prescription #${savedRxId} finalized and sent to Dispensary!`)
+      resetPrescriptionDraft()
+      await loadBackendData(false)
+    } catch (err) {
+      console.error('Finalization rejected by server:', err)
+      const errorMsg =
+        err.detail ||
+        err.message ||
+        'Server rejected prescription finalization. Check visit status and try again.'
+      setServerError(errorMsg)
+      triggerToast(`❌ ${errorMsg}`)
+    } finally {
+      setIsFinalizing(false)
+    }
   }
 
   return (
@@ -1446,14 +1615,48 @@ export default function Doctors_Dashboard() {
                 </button>
                 <button
                   type="button"
-                  onClick={handleCompleteAndDispatch}
-                  className="px-4 py-2 rounded-xl bg-teal-700 hover:bg-teal-800 text-white text-xs font-bold flex items-center gap-2 transition-colors cursor-pointer shadow-xs"
+                  onClick={handleOpenReview}
+                  disabled={isFinalizing}
+                  className="px-4 py-2 rounded-xl bg-teal-700 hover:bg-teal-800 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-bold flex items-center gap-2 transition-colors cursor-pointer shadow-xs"
                 >
-                  <Send className="w-3.5 h-3.5" />
-                  <span>Complete & Dispatch Rx</span>
+                  {isFinalizing ? (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      <span>Finalizing Rx...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Send className="w-3.5 h-3.5" />
+                      <span>Review & Finalize Rx</span>
+                    </>
+                  )}
                 </button>
               </div>
             </div>
+
+            {/* Server Error Notification Banner */}
+            {serverError && (
+              <motion.div
+                initial={{ opacity: 0, y: -6 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="p-3.5 rounded-xl bg-red-50 border border-red-200 text-red-800 text-xs flex items-start justify-between gap-3 shadow-xs"
+              >
+                <div className="flex items-start gap-2.5">
+                  <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-bold block text-red-900">Server Validation Error:</span>
+                    <span>{serverError}</span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setServerError(null)}
+                  className="text-red-500 hover:text-red-700 font-bold px-2 py-0.5 rounded cursor-pointer"
+                >
+                  ✕
+                </button>
+              </motion.div>
+            )}
 
             {/* ── 2-COLUMN WORKSTATION GRID ── */}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
@@ -2114,19 +2317,42 @@ export default function Doctors_Dashboard() {
                     <div className="flex items-center gap-2.5">
                       <button
                         type="button"
-                        onClick={() => triggerToast('Prescription sent to local printer!')}
+                        onClick={() => {
+                          if (draftMedicines.length === 0 && !draftDiagnosis.trim()) {
+                            triggerToast('⚠️ Please enter diagnosis and medicines first')
+                            return
+                          }
+                          generatePrescriptionPdf({
+                            prescription: { diagnosis: draftDiagnosis || 'OPD Consultation' },
+                            doctor: doctorProfile,
+                            patient: selectedPatient,
+                            medicines: draftMedicines,
+                            autoDownload: false,
+                            openPrint: true,
+                          })
+                        }}
                         className="px-3.5 py-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
                       >
                         <Printer className="w-3.5 h-3.5 text-slate-500" />
-                        <span>Print Rx</span>
+                        <span>Print Rx Draft</span>
                       </button>
                       <button
                         type="button"
-                        onClick={handleCompleteAndDispatch}
-                        className="px-5 py-2 rounded-xl bg-teal-700 hover:bg-teal-800 text-white text-xs font-bold flex items-center gap-2 transition-all cursor-pointer shadow-sm hover:shadow-md"
+                        onClick={handleOpenReview}
+                        disabled={isFinalizing}
+                        className="px-5 py-2 rounded-xl bg-teal-700 hover:bg-teal-800 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-bold flex items-center gap-2 transition-all cursor-pointer shadow-sm hover:shadow-md"
                       >
-                        <Send className="w-4 h-4" />
-                        <span>Complete & Send to Dispensary</span>
+                        {isFinalizing ? (
+                          <>
+                            <RefreshCw className="w-4 h-4 animate-spin" />
+                            <span>Finalizing with Clinic Server...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Send className="w-4 h-4" />
+                            <span>Review & Dispatch to Dispensary</span>
+                          </>
+                        )}
                       </button>
                     </div>
                   </div>
@@ -2234,10 +2460,35 @@ export default function Doctors_Dashboard() {
                         </td>
                         <td className="py-3 px-4 text-slate-600 max-w-xs truncate">{item.prescriptions}</td>
                         <td className="py-3 px-4 text-right">
-                          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
-                            <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                            <span>Dispensed</span>
-                          </span>
+                          <div className="flex items-center justify-end gap-2">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                generatePrescriptionPdf({
+                                  prescription: {
+                                    prescription_id: item.prescriptionId || item.id,
+                                    diagnosis: item.diagnosis,
+                                  },
+                                  doctor: doctorProfile,
+                                  patient: {
+                                    name: item.name,
+                                    rollNo: item.rollNo,
+                                    visitId: item.visitId,
+                                  },
+                                  medicines: item.medicines || [],
+                                  autoDownload: true,
+                                })
+                              }
+                              className="p-1.5 rounded-lg border border-slate-200 hover:bg-teal-50 hover:border-teal-300 text-slate-600 hover:text-teal-700 transition-colors cursor-pointer"
+                              title="Download E-Prescription PDF"
+                            >
+                              <Download className="w-3.5 h-3.5" />
+                            </button>
+                            <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                              <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                              <span>Dispensed</span>
+                            </span>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -2247,6 +2498,236 @@ export default function Doctors_Dashboard() {
             )}
           </div>
         )}
+
+        {/* ── PRESCRIPTION REVIEW & FINALIZATION MODAL ── */}
+        <AnimatePresence>
+          {showReviewModal && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                className="w-full max-w-2xl bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[90vh]"
+              >
+                {/* Header */}
+                <div className="px-6 py-4 bg-gradient-to-r from-teal-800 to-teal-700 text-white flex items-center justify-between">
+                  <div>
+                    <h3 className="text-sm font-bold tracking-tight">Prescription Review & Finalization</h3>
+                    <p className="text-[11px] text-teal-100">
+                      Verify clinical findings and medications before digital signing
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => !isFinalizing && setShowReviewModal(false)}
+                    disabled={isFinalizing}
+                    className="p-1 rounded-lg hover:bg-white/10 text-white transition-colors cursor-pointer"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                {/* Body (scrollable) */}
+                <div className="p-6 space-y-4 overflow-y-auto text-xs">
+                  {/* Server Error Alert inside Modal */}
+                  {serverError && (
+                    <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded-xl flex items-center gap-2">
+                      <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
+                      <div>
+                        <span className="font-bold">Submission Error: </span>
+                        <span>{serverError}</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Patient & Doctor Strip */}
+                  <div className="grid grid-cols-2 gap-3 p-3 bg-slate-50 border border-slate-200 rounded-xl">
+                    <div>
+                      <span className="text-[10px] uppercase font-bold text-slate-400 block">Patient</span>
+                      <span className="font-bold text-slate-800 text-sm">{selectedPatient?.name}</span>
+                      <p className="text-slate-500 text-[11px]">
+                        Roll No: {selectedPatient?.rollNo} • Age: {selectedPatient?.age} • Blood: {selectedPatient?.bloodGroup}
+                      </p>
+                    </div>
+                    <div>
+                      <span className="text-[10px] uppercase font-bold text-slate-400 block">Prescribing Doctor</span>
+                      <span className="font-bold text-teal-800 text-sm">{doctorProfile.name}</span>
+                      <p className="text-slate-500 text-[11px]">
+                        {doctorProfile.specialization} • Room {doctorProfile.room}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Assessment */}
+                  <div className="space-y-1">
+                    <span className="text-[10px] uppercase font-bold text-slate-400 block">Clinical Diagnosis</span>
+                    <div className="p-2.5 rounded-lg bg-teal-50/50 border border-teal-200 text-teal-900 font-bold">
+                      {draftDiagnosis}
+                    </div>
+                    {draftClinicalNotes && (
+                      <p className="text-[11px] text-slate-600 mt-1 italic">
+                        Notes: {draftClinicalNotes}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Medications Table */}
+                  <div className="space-y-1.5">
+                    <span className="text-[10px] uppercase font-bold text-slate-400 block">
+                      Prescribed Medicines ({draftMedicines.length})
+                    </span>
+                    <div className="border border-slate-200 rounded-xl overflow-hidden shadow-2xs">
+                      <table className="w-full text-left text-xs">
+                        <thead className="bg-slate-100/80 text-slate-600 text-[10px] uppercase font-bold">
+                          <tr>
+                            <th className="py-2 px-3">Medicine</th>
+                            <th className="py-2 px-3">Schedule</th>
+                            <th className="py-2 px-3">Duration</th>
+                            <th className="py-2 px-3">Instructions</th>
+                            <th className="py-2 px-3 text-right">Qty</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {draftMedicines.map((m, idx) => (
+                            <tr key={idx} className="hover:bg-slate-50/50">
+                              <td className="py-2 px-3 font-semibold text-slate-900">{m.name}</td>
+                              <td className="py-2 px-3 font-mono text-teal-700 font-bold">{m.dosage}</td>
+                              <td className="py-2 px-3 text-slate-600">{m.duration}</td>
+                              <td className="py-2 px-3 text-slate-500">{m.instruction}</td>
+                              <td className="py-2 px-3 text-right font-bold text-slate-900">{m.qty}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  {/* Notice */}
+                  <div className="p-3 bg-amber-50/80 border border-amber-200/80 rounded-xl text-amber-800 text-[11px] flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                    <span>
+                      Finalizing will transition this visit to <strong>WAITING_FOR_MEDICINE</strong> at the dispensary and retire the active OPD queue token.
+                    </span>
+                  </div>
+                </div>
+
+                {/* Footer */}
+                <div className="px-6 py-3.5 bg-slate-50 border-t border-slate-200 flex items-center justify-between gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setShowReviewModal(false)}
+                    disabled={isFinalizing}
+                    className="px-4 py-2 rounded-xl border border-slate-200 hover:bg-slate-100 text-slate-700 font-semibold cursor-pointer text-xs"
+                  >
+                    ← Back to Edit
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleCompleteAndDispatch}
+                    disabled={isFinalizing}
+                    className="px-5 py-2 rounded-xl bg-teal-700 hover:bg-teal-800 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold flex items-center gap-2 cursor-pointer shadow-xs text-xs"
+                  >
+                    {isFinalizing ? (
+                      <>
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                        <span>Finalizing & Dispatching...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Check className="w-3.5 h-3.5" />
+                        <span>Confirm & Dispatch to Dispensary</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
+
+        {/* ── SUCCESS MODAL (WITH PDF DOWNLOAD & PRINT) ── */}
+        <AnimatePresence>
+          {finalizeSuccessData && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.95 }}
+                className="w-full max-w-md bg-white rounded-2xl shadow-2xl border border-slate-200 p-6 text-center space-y-4"
+              >
+                <div className="w-12 h-12 bg-emerald-100 text-emerald-700 rounded-full flex items-center justify-center mx-auto">
+                  <CheckCircle2 className="w-7 h-7" />
+                </div>
+
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">
+                    Prescription Finalized & Dispatched!
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-1">
+                    Prescription #{finalizeSuccessData.prescriptionId} saved. Visit #{finalizeSuccessData.visitId} transitioned to WAITING_FOR_MEDICINE.
+                  </p>
+                </div>
+
+                <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-left text-xs space-y-1">
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Student:</span>
+                    <span className="font-bold text-slate-800">{finalizeSuccessData.patientName}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Roll No:</span>
+                    <span className="font-mono text-slate-800">{finalizeSuccessData.rollNo}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Diagnosis:</span>
+                    <span className="font-semibold text-teal-800">{finalizeSuccessData.diagnosis}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-500">Medicines Prescribed:</span>
+                    <span className="font-semibold text-slate-800">{finalizeSuccessData.medicines.length} items</span>
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      generatePrescriptionPdf({
+                        prescription: {
+                          prescription_id: finalizeSuccessData.prescriptionId,
+                          diagnosis: finalizeSuccessData.diagnosis,
+                        },
+                        doctor: doctorProfile,
+                        patient: {
+                          name: finalizeSuccessData.patientName,
+                          rollNo: finalizeSuccessData.rollNo,
+                          visitId: finalizeSuccessData.visitId,
+                        },
+                        medicines: finalizeSuccessData.medicines,
+                        autoDownload: true,
+                      })
+                    }
+                    className="w-full py-2.5 rounded-xl bg-teal-700 hover:bg-teal-800 text-white font-bold text-xs flex items-center justify-center gap-2 cursor-pointer shadow-xs"
+                  >
+                    <Download className="w-4 h-4" />
+                    <span>Download Official E-Prescription PDF</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFinalizeSuccessData(null)
+                      setActiveTab('queue')
+                    }}
+                    className="w-full py-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 font-semibold text-xs cursor-pointer"
+                  >
+                    Back to Live OPD Queue
+                  </button>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
       </main>
     </div>
   )
