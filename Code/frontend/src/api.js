@@ -415,3 +415,19 @@ export function redirectPatient(visitId, targetDoctorId, reason = 'Clinical refe
     }),
   })
 }
+
+export function fetchAwaitingDispense(doctorId = null) {
+  const query = doctorId && doctorId !== 'ALL' ? `?doctor_id=${encodeURIComponent(doctorId)}` : ''
+  return request(`/api/reception/prescriptions/awaiting-dispense${query}`)
+}
+
+export function fetchDispensingPrescription(visitId) {
+  return request(`/api/reception/prescriptions/${visitId}`)
+}
+
+export function dispensePrescription(visitId, payload = {}) {
+  return request(`/api/reception/dispense/${visitId}`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}

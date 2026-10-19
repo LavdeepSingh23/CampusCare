@@ -2,7 +2,8 @@ import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { useQueue, DOCTORS, DIRECTORY, dispense, logAction, resetDemo } from "../../context/queueStore";
-import { lookupStudent, fetchReceptionDoctors, receptionCheckIn, fetchReceptionQueue } from "../../api";
+import { lookupStudent, fetchReceptionDoctors, receptionCheckIn, fetchReceptionQueue, fetchAwaitingDispense } from "../../api";
+import DispensingDesk from "./DispensingDesk";
 import { useAuth } from "../../context/AuthContext";
 import { Sidebar, SidebarBody, SidebarLink } from "../ui/sidebar";
 import campusCareLogo from "../../assets/campuscare-logo.png";
@@ -86,6 +87,7 @@ export default function ReceptionDashboard({ onLogout, initialPage = "reception"
  
   const [liveQueue, setLiveQueue] = useState([]);
   const [liveDoctors, setLiveDoctors] = useState([]);
+  const [liveDispensing, setLiveDispensing] = useState([]);
 
   useEffect(() => {
     const fetchLive = () => {
@@ -97,6 +99,11 @@ export default function ReceptionDashboard({ onLogout, initialPage = "reception"
       fetchReceptionDoctors()
         .then((d) => {
           if (Array.isArray(d)) setLiveDoctors(d);
+        })
+        .catch(() => {});
+      fetchAwaitingDispense()
+        .then((disp) => {
+          if (Array.isArray(disp)) setLiveDispensing(disp);
         })
         .catch(() => {});
     };
@@ -113,7 +120,7 @@ export default function ReceptionDashboard({ onLogout, initialPage = "reception"
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const counts = {
     queue: liveQueue.length > 0 ? liveQueue.length : active.length,
-    dispensing: forMedicine.length,
+    dispensing: liveDispensing.length > 0 ? liveDispensing.length : forMedicine.length,
   };
  
   return (
@@ -202,11 +209,25 @@ export default function ReceptionDashboard({ onLogout, initialPage = "reception"
         </div>
  
         <div className="flex-1">
-          {page === "reception" && <Home {...{ now, visits, active, waiting, inConsult, forMedicine, log, setPage, liveQueue, liveDoctors }} />}
+          {page === "reception" && <Home {...{ now, visits, active, waiting, inConsult, forMedicine, log, setPage, liveQueue, liveDoctors, liveDispensing }} />}
           {page === "checkin" && <CheckIn {...{ flash, setPage }} />}
           {page === "queue" && <LiveQueue setPage={setPage} />}
           {page === "students" && <Students {...{ visits }} />}
-          {page === "dispensing" && <Dispensing {...{ forMedicine, flash }} />}
+          {page === "dispensing" && (
+            <DispensingDesk
+              flash={flash}
+              onDispensed={(res) => {
+                try {
+                  logAction(`Dispensed: ${res?.dispensingStatus || "DISPENSED"} for Visit #${res?.visitId || ""}`, "dispensing");
+                } catch {
+                  // ignore
+                }
+                fetchAwaitingDispense().then((d) => {
+                  if (Array.isArray(d)) setLiveDispensing(d);
+                }).catch(() => {});
+              }}
+            />
+          )}
           {page === "completed" && <Completed {...{ completed }} />}
           {page === "activity" && <Activity {...{ log }} />}
           {page === "settings" && <Settings {...{ flash }} />}
@@ -285,7 +306,7 @@ const PageHead = ({ title, sub, badge, right }) => (
 );
  
 /* ====================== 1. RECEPTION (Home Overview) ====================== */
-function Home({ now, visits, waiting, inConsult, forMedicine, log, setPage, liveQueue = [], liveDoctors = [] }) {
+function Home({ now, visits, waiting, inConsult, forMedicine, log, setPage, liveQueue = [], liveDoctors = [], liveDispensing = [] }) {
   const h = now.getHours();
   const greet = h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening";
   const completedToday = visits.filter((v) => v.status === "dispensed");
@@ -451,33 +472,36 @@ function Home({ now, visits, waiting, inConsult, forMedicine, log, setPage, live
             </div>
  
             <div className="mt-4">
-              {forMedicine.length > 0 ? (
-                <div className="p-4 rounded-xl bg-orange-50/80 border border-orange-200/80 text-orange-950 space-y-2">
-                  <div className="flex items-center gap-2">
-                    <Pill className="w-4 h-4 text-orange-600" />
-                    <span className="text-xs font-bold">
-                      {forMedicine.length} prescription{forMedicine.length > 1 ? "s" : ""} waiting for pickup
-                    </span>
+              {(() => {
+                const pendingCount = liveDispensing.length > 0 ? liveDispensing.length : forMedicine.length;
+                return pendingCount > 0 ? (
+                  <div className="p-4 rounded-xl bg-orange-50/80 border border-orange-200/80 text-orange-950 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Pill className="w-4 h-4 text-orange-600" />
+                      <span className="text-xs font-bold">
+                        {pendingCount} prescription{pendingCount > 1 ? "s" : ""} waiting for pickup
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-orange-800/90 leading-relaxed">
+                      Doctor consultations are completed. Students are waiting at the medicine counter.
+                    </p>
+                    <div className="pt-2">
+                      <button
+                        onClick={() => setPage("dispensing")}
+                        className="w-full py-2 px-3 rounded-lg bg-orange-600 hover:bg-orange-700 text-white font-semibold text-xs shadow-2xs transition-all cursor-pointer"
+                      >
+                        Open Dispensing Station ({pendingCount})
+                      </button>
+                    </div>
                   </div>
-                  <p className="text-[11px] text-orange-800/90 leading-relaxed">
-                    Doctor consultations are completed. Students are waiting at the medicine counter.
-                  </p>
-                  <div className="pt-2">
-                    <button
-                      onClick={() => setPage("dispensing")}
-                      className="w-full py-2 px-3 rounded-lg bg-orange-600 hover:bg-orange-700 text-white font-semibold text-xs shadow-2xs transition-all cursor-pointer"
-                    >
-                      Open Dispensing Station ({forMedicine.length})
-                    </button>
+                ) : (
+                  <div className="p-4 rounded-xl bg-slate-50 border border-slate-200/70 text-center py-6">
+                    <CheckCircle className="w-6 h-6 text-emerald-600 mx-auto mb-1.5" />
+                    <p className="text-xs font-bold text-slate-800">All Prescriptions Cleared</p>
+                    <p className="text-[11px] text-slate-400 mt-0.5">No students are currently waiting at the medicine desk.</p>
                   </div>
-                </div>
-              ) : (
-                <div className="p-4 rounded-xl bg-slate-50 border border-slate-200/70 text-center py-6">
-                  <CheckCircle className="w-6 h-6 text-emerald-600 mx-auto mb-1.5" />
-                  <p className="text-xs font-bold text-slate-800">All Prescriptions Cleared</p>
-                  <p className="text-[11px] text-slate-400 mt-0.5">No students are currently waiting at the medicine desk.</p>
-                </div>
-              )}
+                );
+              })()}
             </div>
           </div>
  
