@@ -134,8 +134,11 @@ To comply with medical confidentiality and student data protection:
 | **Mark Patient No-Show** | `POST /api/doctor/{doctor_id}/no-show/{visit_id}` | `POST /api/queue/{visit_id}/no-show` | **YES** |
 | **Requeue Patient** | `POST /api/queue/{visit_id}/requeue` | — | **YES** |
 | **Redirect Patient** | `POST /api/queue/{visit_id}/redirect` | `POST /api/doctor/{doctor_id}/redirect/{visit_id}` | **YES** |
-| **Dispense Medication** | `POST /api/queue/{visit_id}/dispense` | — | **YES** |
+| **Dispense Medication** | `POST /api/queue/{visit_id}/dispense` | `POST /api/reception/dispense/{visit_id}` | **YES** |
+| **Awaiting Dispense List** | `GET /api/queue/awaiting-dispense` | `GET /api/reception/prescriptions/awaiting-dispense`<br>`GET /api/reception/dispensing` | **YES** |
+| **Visit Prescription Detail** | `GET /api/queue/{visit_id}/prescription` | `GET /api/reception/prescriptions/{visit_id}` | **YES** |
 | **Cancel Visit** | `POST /api/queue/{visit_id}/cancel` | — | **YES** |
+
 | **Doctor Daily Stats** | `GET /api/doctor/{doctor_id}/stats` | — | **YES** |
 | **Patient Medical Summary** | `GET /api/patient/{roll_number}/summary` | — | **YES** |
 | **Patient Medical History** | `GET /api/patient/{roll_number}/history` | — | **YES** |
@@ -609,31 +612,164 @@ To comply with medical confidentiality and student data protection:
 
 ---
 
-### 5.12 Reception: Dispense Medicine & Discharge Patient
+### 5.12 Pharmacy / Reception: Medicine Dispensing & Prescription Fulfillment
 
-- **Route**: `POST /api/queue/{visit_id}/dispense`
-- **Authorization**: `RECEPTIONIST` role only.
+#### 5.12.1 Prescriptions Awaiting Dispensing
+
+- **Route**: `GET /api/queue/awaiting-dispense`  
+  *(Aliases: `GET /api/reception/prescriptions/awaiting-dispense`, `GET /api/reception/dispensing`)*
+- **Authorization**: Staff token (`RECEPTIONIST` or `DOCTOR`). Students receive `403 Forbidden`.
+- **Query Parameters**:
+  - `doctor_id` (`int`, optional): Filter awaiting prescriptions assigned to a specific doctor.
+- **Success Response (`200 OK`)**: List of visits currently in `WAITING_FOR_MEDICINE`:
+  ```json
+  [
+    {
+      "visitId": 105,
+      "visit_id": 105,
+      "id": 105,
+      "rollNumber": "CS21B045",
+      "roll_number": "CS21B045",
+      "rollNo": "CS21B045",
+      "patientName": "Aarav Mehta",
+      "name": "Aarav Mehta",
+      "bloodGroup": "O+",
+      "allergies": "Penicillin",
+      "allergy": "Penicillin",
+      "doctorId": 1,
+      "doctorName": "Dr. Neha Kapoor",
+      "doctorEmail": "neha.kapoor@campuscare.edu",
+      "specialty": "General Physician",
+      "consultationId": 88,
+      "prescriptionId": 52,
+      "rxNo": 52,
+      "diagnosis": "Bacterial Pharyngitis",
+      "reasonForVisit": "Fever and sore throat",
+      "generalInstructions": "Take after meals. Warm saline gargles thrice daily.",
+      "advice": "Take after meals. Warm saline gargles thrice daily.",
+      "finalizedAt": "2026-10-18T10:45:00",
+      "consultationCompletedAt": "2026-10-18T10:45:00",
+      "status": "WAITING_FOR_MEDICINE",
+      "medicines": [
+        {
+          "prescriptionItemId": 120,
+          "id": 120,
+          "medicineName": "Amoxicillin 500mg",
+          "name": "Amoxicillin 500mg",
+          "med": "Amoxicillin 500mg",
+          "strength": "500mg",
+          "dosageForm": "Capsule",
+          "route": "Oral",
+          "days": 5,
+          "durationText": "5 days",
+          "frequency": "1-0-1",
+          "freq": "1-0-1",
+          "mealRelation": "AFTER_MEAL",
+          "specialInstructions": "After meals",
+          "calculatedTotalQuantity": 10.0,
+          "quantity": 10.0,
+          "qty": 10.0,
+          "doses": [
+            { "timeOfDay": "MORNING", "doseQuantity": 1.0, "doseUnit": "capsule" },
+            { "timeOfDay": "NIGHT", "doseQuantity": 1.0, "doseUnit": "capsule" }
+          ]
+        }
+      ],
+      "rx": [ /* identical array alias for frontend receptionist.jsx */ ]
+    }
+  ]
+  ```
+
+---
+
+#### 5.12.2 Single Visit Finalized Prescription Detail
+
+- **Route**: `GET /api/queue/{visit_id}/prescription`  
+  *(Alias: `GET /api/reception/prescriptions/{visit_id}`)*
+- **Authorization**: Staff token (`RECEPTIONIST` or `DOCTOR`).
+- **Success Response (`200 OK`)**:
+  ```json
+  {
+    "visitId": 105,
+    "rollNumber": "CS21B045",
+    "patientName": "Aarav Mehta",
+    "bloodGroup": "O+",
+    "allergies": "Penicillin",
+    "doctorId": 1,
+    "doctorName": "Dr. Neha Kapoor",
+    "prescriptionId": 52,
+    "diagnosis": "Bacterial Pharyngitis",
+    "generalInstructions": "Take after meals. Warm saline gargles thrice daily.",
+    "finalizedAt": "2026-10-18T10:45:00",
+    "status": "WAITING_FOR_MEDICINE",
+    "items": [ /* list of prescribed medicines with doses and calculated quantities */ ]
+  }
+  ```
+- **Error Responses**:
+  - `404 Not Found`: Visit does not exist or has no finalized prescription.
+
+---
+
+#### 5.12.3 Dispense Medication & Discharge Patient
+
+- **Route**: `POST /api/queue/{visit_id}/dispense`  
+  *(Alias: `POST /api/reception/dispense/{visit_id}`)*
+- **Authorization**: `RECEPTIONIST` role only. Doctors and students receive `403 Forbidden`.
 - **Request Body**:
   ```json
   {
-    "remarks": "Medication handed to patient with dosage instructions" // string, optional
+    "status": "Dispensed as prescribed", // "Dispensed as prescribed" | "Partially dispensed" | "Substituted"
+    "remarks": "Medication verified and handed to student", // optional notes
+    "change_reason": "Only 3 tabs available in stock",      // required if partially dispensed or substituted
+    "items": [                                             // optional per-medicine overrides
+      {
+        "prescription_item_id": 120,
+        "dispensed_medicine_name": "Amoxicillin 500mg",
+        "dispensed_quantity": 3.0,
+        "was_changed": true,
+        "change_reason": "Partial fulfillment: 3/10 caps issued"
+      }
+    ]
   }
   ```
 - **Success Response (`200 OK`)**:
   ```json
   {
-    "status": "dispensed",           // or "already_completed"
+    "status": "dispensed",                  // or "already_completed"
     "visitId": 105,
-    "rollNumber": "CS21B045"
+    "visit_id": 105,
+    "rollNumber": "CS21B045",
+    "roll_number": "CS21B045",
+    "dispensingId": 34,
+    "dispensingStatus": "PARTIALLY_DISPENSED", // "DISPENSED" or "PARTIALLY_DISPENSED"
+    "dispensedByStaffId": 3,
+    "wasChanged": true,
+    "changeReason": "Only 3 tabs available in stock",
+    "completedAt": "2026-10-18T10:50:00",
+    "items": [
+      {
+        "dispensingItemId": 70,
+        "prescriptionItemId": 120,
+        "dispensedMedicineName": "Amoxicillin 500mg",
+        "dispensedQuantity": 3.0,
+        "wasChanged": true,
+        "changeReason": "Partial fulfillment: 3/10 caps issued"
+      }
+    ]
   }
   ```
-- **Error Responses**:
-  - `404 Not Found`: Visit does not exist.
-  - `409 Conflict`: Visit is not in `WAITING_FOR_MEDICINE` status.
+- **Validation Rules**:
+  - Visit must be in `WAITING_FOR_MEDICINE`. Any other status produces `409 Conflict`.
+  - When status is `Partially dispensed` or any item quantity is reduced, `change_reason` is mandatory. Missing reason returns `409 Conflict`.
+  - Preserves doctor's original `PRESCRIPTION` and `PRESCRIPTION_ITEM` records completely untouched as the clinical record.
 - **Side Effects**:
+  - Inserts `DISPENSING` row linking visit, staff actor, fulfillment status, and change reason.
+  - Inserts `DISPENSING_ITEM` rows for each dispensed medication.
   - Updates `VISIT.status = 'COMPLETED'` and `completed_at = NOW()`.
   - Inserts `VISIT_EVENT` (`event_type = 'MEDICINE_DISPENSED'`).
-- **Retry Safety**: **Idempotent**. Retrying an already dispensed visit safely returns `status = 'already_completed'` without writing duplicate audit records.
+  - Inserts `VISIT_EVENT` (`event_type = 'COMPLETED'`).
+- **Retry Safety**: **Idempotent**. Retrying an already dispensed visit safely returns `status = 'already_completed'` with existing dispensing details without writing duplicate audit records or database rows.
+
 
 ---
 

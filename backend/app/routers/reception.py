@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field
 from app.core.database import get_db_connection
 from app.core.deps import CurrentReceptionist, get_current_receptionist
 from app.core.util import display_name_from_email
+from app.schemas.dispensing import DispenseRequest
 from app.services import queue_lifecycle as ql
 
 logger = logging.getLogger(__name__)
@@ -351,6 +352,85 @@ def front_desk_queue(
         })
 
     return result
+
+
+# ── 5. Prescriptions awaiting dispensing & medicine fulfillment ─────────
+@router.get("/prescriptions/awaiting-dispense")
+@router.get("/dispensing")
+def list_prescriptions_awaiting_dispense(
+    doctor_id: Optional[int] = Query(None, description="Optional doctor ID filter"),
+    _: CurrentReceptionist = Depends(get_current_receptionist),
+):
+    """
+    Receptionist dispensing view: Returns all visits currently in WAITING_FOR_MEDICINE,
+    along with patient details, allergies, doctor information, and full prescribed medicines
+    with dosages, timing schedules, and calculated quantities.
+    """
+    conn = get_db_connection()
+    try:
+        return ql.get_prescriptions_awaiting_dispense(conn=conn, doctor_id=doctor_id)
+    finally:
+        conn.close()
+
+
+@router.get("/prescriptions/{visit_id}")
+def get_prescription_by_visit(
+    visit_id: int,
+    _: CurrentReceptionist = Depends(get_current_receptionist),
+):
+    """
+    Receptionist prescription view: Returns finalized prescription details for a specific visit.
+    """
+    conn = get_db_connection()
+    try:
+        return ql.get_visit_prescription_detail(conn=conn, visit_id=visit_id)
+    except ql.ResourceNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+    finally:
+        conn.close()
+
+
+@router.post("/dispense/{visit_id}")
+def dispense_visit_prescription(
+    visit_id: int,
+    payload: Optional[DispenseRequest] = None,
+    receptionist: CurrentReceptionist = Depends(get_current_receptionist),
+):
+    """
+    Receptionist dispensing action: Records medicine dispensing and discharges student visit.
+    Supports full dispensing, partial dispensing with reason, and item-level quantities.
+    """
+    conn = get_db_connection()
+    try:
+        remarks = payload.remarks if payload and payload.remarks else "Medicines dispensed at front desk"
+        status_val = payload.get_status() if payload else None
+        reason_val = payload.get_change_reason() if payload else None
+        items_val = [it.model_dump() for it in payload.items] if payload and payload.items else None
+
+        result = ql.dispense_medication(
+            conn=conn,
+            visit_id=visit_id,
+            performed_by_user_id=receptionist.user_id,
+            remarks=remarks,
+            dispensing_status=status_val,
+            change_reason=reason_val,
+            items=items_val,
+        )
+        conn.commit()
+        return result
+    except ql.ResourceNotFoundError as exc:
+        conn.rollback()
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+    except ql.InvalidTransitionError as exc:
+        conn.rollback()
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
+    except Exception as exc:
+        conn.rollback()
+        logger.error("Reception dispense failed for visit #%s: %s", visit_id, exc, exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to record dispensing: {exc}")
+    finally:
+        conn.close()
+
 
 
 def _is_mysql(conn) -> bool:

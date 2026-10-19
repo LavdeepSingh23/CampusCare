@@ -28,8 +28,7 @@ class CheckInRequest(BaseModel):
     via: str = "MANUAL"
 
 
-class DispenseRequest(BaseModel):
-    remarks: Optional[str] = Field(None, description="Dispensing notes or pharmacy remarks")
+from app.schemas.dispensing import DispenseRequest, DispensingItemInput
 
 
 class ActionReasonRequest(BaseModel):
@@ -109,16 +108,28 @@ def dispense_medicine(
 ):
     """
     Receptionist-only operation: Confirms medication dispensing and finalizes the student visit.
+    Persists:
+    - DISPENSING record with staff actor and fulfillment status.
+    - DISPENSING_ITEM records for each dispensed medicine.
+    - Transitions VISIT to COMPLETED.
+    - Logs MEDICINE_DISPENSED and COMPLETED audit events.
     Rejects doctors and students with 403 Forbidden.
     """
     connection = get_db_connection()
     try:
         remarks = payload.remarks if payload and payload.remarks else "Medicines dispensed at front desk"
+        status_val = payload.get_status() if payload else None
+        reason_val = payload.get_change_reason() if payload else None
+        items_val = [it.model_dump() for it in payload.items] if payload and payload.items else None
+
         result = ql.dispense_medication(
             conn=connection,
             visit_id=visit_id,
             performed_by_user_id=receptionist.user_id,
             remarks=remarks,
+            dispensing_status=status_val,
+            change_reason=reason_val,
+            items=items_val,
         )
         connection.commit()
         return result
@@ -137,6 +148,7 @@ def dispense_medicine(
         )
     finally:
         connection.close()
+
 
 
 @router.post("/{visit_id}/requeue")
@@ -373,3 +385,41 @@ def get_live_queue(
             ]
     finally:
         connection.close()
+
+
+@router.get("/awaiting-dispense")
+def get_prescriptions_awaiting_dispense(
+    doctor_id: Optional[int] = None,
+    staff: CurrentUser = Depends(get_current_staff),
+):
+    """
+    Staff-only endpoint: Returns all visits currently awaiting dispensing (WAITING_FOR_MEDICINE),
+    along with student information, allergies, doctor assignment, diagnosis, and complete
+    prescribed medicine items with doses and calculated quantities.
+    Rejects students with 403 Forbidden.
+    """
+    connection = get_db_connection()
+    try:
+        return ql.get_prescriptions_awaiting_dispense(conn=connection, doctor_id=doctor_id)
+    finally:
+        connection.close()
+
+
+@router.get("/{visit_id}/prescription")
+def get_visit_prescription(
+    visit_id: int,
+    staff: CurrentUser = Depends(get_current_staff),
+):
+    """
+    Staff-only endpoint: Returns the finalized prescription and clinical records for a visit.
+    Raises 404 if visit or prescription is not found.
+    Rejects students with 403 Forbidden.
+    """
+    connection = get_db_connection()
+    try:
+        return ql.get_visit_prescription_detail(conn=connection, visit_id=visit_id)
+    except ql.ResourceNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+    finally:
+        connection.close()
+

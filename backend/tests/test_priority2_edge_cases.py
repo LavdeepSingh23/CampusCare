@@ -31,11 +31,15 @@ def setup_fixtures():
             cur.execute("SELECT visit_id FROM VISIT WHERE roll_number LIKE 'TEST_P2_%'")
             v_ids = [r["visit_id"] for r in cur.fetchall()]
             if v_ids:
-                cur.execute(f"DELETE FROM QUEUE_ENTRY WHERE visit_id IN ({','.join(map(str, v_ids))})")
-                cur.execute(f"DELETE FROM VISIT_EVENT WHERE visit_id IN ({','.join(map(str, v_ids))})")
-                cur.execute(f"DELETE FROM PRESCRIPTION WHERE consultation_id IN (SELECT consultation_id FROM CONSULTATION WHERE visit_id IN ({','.join(map(str, v_ids))}))")
-                cur.execute(f"DELETE FROM CONSULTATION WHERE visit_id IN ({','.join(map(str, v_ids))})")
-                cur.execute(f"DELETE FROM VISIT WHERE visit_id IN ({','.join(map(str, v_ids))})")
+                id_str = ",".join(map(str, v_ids))
+                cur.execute(f"DELETE FROM DISPENSING_ITEM WHERE dispensing_id IN (SELECT dispensing_id FROM DISPENSING WHERE visit_id IN ({id_str}))")
+                cur.execute(f"DELETE FROM DISPENSING WHERE visit_id IN ({id_str})")
+                cur.execute(f"DELETE FROM QUEUE_ENTRY WHERE visit_id IN ({id_str})")
+                cur.execute(f"DELETE FROM VISIT_EVENT WHERE visit_id IN ({id_str})")
+                cur.execute(f"DELETE FROM PRESCRIPTION WHERE consultation_id IN (SELECT consultation_id FROM CONSULTATION WHERE visit_id IN ({id_str}))")
+                cur.execute(f"DELETE FROM CONSULTATION WHERE visit_id IN ({id_str})")
+                cur.execute(f"DELETE FROM VISIT WHERE visit_id IN ({id_str})")
+
 
             cur.execute("DELETE FROM STUDENT WHERE roll_number LIKE 'TEST_P2_%'")
             cur.execute("DELETE FROM USER_ACCOUNT WHERE email LIKE 'test_p2_%@thapar.edu'")
@@ -75,11 +79,15 @@ def teardown_fixtures():
             cur.execute("SELECT visit_id FROM VISIT WHERE roll_number LIKE 'TEST_P2_%'")
             v_ids = [r["visit_id"] for r in cur.fetchall()]
             if v_ids:
-                cur.execute(f"DELETE FROM QUEUE_ENTRY WHERE visit_id IN ({','.join(map(str, v_ids))})")
-                cur.execute(f"DELETE FROM VISIT_EVENT WHERE visit_id IN ({','.join(map(str, v_ids))})")
-                cur.execute(f"DELETE FROM PRESCRIPTION WHERE consultation_id IN (SELECT consultation_id FROM CONSULTATION WHERE visit_id IN ({','.join(map(str, v_ids))}))")
-                cur.execute(f"DELETE FROM CONSULTATION WHERE visit_id IN ({','.join(map(str, v_ids))})")
-                cur.execute(f"DELETE FROM VISIT WHERE visit_id IN ({','.join(map(str, v_ids))})")
+                id_str = ",".join(map(str, v_ids))
+                cur.execute(f"DELETE FROM DISPENSING_ITEM WHERE dispensing_id IN (SELECT dispensing_id FROM DISPENSING WHERE visit_id IN ({id_str}))")
+                cur.execute(f"DELETE FROM DISPENSING WHERE visit_id IN ({id_str})")
+                cur.execute(f"DELETE FROM QUEUE_ENTRY WHERE visit_id IN ({id_str})")
+                cur.execute(f"DELETE FROM VISIT_EVENT WHERE visit_id IN ({id_str})")
+                cur.execute(f"DELETE FROM PRESCRIPTION WHERE consultation_id IN (SELECT consultation_id FROM CONSULTATION WHERE visit_id IN ({id_str}))")
+                cur.execute(f"DELETE FROM CONSULTATION WHERE visit_id IN ({id_str})")
+                cur.execute(f"DELETE FROM VISIT WHERE visit_id IN ({id_str})")
+
 
             cur.execute("DELETE FROM STUDENT WHERE roll_number LIKE 'TEST_P2_%'")
             cur.execute("DELETE FROM USER_ACCOUNT WHERE email LIKE 'test_p2_%@thapar.edu'")
