@@ -130,7 +130,7 @@ To comply with medical confidentiality and student data protection:
 | **Doctor Active Consultation** | `GET /api/doctor/{doctor_id}/active-consultation` | — | **YES** |
 | **Doctor Call Next** | `POST /api/doctor/{doctor_id}/call-next` | `POST /api/doctor/{doctor_id}/start-consultation` (without body) | **YES** |
 | **Doctor Start Consultation** | `POST /api/doctor/{doctor_id}/start-consultation/{visit_id}` | `POST /api/queue/{visit_id}/start-consultation` | **YES** |
-| **Complete Consultation** | `POST /api/doctor/{doctor_id}/complete` | — | **YES** |
+| **Complete Consultation** | `POST /api/doctor/{doctor_id}/complete` | `POST /api/doctor/{doctor_id}/complete/{visit_id}` | **YES** |
 | **Mark Patient No-Show** | `POST /api/doctor/{doctor_id}/no-show/{visit_id}` | `POST /api/queue/{visit_id}/no-show` | **YES** |
 | **Requeue Patient** | `POST /api/queue/{visit_id}/requeue` | — | **YES** |
 | **Redirect Patient** | `POST /api/queue/{visit_id}/redirect` | `POST /api/doctor/{doctor_id}/redirect/{visit_id}` | **YES** |
@@ -374,24 +374,48 @@ To comply with medical confidentiality and student data protection:
 
 ---
 
-### 5.8 Doctor: Complete Consultation & Write Prescription
+### 5.8 Doctor: Complete Consultation & Finalize Prescription
 
-- **Route**: `POST /api/doctor/{doctor_id}/complete`
-- **Authorization**: Doctor workstation token (matches `{doctor_id}`).
+- **Route**: `POST /api/doctor/{doctor_id}/complete`  
+  *(Canonical Visit Route: `POST /api/doctor/{doctor_id}/complete/{visit_id}`)*
+- **Authorization**: Doctor workstation token (token must match `{doctor_id}`, and doctor must be assigned to the visit).
 - **Request Body**:
   ```json
   {
-    "roll_number": "CS21B045",       // string, required
-    "diagnosis": "Acute Bronchitis", // string, required
-    "general": "Rest for 3 days",    // string, optional (clinical notes & advice)
-    "medicines": [                   // array, optional
+    "visit_id": 105,                       // integer, optional (canonical identifier; can also be supplied in path)
+    "roll_number": "CS21B045",              // string, optional (fallback lookup for active consultation)
+    "diagnosis": "Acute Bronchitis",        // string, required (non-empty)
+    "reason_for_visit": "Persistent cough", // string, optional (defaults to diagnosis or General Consultation)
+    "clinical_notes": "Chest clear, mild wheeze", // string, optional
+    "general_instructions": "Rest for 3 days and drink warm fluids", // string, optional (alias: general)
+    "medicines": [                          // array, optional
       {
-        "name": "Paracetamol 500mg", // string, required
-        "note": "After food",        // string, optional
-        "morning": true,             // boolean, optional
-        "afternoon": false,          // boolean, optional
-        "evening": true,             // boolean, optional
-        "night": false               // boolean, optional
+        "name": "Amoxicillin 500mg",        // string, required
+        "strength": "500mg",                // string, optional
+        "dosage_form": "Capsule",           // string, optional (Tablet, Capsule, Syrup, etc.)
+        "route": "Oral",                    // string, optional
+        "duration_value": 5,                // integer, optional
+        "duration_unit": "DAY",             // enum('DAY', 'WEEK', 'MONTH'), optional
+        "meal_relation": "AFTER_MEAL",      // enum('BEFORE_MEAL', 'AFTER_MEAL', 'WITH_MEAL', 'ANY_TIME', 'NOT_APPLICABLE'), optional
+        "special_instructions": "Take with water after meals", // string, optional
+        "morning": true,                    // boolean, optional
+        "afternoon": false,                 // boolean, optional
+        "evening": false,                   // boolean, optional
+        "night": true,                      // boolean, optional
+        "dose_quantity": 1.0,               // float, optional (default 1.0)
+        "dose_unit": "capsule",             // string, optional (default 'dose')
+        "doses": [                          // array, optional explicit dose schedules
+          {
+            "time_of_day": "MORNING",       // enum('MORNING', 'AFTERNOON', 'EVENING', 'NIGHT'), required
+            "dose_quantity": 1.0,           // float, positive
+            "dose_unit": "capsule"          // string
+          },
+          {
+            "time_of_day": "NIGHT",
+            "dose_quantity": 1.0,
+            "dose_unit": "capsule"
+          }
+        ]
       }
     ]
   }
@@ -399,23 +423,84 @@ To comply with medical confidentiality and student data protection:
 - **Success Response (`200 OK`)**:
   ```json
   {
-    "status": "completed",
-    "visitId": 105,
-    "consultationId": 82,
+    "status": "ok",
+    "prescription_id": 45,
     "prescriptionId": 45,
-    "rollNumber": "CS21B045"
+    "consultation_id": 82,
+    "consultationId": 82,
+    "visit_id": 105,
+    "visitId": 105,
+    "roll_number": "CS21B045",
+    "rollNumber": "CS21B045",
+    "doctor_id": 1,
+    "doctorId": 1,
+    "diagnosis": "Acute Bronchitis",
+    "reason_for_visit": "Persistent cough",
+    "reasonForVisit": "Persistent cough",
+    "clinical_notes": "Chest clear, mild wheeze",
+    "clinicalNotes": "Chest clear, mild wheeze",
+    "general_instructions": "Rest for 3 days and drink warm fluids",
+    "generalInstructions": "Rest for 3 days and drink warm fluids",
+    "finalized_at": "2026-10-19T17:15:00",
+    "finalizedAt": "2026-10-19T17:15:00",
+    "visit_status": "WAITING_FOR_MEDICINE",
+    "visitStatus": "WAITING_FOR_MEDICINE",
+    "queue_status": "COMPLETED",
+    "queueStatus": "COMPLETED",
+    "medicines": [
+      {
+        "prescription_item_id": 101,
+        "prescriptionItemId": 101,
+        "medicine_name": "Amoxicillin 500mg",
+        "medicineName": "Amoxicillin 500mg",
+        "strength": "500mg",
+        "dosage_form": "Capsule",
+        "dosageForm": "Capsule",
+        "route": "Oral",
+        "duration_value": 5,
+        "durationValue": 5,
+        "duration_unit": "DAY",
+        "durationUnit": "DAY",
+        "meal_relation": "AFTER_MEAL",
+        "mealRelation": "AFTER_MEAL",
+        "special_instructions": "Take with water after meals",
+        "specialInstructions": "Take with water after meals",
+        "doses": [
+          {
+            "time_of_day": "MORNING",
+            "timeOfDay": "MORNING",
+            "dose_quantity": 1.0,
+            "doseQuantity": 1.0,
+            "dose_unit": "capsule",
+            "doseUnit": "capsule"
+          },
+          {
+            "time_of_day": "NIGHT",
+            "timeOfDay": "NIGHT",
+            "dose_quantity": 1.0,
+            "doseQuantity": 1.0,
+            "dose_unit": "capsule",
+            "doseUnit": "capsule"
+          }
+        ]
+      }
+    ]
   }
   ```
 - **Error Responses**:
-  - `404 Not Found`: No active consultation found for student and doctor.
-  - `409 Conflict`: Visit is not in `IN_CONSULTATION` state.
-- **Side Effects**:
-  - Inserts `CONSULTATION` row (`diagnosis`, `clinical_notes`).
-  - Inserts `PRESCRIPTION` and `PRESCRIPTION_ITEM` rows if medicines provided.
+  - `403 Forbidden`: Token does not match `{doctor_id}`, or Doctor is not assigned to this visit.
+  - `404 Not Found`: Visit does not exist or no active consultation found for student/doctor.
+  - `409 Conflict`: Visit is not in `IN_CONSULTATION` state, or prescription was already finalized (duplicate finalization/overwriting prohibited).
+  - `422 Unprocessable Entity`: Missing or empty diagnosis, or invalid field enum.
+- **Side Effects (Atomic Transaction)**:
+  - Inserts `CONSULTATION` row (`visit_id`, `doctor_id`, `reason_for_visit`, `diagnosis`, `clinical_notes`).
+  - Inserts `PRESCRIPTION` header row (`consultation_id`, `general_instructions`, `finalized_at = NOW()`).
+  - Inserts all `PRESCRIPTION_ITEM` rows (`strength`, `dosage_form`, `route`, `duration_value`, `duration_unit`, `meal_relation`, `special_instructions`).
+  - Inserts all `PRESCRIPTION_DOSE` rows (`time_of_day`, `dose_quantity`, `dose_unit`).
   - Retires `QUEUE_ENTRY` (`status = 'COMPLETED'`, `exited_at = NOW()`, `exit_reason = 'COMPLETED'`).
   - Updates `VISIT` (`status = 'WAITING_FOR_MEDICINE'`, `consultation_completed_at = NOW()`).
   - Inserts `VISIT_EVENT` (`event_type = 'CONSULTATION_COMPLETED'`).
-- **Retry Safety**: **Non-idempotent**. Once completed, the visit transitions to `WAITING_FOR_MEDICINE` and subsequent retries reject with `404` or `409`.
+- **Retry Safety**: **Non-idempotent & protected against overwrite**. Once finalized, subsequent calls return `409 Conflict`.
 
 ---
 

@@ -302,7 +302,10 @@ export function completeConsultation(doctorId, payload) {
     if (idx !== -1) MOCK_QUEUE.splice(idx, 1)
     return mockDelay({ status: 'ok' })
   }
-  return request(`/api/doctor/${doctorId}/complete`, {
+  const url = payload.visit_id
+    ? `/api/doctor/${doctorId}/complete/${payload.visit_id}`
+    : `/api/doctor/${doctorId}/complete`
+  return request(url, {
     method: 'POST',
     body: JSON.stringify(payload),
   })

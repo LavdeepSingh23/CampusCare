@@ -666,14 +666,21 @@ export default function Doctors_Dashboard() {
     if (doctorId && selectedPatient) {
       try {
         await completeConsultation(doctorId, {
+          visit_id: selectedPatient.visitId,
           roll_number: selectedPatient.rollNo,
           diagnosis: draftDiagnosis,
+          reason_for_visit: selectedPatient.complaint || 'General Consultation',
           general: draftClinicalNotes || draftDietAdvice || 'General advice',
+          general_instructions: draftClinicalNotes || draftDietAdvice || 'General advice',
           clinical_notes: draftClinicalNotes || `Chief Complaint: ${selectedPatient.complaint}`,
           medicines: draftMedicines.map((m) => ({
             name: m.name,
             dosage: m.dosage,
+            strength: m.strength || null,
+            dosage_form: m.category || null,
+            duration: m.duration || null,
             instructions: `${m.instruction} for ${m.duration} (Qty: ${m.qty})`,
+            special_instructions: `${m.instruction} for ${m.duration} (Qty: ${m.qty})`,
             note: m.instruction,
             morning: m.timing?.toLowerCase().includes('morning') || false,
             afternoon: m.timing?.toLowerCase().includes('afternoon') || false,

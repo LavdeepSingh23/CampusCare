@@ -14,7 +14,11 @@ from app.core.deps import (
     require_own_doctor_id,
 )
 from app.core.util import display_name_from_email
-from app.schemas.doctor import CompleteConsultationRequest, UpdateValueRequest
+from app.schemas.doctor import (
+    CompleteConsultationRequest,
+    CompleteConsultationResponse,
+    UpdateValueRequest,
+)
 from app.services import queue_lifecycle as ql
 
 router = APIRouter(tags=["doctor"])
@@ -632,33 +636,60 @@ def call_next_student(
 
 # ── complete consultation ───────────────────────────────────────────────
 
-@router.post("/doctor/{doctor_id}/complete")
+@router.post("/doctor/{doctor_id}/complete", response_model=CompleteConsultationResponse)
+@router.post("/doctor/{doctor_id}/complete/{visit_id}", response_model=CompleteConsultationResponse)
 def complete_consultation(
     doctor_id: int,
     payload: CompleteConsultationRequest,
+    visit_id: Optional[int] = None,
     current: CurrentDoctor = Depends(get_current_doctor),
 ):
+    """
+    Completes a doctor consultation, persists consultation notes, prescription header,
+    medicine items and dose schedules atomically in one transaction, and transitions
+    the visit to WAITING_FOR_MEDICINE.
+    Supports identifying visits via:
+    - Path parameter: /doctor/{doctor_id}/complete/{visit_id}
+    - Request body: payload.visit_id
+    - Student roll: payload.roll_number (active consultation lookup)
+    """
     require_own_doctor_id(doctor_id, current)
+    target_visit_id = visit_id or payload.visit_id
     connection = get_db_connection()
     try:
         meds_data = [
             {
                 "name": med.name,
+                "strength": med.strength,
+                "dosage_form": med.dosage_form,
+                "route": med.route,
+                "duration_value": med.duration_value,
+                "duration_unit": med.duration_unit,
+                "duration": med.duration,
+                "meal_relation": med.meal_relation,
+                "special_instructions": med.special_instructions or med.instructions or med.note,
                 "note": med.note,
+                "instructions": med.instructions,
                 "morning": med.morning,
-                "afternoon": getattr(med, "afternoon", False),
+                "afternoon": med.afternoon,
                 "evening": med.evening,
                 "night": med.night,
+                "dosage": med.dosage,
+                "dose_quantity": med.dose_quantity,
+                "dose_unit": med.dose_unit,
+                "doses": [d.model_dump() for d in med.doses] if med.doses else None,
             }
             for med in payload.medicines
         ]
         res = ql.complete_consultation(
             conn=connection,
             doctor_id=doctor_id,
+            visit_id=target_visit_id,
             roll_number=payload.roll_number,
             diagnosis=payload.diagnosis,
-            clinical_notes=payload.general,
-            general_instructions=payload.general,
+            reason_for_visit=payload.reason_for_visit,
+            clinical_notes=payload.clinical_notes or payload.general,
+            general_instructions=payload.general_instructions or payload.general,
             medicines=meds_data,
             performed_by_user_id=current.user_id,
         )
@@ -667,12 +698,15 @@ def complete_consultation(
     except ql.ResourceNotFoundError as exc:
         connection.rollback()
         raise HTTPException(status_code=404, detail=str(exc))
+    except ql.UnauthorizedActionError as exc:
+        connection.rollback()
+        raise HTTPException(status_code=403, detail=str(exc))
     except ql.InvalidTransitionError as exc:
         connection.rollback()
         raise HTTPException(status_code=409, detail=str(exc))
     except Exception as exc:
         connection.rollback()
-        raise HTTPException(status_code=500, detail=f"Failed to save consultation: {exc}")
+        raise HTTPException(status_code=500, detail=f"Failed to complete consultation: {exc}")
     finally:
         connection.close()
 

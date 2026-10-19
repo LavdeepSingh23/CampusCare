@@ -55,6 +55,11 @@ class InvalidTransitionError(QueueLifecycleError):
     pass
 
 
+class UnauthorizedActionError(QueueLifecycleError):
+    """Raised when an actor is not permitted to perform the action on this visit/queue entry."""
+    pass
+
+
 def _is_mysql(conn) -> bool:
     """Helper to detect MySQL vs SQLite wrapper."""
     return not conn.__class__.__name__.startswith("SQLite")
@@ -778,123 +783,414 @@ def redirect_patient(
 def complete_consultation(
     conn,
     doctor_id: int,
-    roll_number: str,
-    diagnosis: str,
-    clinical_notes: Optional[str],
-    general_instructions: Optional[str],
-    medicines: List[Dict[str, Any]],
-    performed_by_user_id: int,
+    visit_id: Optional[int] = None,
+    roll_number: Optional[str] = None,
+    diagnosis: str = "",
+    reason_for_visit: Optional[str] = None,
+    clinical_notes: Optional[str] = None,
+    general_instructions: Optional[str] = None,
+    medicines: Optional[List[Dict[str, Any]]] = None,
+    performed_by_user_id: int = 1,
 ) -> Dict[str, Any]:
     """
     Completes doctor consultation, saves prescription records, and transitions
     VISIT to WAITING_FOR_MEDICINE and active QUEUE_ENTRY to COMPLETED.
+    Enforces:
+    - Accurate visit resolution via visit_id or roll_number.
+    - Verified doctor assignment ownership (prevents doctor mismatch).
+    - Status validation: VISIT must be in active consultation.
+    - Duplicate finalization prevention: rejects re-finalizing existing prescriptions.
+    - Atomic persistence: CONSULTATION, PRESCRIPTION, PRESCRIPTION_ITEM, PRESCRIPTION_DOSE in one transaction.
+    - State transition: VISIT moves to WAITING_FOR_MEDICINE only after successful save.
+    - Full canonical return payload with identifiers and structured item/dose lists.
     """
+    clean_diagnosis = (diagnosis or "").strip()
+    if not clean_diagnosis:
+        raise InvalidTransitionError("Diagnosis is required and cannot be empty.")
+
+    lock_clause = " FOR UPDATE" if _is_mysql(conn) else ""
     with conn.cursor() as cur:
-        lock_clause = " FOR UPDATE" if _is_mysql(conn) else ""
-        cur.execute(
-            f"""
-            SELECT qe.queue_entry_id, qe.status as queue_status, v.visit_id, v.status as visit_status
-            FROM QUEUE_ENTRY qe
-            JOIN VISIT v ON v.visit_id = qe.visit_id
-            WHERE qe.doctor_id = %s AND v.roll_number = %s
-              AND qe.status IN ('WAITING', 'IN_CONSULTATION')
-            ORDER BY qe.entered_at DESC
-            LIMIT 1{lock_clause}
-            """,
-            (doctor_id, roll_number),
-        )
-        active = cur.fetchone()
-        if not active:
-            raise ResourceNotFoundError(
-                f"No active consultation found for student '{roll_number}' under Doctor #{doctor_id}."
+        # 1. Resolve visit & queue entry
+        if visit_id is not None:
+            cur.execute(
+                f"""
+                SELECT v.visit_id, v.roll_number, v.doctor_id AS visit_doctor_id, v.status AS visit_status,
+                       qe.queue_entry_id, qe.doctor_id AS qe_doctor_id, qe.status AS qe_status
+                FROM VISIT v
+                LEFT JOIN QUEUE_ENTRY qe ON qe.visit_id = v.visit_id
+                    AND qe.status IN ('IN_CONSULTATION', 'WAITING')
+                WHERE v.visit_id = %s{lock_clause}
+                """,
+                (visit_id,),
+            )
+            row = cur.fetchone()
+            if not row:
+                raise ResourceNotFoundError(f"Visit #{visit_id} not found.")
+        elif roll_number:
+            clean_roll = roll_number.strip()
+            cur.execute(
+                f"""
+                SELECT v.visit_id, v.roll_number, v.doctor_id AS visit_doctor_id, v.status AS visit_status,
+                       qe.queue_entry_id, qe.doctor_id AS qe_doctor_id, qe.status AS qe_status
+                FROM VISIT v
+                JOIN QUEUE_ENTRY qe ON qe.visit_id = v.visit_id
+                WHERE qe.doctor_id = %s AND v.roll_number = %s
+                  AND qe.status IN ('WAITING', 'IN_CONSULTATION')
+                ORDER BY qe.entered_at DESC
+                LIMIT 1{lock_clause}
+                """,
+                (doctor_id, clean_roll),
+            )
+            row = cur.fetchone()
+            if not row:
+                raise ResourceNotFoundError(
+                    f"No active consultation found for student '{clean_roll}' under Doctor #{doctor_id}."
+                )
+        else:
+            cur.execute(
+                f"""
+                SELECT v.visit_id, v.roll_number, v.doctor_id AS visit_doctor_id, v.status AS visit_status,
+                       qe.queue_entry_id, qe.doctor_id AS qe_doctor_id, qe.status AS qe_status
+                FROM QUEUE_ENTRY qe
+                JOIN VISIT v ON v.visit_id = qe.visit_id
+                WHERE qe.doctor_id = %s AND qe.status = 'IN_CONSULTATION'
+                ORDER BY qe.entered_at DESC
+                LIMIT 1{lock_clause}
+                """,
+                (doctor_id,),
+            )
+            row = cur.fetchone()
+            if not row:
+                raise ResourceNotFoundError(f"No active consultation found for Doctor #{doctor_id}.")
+
+        actual_visit_id = row["visit_id"]
+        actual_roll_number = row["roll_number"]
+        queue_entry_id = row["queue_entry_id"]
+        visit_doctor_id = row["visit_doctor_id"]
+        qe_doctor_id = row["qe_doctor_id"]
+        visit_status = row["visit_status"]
+        qe_status = row["qe_status"]
+
+        # 2. Verify Doctor Assignment
+        assigned_doctor = visit_doctor_id or qe_doctor_id
+        if assigned_doctor is not None and assigned_doctor != doctor_id:
+            raise UnauthorizedActionError(
+                f"Doctor #{doctor_id} is not assigned to Visit #{actual_visit_id} (assigned to Doctor #{assigned_doctor})."
             )
 
-        visit_id = active["visit_id"]
-        queue_entry_id = active["queue_entry_id"]
+        # 3. Status validation & duplicate prevention
+        if visit_status in ("WAITING_FOR_MEDICINE", "COMPLETED"):
+            raise InvalidTransitionError(
+                f"Visit #{actual_visit_id} has already been completed/finalized (current status: '{visit_status}')."
+            )
 
-        # Insert Consultation record
+        if visit_status in ("NO_SHOW", "CANCELLED", "CHECKED_IN", "WAITING_FOR_DOCTOR"):
+            raise InvalidTransitionError(
+                f"Cannot complete consultation for Visit #{actual_visit_id} in status '{visit_status}'. Expected 'IN_CONSULTATION'."
+            )
+
+        cur.execute(
+            f"SELECT consultation_id FROM CONSULTATION WHERE visit_id = %s{lock_clause}",
+            (actual_visit_id,),
+        )
+        existing_consult = cur.fetchone()
+        if existing_consult:
+            raise InvalidTransitionError(
+                f"Visit #{actual_visit_id} already has a finalized consultation #{existing_consult['consultation_id']}. Overwriting or duplicate finalization is prohibited."
+            )
+
+        # 4. Insert Consultation record
+        resolved_reason = (reason_for_visit or "").strip() or clean_diagnosis or "General Consultation"
         cur.execute(
             """
             INSERT INTO CONSULTATION (visit_id, doctor_id, reason_for_visit, diagnosis, clinical_notes)
             VALUES (%s, %s, %s, %s, %s)
             """,
-            (visit_id, doctor_id, diagnosis, diagnosis, clinical_notes or None),
+            (actual_visit_id, doctor_id, resolved_reason, clean_diagnosis, (clinical_notes or "").strip() or None),
         )
         consultation_id = cur.lastrowid
 
-        # Insert Prescription record
+        # 5. Insert Prescription record
         cur.execute(
             """
             INSERT INTO PRESCRIPTION (consultation_id, general_instructions, finalized_at)
             VALUES (%s, %s, NOW())
             """,
-            (consultation_id, general_instructions or None),
+            (consultation_id, (general_instructions or "").strip() or None),
         )
         prescription_id = cur.lastrowid
 
-        # Insert Prescription Items & Doses
-        for med in medicines:
-            name = (med.get("name") or "").strip()
+        # 6. Insert Prescription Items & Doses
+        import re
+        saved_items = []
+        medicines_list = medicines or []
+
+        for med in medicines_list:
+            name = (med.get("name") or med.get("medicine_name") or med.get("medicineName") or "").strip()
             if not name:
                 continue
+
+            strength = med.get("strength")
+            if not strength:
+                st_match = re.search(r"(\d+(?:\.\d+)?\s*(?:mg|mcg|g|ml|%))", name, re.IGNORECASE)
+                if st_match:
+                    strength = st_match.group(1)
+
+            dosage_form = med.get("dosage_form") or med.get("dosageForm") or med.get("category")
+            if not dosage_form:
+                nl = name.lower()
+                if "tablet" in nl or "tab" in nl:
+                    dosage_form = "Tablet"
+                elif "capsule" in nl or "cap" in nl:
+                    dosage_form = "Capsule"
+                elif "syrup" in nl or "syp" in nl:
+                    dosage_form = "Syrup"
+                elif "inhaler" in nl:
+                    dosage_form = "Inhaler"
+                elif "ointment" in nl or "cream" in nl or "gel" in nl:
+                    dosage_form = "Ointment"
+                elif "drop" in nl:
+                    dosage_form = "Drops"
+                elif "inj" in nl:
+                    dosage_form = "Injection"
+                else:
+                    dosage_form = "Tablet"
+
+            route = med.get("route")
+            if not route:
+                if dosage_form in ("Tablet", "Capsule", "Syrup"):
+                    route = "Oral"
+                elif dosage_form in ("Ointment", "Gel"):
+                    route = "Topical"
+                elif dosage_form in ("Inhaler",):
+                    route = "Inhalation"
+                elif dosage_form in ("Drops",):
+                    route = "Ophthalmic/Otic"
+                else:
+                    route = "Oral"
+
+            duration_val = med.get("duration_value") if med.get("duration_value") is not None else med.get("durationValue")
+            duration_unit = med.get("duration_unit") or med.get("durationUnit")
+            if duration_val is None and med.get("duration"):
+                d_str = str(med.get("duration")).strip().lower()
+                dur_match = re.search(r"(\d+)\s*(day|week|month)s?", d_str)
+                if dur_match:
+                    duration_val = int(dur_match.group(1))
+                    duration_unit = dur_match.group(2).upper()
+
+            if duration_val is not None and not duration_unit:
+                duration_unit = "DAY"
+            if duration_unit:
+                duration_unit = duration_unit.upper()
+                if duration_unit not in ("DAY", "WEEK", "MONTH"):
+                    duration_unit = "DAY"
+
+            meal_rel = med.get("meal_relation") or med.get("mealRelation")
+            if meal_rel:
+                meal_rel = meal_rel.upper().replace(" ", "_")
+                if meal_rel not in ("BEFORE_MEAL", "AFTER_MEAL", "WITH_MEAL", "ANY_TIME", "NOT_APPLICABLE"):
+                    meal_rel = "AFTER_MEAL"
+            else:
+                check_text = (str(med.get("special_instructions") or "") + " " +
+                              str(med.get("specialInstructions") or "") + " " +
+                              str(med.get("instructions") or "") + " " +
+                              str(med.get("note") or "")).lower()
+                if "after" in check_text:
+                    meal_rel = "AFTER_MEAL"
+                elif "before" in check_text or "empty" in check_text:
+                    meal_rel = "BEFORE_MEAL"
+                elif "with" in check_text:
+                    meal_rel = "WITH_MEAL"
+                elif "bedtime" in check_text:
+                    meal_rel = "AFTER_MEAL"
+                else:
+                    meal_rel = "AFTER_MEAL"
+
+            special_inst = (med.get("special_instructions") or
+                            med.get("specialInstructions") or
+                            med.get("instructions") or
+                            med.get("note") or "").strip() or None
+
             cur.execute(
                 """
-                INSERT INTO PRESCRIPTION_ITEM (prescription_id, medicine_name, special_instructions)
-                VALUES (%s, %s, %s)
+                INSERT INTO PRESCRIPTION_ITEM (
+                    prescription_id, medicine_name, strength, dosage_form, route,
+                    duration_value, duration_unit, meal_relation, special_instructions
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """,
-                (prescription_id, name, med.get("note") or None),
+                (
+                    prescription_id,
+                    name[:150],
+                    strength[:50] if strength else None,
+                    dosage_form[:50] if dosage_form else None,
+                    route[:50] if route else None,
+                    duration_val,
+                    duration_unit,
+                    meal_rel,
+                    special_inst,
+                ),
             )
             item_id = cur.lastrowid
 
-            for flag, time_of_day in (
-                (med.get("morning"), "MORNING"),
-                (med.get("afternoon"), "AFTERNOON"),
-                (med.get("evening"), "EVENING"),
-                (med.get("night"), "NIGHT"),
-            ):
-                if flag:
-                    cur.execute(
-                        """
-                        INSERT INTO PRESCRIPTION_DOSE (prescription_item_id, time_of_day, dose_quantity, dose_unit)
-                        VALUES (%s, %s, %s, %s)
-                        """,
-                        (item_id, time_of_day, 1, "dose"),
-                    )
+            doses_to_insert = []
+            explicit_doses = med.get("doses")
 
-        # Complete QUEUE_ENTRY
-        cur.execute(
-            """
-            UPDATE QUEUE_ENTRY
-            SET status = 'COMPLETED', exited_at = NOW(), exit_reason = 'COMPLETED'
-            WHERE queue_entry_id = %s
-            """,
-            (queue_entry_id,),
-        )
+            if explicit_doses and isinstance(explicit_doses, list):
+                for d in explicit_doses:
+                    tod = str(d.get("time_of_day") or d.get("timeOfDay") or "").strip().upper()
+                    if tod in ("MORNING", "AFTERNOON", "EVENING", "NIGHT"):
+                        qty = float(d.get("dose_quantity") if d.get("dose_quantity") is not None else (d.get("doseQuantity") or 1.0))
+                        unit = str(d.get("dose_unit") or d.get("doseUnit") or "dose")
+                        doses_to_insert.append((tod, qty, unit))
+            else:
+                flag_morning = bool(med.get("morning"))
+                flag_afternoon = bool(med.get("afternoon"))
+                flag_evening = bool(med.get("evening"))
+                flag_night = bool(med.get("night"))
 
-        # Transition VISIT to WAITING_FOR_MEDICINE
+                dosage_str = str(med.get("dosage") or "").strip().lower()
+                if not (flag_morning or flag_afternoon or flag_evening or flag_night) and dosage_str:
+                    if dosage_str in ("od", "1-0-0", "once daily"):
+                        flag_morning = True
+                    elif dosage_str in ("bd", "bid", "1-0-1", "twice daily"):
+                        flag_morning = True
+                        flag_night = True
+                    elif dosage_str in ("tid", "1-1-1", "thrice daily"):
+                        flag_morning = True
+                        flag_afternoon = True
+                        flag_night = True
+                    elif dosage_str in ("qid", "1-1-1-1", "four times daily"):
+                        flag_morning = True
+                        flag_afternoon = True
+                        flag_evening = True
+                        flag_night = True
+                    elif dosage_str in ("0-0-1", "hs", "night", "bedtime"):
+                        flag_night = True
+                    elif "1-0-1" in dosage_str:
+                        flag_morning = True
+                        flag_night = True
+                    elif "1-1-1" in dosage_str:
+                        flag_morning = True
+                        flag_afternoon = True
+                        flag_night = True
+
+                dose_qty = float(med.get("dose_quantity") if med.get("dose_quantity") is not None else (med.get("doseQuantity") or 1.0))
+                dose_unit = str(med.get("dose_unit") or med.get("doseUnit") or "dose")
+
+                if flag_morning:
+                    doses_to_insert.append(("MORNING", dose_qty, dose_unit))
+                if flag_afternoon:
+                    doses_to_insert.append(("AFTERNOON", dose_qty, dose_unit))
+                if flag_evening:
+                    doses_to_insert.append(("EVENING", dose_qty, dose_unit))
+                if flag_night:
+                    doses_to_insert.append(("NIGHT", dose_qty, dose_unit))
+
+            seen_tod = set()
+            saved_doses = []
+            for tod, qty, unit in doses_to_insert:
+                if tod in seen_tod:
+                    continue
+                seen_tod.add(tod)
+                cur.execute(
+                    """
+                    INSERT INTO PRESCRIPTION_DOSE (prescription_item_id, time_of_day, dose_quantity, dose_unit)
+                    VALUES (%s, %s, %s, %s)
+                    """,
+                    (item_id, tod, qty, unit[:30]),
+                )
+                saved_doses.append({
+                    "time_of_day": tod,
+                    "timeOfDay": tod,
+                    "dose_quantity": qty,
+                    "doseQuantity": qty,
+                    "dose_unit": unit,
+                    "doseUnit": unit,
+                })
+
+            saved_items.append({
+                "prescription_item_id": item_id,
+                "prescriptionItemId": item_id,
+                "medicine_name": name,
+                "medicineName": name,
+                "strength": strength,
+                "dosage_form": dosage_form,
+                "dosageForm": dosage_form,
+                "route": route,
+                "duration_value": duration_val,
+                "durationValue": duration_val,
+                "duration_unit": duration_unit,
+                "durationUnit": duration_unit,
+                "meal_relation": meal_rel,
+                "mealRelation": meal_rel,
+                "special_instructions": special_inst,
+                "specialInstructions": special_inst,
+                "doses": saved_doses,
+            })
+
+        # 7. Complete QUEUE_ENTRY
+        if queue_entry_id:
+            cur.execute(
+                """
+                UPDATE QUEUE_ENTRY
+                SET status = 'COMPLETED', exited_at = NOW(), exit_reason = 'COMPLETED'
+                WHERE queue_entry_id = %s
+                """,
+                (queue_entry_id,),
+            )
+
+        # 8. Transition VISIT to WAITING_FOR_MEDICINE
         cur.execute(
             """
             UPDATE VISIT
             SET status = 'WAITING_FOR_MEDICINE', consultation_completed_at = NOW()
             WHERE visit_id = %s
             """,
-            (visit_id,),
+            (actual_visit_id,),
         )
 
-        # Audit log
+        # 9. Audit event
         cur.execute(
             """
             INSERT INTO VISIT_EVENT (visit_id, event_type, performed_by_user_id, notes)
             VALUES (%s, 'CONSULTATION_COMPLETED', %s, %s)
             """,
-            (visit_id, performed_by_user_id, f"Diagnosis: {diagnosis}"[:500]),
+            (actual_visit_id, performed_by_user_id, f"Diagnosis: {clean_diagnosis}"[:500]),
         )
+
+        # 10. Fetch finalized timestamp
+        cur.execute("SELECT finalized_at FROM PRESCRIPTION WHERE prescription_id = %s", (prescription_id,))
+        presc_row = cur.fetchone()
+        finalized_str = presc_row["finalized_at"].isoformat() if presc_row and presc_row["finalized_at"] else ""
 
     return {
         "status": "ok",
-        "visitId": visit_id,
-        "consultationId": consultation_id,
+        "prescription_id": prescription_id,
         "prescriptionId": prescription_id,
+        "consultation_id": consultation_id,
+        "consultationId": consultation_id,
+        "visit_id": actual_visit_id,
+        "visitId": actual_visit_id,
+        "roll_number": actual_roll_number,
+        "rollNumber": actual_roll_number,
+        "doctor_id": doctor_id,
+        "doctorId": doctor_id,
+        "diagnosis": clean_diagnosis,
+        "reason_for_visit": resolved_reason,
+        "reasonForVisit": resolved_reason,
+        "clinical_notes": (clinical_notes or "").strip() or None,
+        "clinicalNotes": (clinical_notes or "").strip() or None,
+        "general_instructions": (general_instructions or "").strip() or None,
+        "generalInstructions": (general_instructions or "").strip() or None,
+        "finalized_at": finalized_str,
+        "finalizedAt": finalized_str,
+        "visit_status": "WAITING_FOR_MEDICINE",
+        "visitStatus": "WAITING_FOR_MEDICINE",
+        "queue_status": "COMPLETED",
+        "queueStatus": "COMPLETED",
+        "medicines": saved_items,
+        "items": saved_items,
     }
 
 
