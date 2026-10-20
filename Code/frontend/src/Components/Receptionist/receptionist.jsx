@@ -2,7 +2,20 @@ import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { useQueue, DOCTORS, DIRECTORY, dispense, logAction, resetDemo } from "../../context/queueStore";
-import { lookupStudent, fetchReceptionDoctors, receptionCheckIn, fetchReceptionQueue, fetchAwaitingDispense } from "../../api";
+import {
+  lookupStudent,
+  fetchReceptionDoctors,
+  receptionCheckIn,
+  fetchReceptionQueue,
+  fetchAwaitingDispense,
+  fetchStudentsDirectory,
+  fetchStudentHistory,
+  fetchCompletedVisits,
+  fetchActivityLog,
+  fetchTerminalSettings,
+  updateDoctorAvailability,
+  enrollRfidCard,
+} from "../../api";
 import DispensingDesk from "./DispensingDesk";
 import EmergencyDesk from "./EmergencyDesk";
 import { useAuth } from "../../context/AuthContext";
@@ -1313,14 +1326,87 @@ function Students({ visits }) {
   const [dept, setDept] = useState("");
   const [sem, setSem] = useState("");
   const [openRoll, setOpenRoll] = useState(null);
-  const depts = [...new Set(DIRECTORY.map((s) => s.dept))];
-  const list = useMemo(() => DIRECTORY.filter((s) =>
-    (s.name + s.rollNo).toLowerCase().includes(q.toLowerCase()) && (!dept || s.dept === dept) && (!sem || String(s.semester) === sem)), [q, dept, sem]);
-  const s = DIRECTORY.find((x) => x.rollNo === openRoll);
-  const past = visits.filter((v) => v.rollNo === openRoll).sort((a, b) => b.checkedIn - a.checkedIn);
- 
-  const open = (roll) => { setOpenRoll(roll); logAction("STUDENT PROFILE VIEWED", DIRECTORY.find((x) => x.rollNo === roll).name); };
- 
+  const [loading, setLoading] = useState(false);
+  const [backendStudents, setBackendStudents] = useState([]);
+  const [studentProfile, setStudentProfile] = useState(null);
+  const [profileLoading, setProfileLoading] = useState(false);
+
+  // Fetch student directory from live backend
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    fetchStudentsDirectory({ q, dept, limit: 100 })
+      .then((data) => {
+        if (!active) return;
+        if (Array.isArray(data)) {
+          setBackendStudents(data);
+        } else if (data?.students && Array.isArray(data.students)) {
+          setBackendStudents(data.students);
+        }
+      })
+      .catch((err) => {
+        console.warn("Using fallback student directory:", err.message);
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [q, dept]);
+
+  // Fetch full telemetry when profile modal opens
+  useEffect(() => {
+    if (!openRoll) {
+      setStudentProfile(null);
+      return;
+    }
+    let active = true;
+    setProfileLoading(true);
+    fetchStudentHistory(openRoll)
+      .then((data) => {
+        if (active) setStudentProfile(data);
+      })
+      .catch((err) => {
+        console.warn("Failed to load student history:", err.message);
+      })
+      .finally(() => {
+        if (active) setProfileLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [openRoll]);
+
+  const rawList = backendStudents.length > 0 ? backendStudents : DIRECTORY;
+  const depts = [...new Set(rawList.map((s) => s.department || s.dept).filter(Boolean))];
+
+  const list = useMemo(() => {
+    return rawList.filter((s) => {
+      const name = s.fullName || s.name || s.student_name || "";
+      const roll = s.rollNumber || s.rollNo || s.roll_number || "";
+      const sDept = s.department || s.dept || "";
+      const sSem = String(s.semester || "");
+      const matchesQ = (name + roll).toLowerCase().includes(q.toLowerCase());
+      const matchesDept = !dept || sDept === dept;
+      const matchesSem = !sem || sSem === sem;
+      return matchesQ && matchesDept && matchesSem;
+    });
+  }, [rawList, q, dept, sem]);
+
+  const s = studentProfile?.student || studentProfile || rawList.find((x) => (x.rollNumber || x.rollNo) === openRoll);
+  const past = studentProfile?.history || visits.filter((v) => (v.rollNumber || v.rollNo) === openRoll);
+  const allergies = studentProfile?.allergies || (s?.allergies ? [{ allergen: s.allergies }] : []);
+  const emergencyContacts = studentProfile?.emergencyContacts || [];
+
+  const open = (roll) => {
+    setOpenRoll(roll);
+    const target = rawList.find((x) => (x.rollNumber || x.rollNo) === roll);
+    if (target) {
+      logAction("STUDENT PROFILE VIEWED", target.fullName || target.name);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <PageHead
@@ -1328,7 +1414,7 @@ function Students({ visits }) {
         sub="Search registered TIET students and view verified medical telemetry"
         badge={`${list.length} students`}
       />
- 
+
       <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs p-5 space-y-4">
         <div className="flex flex-col sm:flex-row gap-3">
           <div className="relative flex-1">
@@ -1357,8 +1443,13 @@ function Students({ visits }) {
             <option value="">All Semesters</option>
             {[1, 2, 3, 4, 5, 6, 7, 8].map((n) => (<option key={n} value={n}>Semester {n}</option>))}
           </select>
+          {loading && (
+            <div className="flex items-center px-2">
+              <RotateCw className="w-4 h-4 animate-spin text-teal-600" />
+            </div>
+          )}
         </div>
- 
+
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse text-xs">
             <thead>
@@ -1372,36 +1463,44 @@ function Students({ visits }) {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {list.map((x) => (
-                <tr
-                  key={x.rollNo}
-                  onClick={() => open(x.rollNo)}
-                  className="hover:bg-teal-50/30 transition-colors cursor-pointer group"
-                >
-                  <td className="py-3 px-4">
-                    <div className="flex items-center gap-2.5">
-                      <Avatar name={x.name} size="sm" />
-                      <span className="font-bold text-slate-900 group-hover:text-teal-900">{x.name}</span>
-                    </div>
-                  </td>
-                  <td className="py-3 px-4 font-mono text-slate-600 font-semibold">{x.rollNo}</td>
-                  <td className="py-3 px-4 text-slate-600">{x.dept} ({x.program})</td>
-                  <td className="py-3 px-4 text-slate-600">Sem {x.semester}</td>
-                  <td className="py-3 px-4">
-                    <span className="px-2 py-0.5 rounded font-mono font-semibold text-[11px] bg-slate-100 text-slate-700">{x.blood}</span>
-                  </td>
-                  <td className="py-3 px-4 text-right">
-                    <button
-                      type="button"
-                      onClick={(e) => { e.stopPropagation(); open(x.rollNo); }}
-                      className="px-2.5 py-1 rounded-lg border border-slate-200 hover:border-teal-500 hover:bg-teal-50 text-slate-600 hover:text-teal-800 text-[11px] font-semibold transition-colors"
-                    >
-                      View Profile
-                    </button>
-                  </td>
-                </tr>
-              ))}
-              {list.length === 0 && (
+              {list.map((x) => {
+                const sName = x.fullName || x.name || x.student_name;
+                const sRoll = x.rollNumber || x.rollNo || x.roll_number;
+                const sDept = x.department || x.dept || "Engineering";
+                const sSem = x.semester ? `Sem ${x.semester}` : "—";
+                const sBlood = x.bloodGroup || x.blood || "—";
+
+                return (
+                  <tr
+                    key={sRoll}
+                    onClick={() => open(sRoll)}
+                    className="hover:bg-teal-50/30 transition-colors cursor-pointer group"
+                  >
+                    <td className="py-3 px-4">
+                      <div className="flex items-center gap-2.5">
+                        <Avatar name={sName} size="sm" />
+                        <span className="font-bold text-slate-900 group-hover:text-teal-900">{sName}</span>
+                      </div>
+                    </td>
+                    <td className="py-3 px-4 font-mono text-slate-600 font-semibold">{sRoll}</td>
+                    <td className="py-3 px-4 text-slate-600">{sDept}</td>
+                    <td className="py-3 px-4 text-slate-600">{sSem}</td>
+                    <td className="py-3 px-4">
+                      <span className="px-2 py-0.5 rounded font-mono font-semibold text-[11px] bg-slate-100 text-slate-700">{sBlood}</span>
+                    </td>
+                    <td className="py-3 px-4 text-right">
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); open(sRoll); }}
+                        className="px-2.5 py-1 rounded-lg border border-slate-200 hover:border-teal-500 hover:bg-teal-50 text-slate-600 hover:text-teal-800 text-[11px] font-semibold transition-colors"
+                      >
+                        View Profile
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+              {list.length === 0 && !loading && (
                 <tr>
                   <td colSpan="6" className="py-8 text-center text-slate-400 text-xs">No students match the search filter.</td>
                 </tr>
@@ -1410,16 +1509,16 @@ function Students({ visits }) {
           </table>
         </div>
       </div>
- 
-      {s && (
+
+      {openRoll && s && (
         <div className="fixed inset-0 z-50 flex justify-end bg-slate-900/50 backdrop-blur-xs" onClick={() => setOpenRoll(null)}>
           <aside className="bg-white w-full max-w-md h-full shadow-2xl p-6 overflow-y-auto space-y-6" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-start justify-between pb-4 border-b border-slate-100">
               <div className="flex items-center gap-3">
-                <Avatar name={s.name} size="lg" />
+                <Avatar name={s.fullName || s.name} size="lg" />
                 <div>
-                  <h3 className="text-base font-bold text-slate-900">{s.name}</h3>
-                  <p className="font-mono text-xs font-semibold text-teal-800">{s.rollNo}</p>
+                  <h3 className="text-base font-bold text-slate-900">{s.fullName || s.name}</h3>
+                  <p className="font-mono text-xs font-semibold text-teal-800">{s.rollNumber || s.rollNo}</p>
                 </div>
               </div>
               <button
@@ -1429,72 +1528,89 @@ function Students({ visits }) {
                 <X className="w-5 h-5" />
               </button>
             </div>
- 
-            <div className="space-y-4">
-              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">Basic Information</h4>
-              <div className="space-y-2 text-xs">
-                <div className="flex justify-between py-1.5 border-b border-slate-100">
-                  <span className="text-slate-500">Program / Branch:</span>
-                  <span className="font-semibold text-slate-800">{s.program} {s.dept}</span>
-                </div>
-                <div className="flex justify-between py-1.5 border-b border-slate-100">
-                  <span className="text-slate-500">Semester:</span>
-                  <span className="font-semibold text-slate-800">Semester {s.semester}</span>
-                </div>
-                <div className="flex justify-between py-1.5 border-b border-slate-100">
-                  <span className="text-slate-500">Email:</span>
-                  <span className="font-mono text-slate-800">{s.email}</span>
-                </div>
-                <div className="flex justify-between py-1.5 border-b border-slate-100">
-                  <span className="text-slate-500">Emergency Phone:</span>
-                  <span className="font-mono text-slate-800">{s.phone}</span>
-                </div>
+
+            {profileLoading ? (
+              <div className="py-12 text-center text-xs text-slate-400 flex flex-col items-center gap-2">
+                <RotateCw className="w-5 h-5 animate-spin text-teal-600" />
+                <span>Loading clinical telemetry...</span>
               </div>
- 
-              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 pt-2">Medical Profile</h4>
-              <div className="space-y-2 text-xs">
-                <div className="flex justify-between py-1.5 border-b border-slate-100">
-                  <span className="text-slate-500">Blood Group:</span>
-                  <span className="font-bold text-slate-900">{s.blood}</span>
+            ) : (
+              <div className="space-y-4">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">Basic Information</h4>
+                <div className="space-y-2 text-xs">
+                  <div className="flex justify-between py-1.5 border-b border-slate-100">
+                    <span className="text-slate-500">Program / Branch:</span>
+                    <span className="font-semibold text-slate-800">{s.program || "B.Tech"} {s.department || s.dept}</span>
+                  </div>
+                  <div className="flex justify-between py-1.5 border-b border-slate-100">
+                    <span className="text-slate-500">Semester:</span>
+                    <span className="font-semibold text-slate-800">Semester {s.semester || "—"}</span>
+                  </div>
+                  <div className="flex justify-between py-1.5 border-b border-slate-100">
+                    <span className="text-slate-500">Email:</span>
+                    <span className="font-mono text-slate-800">{s.email || "—"}</span>
+                  </div>
+                  <div className="flex justify-between py-1.5 border-b border-slate-100">
+                    <span className="text-slate-500">Emergency Phone:</span>
+                    <span className="font-mono text-slate-800">
+                      {emergencyContacts[0]?.phone_number || emergencyContacts[0]?.phone || s.phone || s.contactNumber || "—"}
+                    </span>
+                  </div>
                 </div>
-                <div className="flex justify-between py-1.5 border-b border-slate-100">
-                  <span className="text-slate-500">Known Allergies:</span>
-                  <span className={`font-semibold ${s.allergies !== "None known" ? "text-rose-600 font-bold" : "text-slate-800"}`}>{s.allergies}</span>
+
+                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 pt-2">Medical Profile</h4>
+                <div className="space-y-2 text-xs">
+                  <div className="flex justify-between py-1.5 border-b border-slate-100">
+                    <span className="text-slate-500">Blood Group:</span>
+                    <span className="font-bold text-slate-900">{s.bloodGroup || s.blood || "—"}</span>
+                  </div>
+                  <div className="flex justify-between py-1.5 border-b border-slate-100">
+                    <span className="text-slate-500">Known Allergies:</span>
+                    <span className={`font-semibold ${allergies.length > 0 ? "text-rose-600 font-bold" : "text-slate-800"}`}>
+                      {allergies.length > 0
+                        ? allergies.map((a) => typeof a === "string" ? a : `${a.allergen} (${a.severity || "mild"})`).join(", ")
+                        : "None recorded"}
+                    </span>
+                  </div>
+                  <div className="flex justify-between py-1.5 border-b border-slate-100">
+                    <span className="text-slate-500">Chronic Conditions:</span>
+                    <span className="font-semibold text-slate-800">{s.conditions || s.chronicConditions || "None recorded"}</span>
+                  </div>
+                  <div className="flex justify-between py-1.5 border-b border-slate-100">
+                    <span className="text-slate-500">Current Medications:</span>
+                    <span className="font-semibold text-slate-800">{s.meds || s.medications || "None recorded"}</span>
+                  </div>
                 </div>
-                <div className="flex justify-between py-1.5 border-b border-slate-100">
-                  <span className="text-slate-500">Chronic Conditions:</span>
-                  <span className="font-semibold text-slate-800">{s.conditions}</span>
-                </div>
-                <div className="flex justify-between py-1.5 border-b border-slate-100">
-                  <span className="text-slate-500">Current Medications:</span>
-                  <span className="font-semibold text-slate-800">{s.meds}</span>
-                </div>
-              </div>
- 
-              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 pt-2">Visit History</h4>
-              {past.length > 0 ? (
-                <div className="space-y-2">
-                  {past.map((v) => (
-                    <div key={v.id} className="p-3 rounded-xl border border-slate-200 bg-slate-50/50 flex items-center justify-between text-xs">
-                      <div>
-                        <p className="font-bold text-slate-800">{dname(v.doctorId)}</p>
-                        <p className="text-[11px] text-slate-500 font-mono">{hhmm(v.checkedIn)} • {v.complaint}</p>
+
+                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 pt-2">OPD Visit History</h4>
+                {past.length > 0 ? (
+                  <div className="space-y-2">
+                    {past.map((v, idx) => (
+                      <div key={v.visitId || v.id || idx} className="p-3 rounded-xl border border-slate-200 bg-slate-50/50 flex items-center justify-between text-xs">
+                        <div>
+                          <p className="font-bold text-slate-800">{v.doctorName || (v.doctorId ? `Doctor #${v.doctorId}` : "Consulting Doctor")}</p>
+                          <p className="text-[11px] text-slate-500 font-mono">
+                            {v.checkedInAt || v.checkedIn ? (v.checkedInAt || v.checkedIn).slice(0, 16).replace("T", " ") : "—"} • {v.complaint || "Routine Consultation"}
+                          </p>
+                        </div>
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                          {v.status || "COMPLETED"}
+                        </span>
                       </div>
-                      <Badge s={v.status} />
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-xs text-slate-400 text-center py-3">No past OPD visits found today.</p>
-              )}
-            </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-slate-400 text-center py-3">No prior OPD visits recorded.</p>
+                )}
+              </div>
+            )}
           </aside>
         </div>
       )}
     </div>
   );
 }
- 
+
 /* ====================== 5. DISPENSING ====================== */
 function Dispensing({ forMedicine, flash }) {
   const [openId, setOpenId] = useState(null);
@@ -1697,30 +1813,62 @@ function Dispensing({ forMedicine, flash }) {
 }
  
 /* ====================== 6. COMPLETED VISITS ====================== */
-function Completed({ completed }) {
+function Completed({ completed: fallbackCompleted }) {
   const [q, setQ] = useState("");
-  const rows = completed.filter((v) => (v.name + v.rollNo).toLowerCase().includes(q.toLowerCase()));
- 
+  const [loading, setLoading] = useState(false);
+  const [liveCompleted, setLiveCompleted] = useState([]);
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    fetchCompletedVisits({ q, date: "ALL", limit: 50 })
+      .then((data) => {
+        if (!active) return;
+        if (Array.isArray(data)) {
+          setLiveCompleted(data);
+        }
+      })
+      .catch((err) => {
+        console.warn("Using local completed visits store:", err.message);
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [q]);
+
+  const list = liveCompleted.length > 0 ? liveCompleted : (fallbackCompleted || []);
+  const rows = list.filter((v) => {
+    const name = v.name || v.studentName || v.student_name || "";
+    const roll = v.rollNo || v.rollNumber || v.roll_number || "";
+    return (name + roll).toLowerCase().includes(q.toLowerCase());
+  });
+
   return (
     <div className="space-y-6">
       <PageHead
         title="Completed Visits"
         sub="Today's completed and discharged OPD patient consultations"
-        badge={`${completed.length} completed`}
+        badge={`${rows.length} completed`}
       />
- 
+
       <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs p-5 space-y-4">
-        <div className="relative max-w-sm">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Search completed student by name or roll..."
-            className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 bg-slate-50/60 text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-teal-500 focus:bg-white"
-          />
+        <div className="flex items-center gap-3">
+          <div className="relative max-w-sm flex-1">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Search completed student by name or roll..."
+              className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 bg-slate-50/60 text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-teal-500 focus:bg-white"
+            />
+          </div>
+          {loading && <RotateCw className="w-4 h-4 animate-spin text-teal-600" />}
         </div>
- 
+
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse text-xs">
             <thead>
@@ -1734,26 +1882,37 @@ function Completed({ completed }) {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {rows.map((v) => (
-                <tr key={v.id} className="hover:bg-slate-50/60 transition-colors">
-                  <td className="py-3 px-4">
-                    <div className="flex items-center gap-2.5">
-                      <Avatar name={v.name} size="sm" />
-                      <span className="font-bold text-slate-900">{v.name}</span>
-                    </div>
-                  </td>
-                  <td className="py-3 px-4 font-mono text-slate-600">{v.rollNo}</td>
-                  <td className="py-3 px-4 text-slate-700 font-medium">{dname(v.doctorId)}</td>
-                  <td className="py-3 px-4 font-mono text-slate-500">{hhmm(v.checkedIn)}</td>
-                  <td className="py-3 px-4 font-mono text-slate-500">{hhmm(v.dispensedAt)}</td>
-                  <td className="py-3 px-4">
-                    <span className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200/60">
-                      {v.dispensing?.type || "Dispensed"}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-              {rows.length === 0 && (
+              {rows.map((v, i) => {
+                const sName = v.name || v.studentName || v.student_name;
+                const sRoll = v.rollNo || v.rollNumber || v.roll_number;
+                const docName = v.doctorName || v.doctor_name || (v.doctorId ? `Dr. Doctor #${v.doctorId}` : "Consulting Doctor");
+                const chk = v.checkedInAt || v.checkedIn;
+                const chkStr = chk ? (chk.includes("T") ? chk.split("T")[1].slice(0, 5) : hhmm(chk)) : "—";
+                const dis = v.completedAt || v.dispensedAt;
+                const disStr = dis ? (dis.includes("T") ? dis.split("T")[1].slice(0, 5) : hhmm(dis)) : "—";
+                const dispStatus = v.dispensingStatus || v.dispensing?.type || "Dispensed as prescribed";
+
+                return (
+                  <tr key={v.visitId || v.id || i} className="hover:bg-slate-50/60 transition-colors">
+                    <td className="py-3 px-4">
+                      <div className="flex items-center gap-2.5">
+                        <Avatar name={sName} size="sm" />
+                        <span className="font-bold text-slate-900">{sName}</span>
+                      </div>
+                    </td>
+                    <td className="py-3 px-4 font-mono text-slate-600">{sRoll}</td>
+                    <td className="py-3 px-4 text-slate-700 font-medium">{docName}</td>
+                    <td className="py-3 px-4 font-mono text-slate-500">{chkStr}</td>
+                    <td className="py-3 px-4 font-mono text-slate-500">{disStr}</td>
+                    <td className="py-3 px-4">
+                      <span className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200/60">
+                        {dispStatus}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })}
+              {rows.length === 0 && !loading && (
                 <tr>
                   <td colSpan="6" className="py-8 text-center text-slate-400 text-xs">No completed visits recorded today yet.</td>
                 </tr>
@@ -1765,87 +1924,282 @@ function Completed({ completed }) {
     </div>
   );
 }
- 
+
 /* ====================== 7. ACTIVITY AUDIT LOG ====================== */
-function Activity({ log }) {
+function Activity({ log: fallbackLog }) {
+  const [loading, setLoading] = useState(false);
+  const [liveLog, setLiveLog] = useState([]);
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    fetchActivityLog({ limit: 50, date: "ALL" })
+      .then((data) => {
+        if (!active) return;
+        if (Array.isArray(data)) {
+          setLiveLog(data);
+        }
+      })
+      .catch((err) => {
+        console.warn("Using local activity store:", err.message);
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const items = liveLog.length > 0 ? liveLog : (fallbackLog || []);
+
   return (
     <div className="space-y-6">
       <PageHead
         title="Activity Log"
         sub="Audit feed of front desk check-ins, cabin transitions, and dispensing events"
-        badge={`${log.length} events`}
+        badge={`${items.length} events`}
+        right={loading && <RotateCw className="w-4 h-4 animate-spin text-teal-600" />}
       />
- 
+
       <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs p-5">
         <div className="divide-y divide-slate-100">
-          {log.map((l, i) => (
-            <div key={i} className="py-3 flex items-center justify-between gap-4 text-xs">
-              <div className="flex items-center gap-3">
-                <span className="font-mono text-slate-400 text-xs w-14 shrink-0">{hhmm(l.t)}</span>
-                <div>
-                  <span className="font-bold text-slate-900">{l.kind}</span>
-                  <p className="text-slate-500 text-[11px] mt-0.5">{l.text}</p>
+          {items.map((l, i) => {
+            const timeStr = l.timestamp
+              ? (l.timestamp.includes("T") ? l.timestamp.split("T")[1].slice(0, 5) : l.timestamp)
+              : (l.t ? hhmm(l.t) : "—");
+            const kind = l.eventTitle || l.kind || l.eventType || "SYSTEM EVENT";
+            const desc = l.notes || l.text || (l.studentName ? `Student: ${l.studentName} (${l.rollNumber || ""})` : "");
+            const performer = l.performer || l.performedByEmail;
+
+            return (
+              <div key={l.eventId || i} className="py-3 flex items-center justify-between gap-4 text-xs">
+                <div className="flex items-center gap-3">
+                  <span className="font-mono text-slate-400 text-xs w-14 shrink-0">{timeStr}</span>
+                  <div>
+                    <span className="font-bold text-slate-900">{kind}</span>
+                    <p className="text-slate-500 text-[11px] mt-0.5">{desc}</p>
+                    {performer && <span className="text-[10px] text-teal-700 font-mono">By: {performer}</span>}
+                  </div>
                 </div>
+                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 shrink-0">
+                  {l.eventId ? `Event #${l.eventId}` : "Logged"}
+                </span>
               </div>
-              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 shrink-0">Logged</span>
-            </div>
-          ))}
-          {log.length === 0 && <p className="text-center text-slate-400 text-xs py-8">No events logged yet.</p>}
+            );
+          })}
+          {items.length === 0 && !loading && (
+            <p className="text-center text-slate-400 text-xs py-8">No events logged yet.</p>
+          )}
         </div>
       </div>
     </div>
   );
 }
- 
+
 /* ====================== 8. SETTINGS ====================== */
 function Settings({ flash }) {
+  const [settingsData, setSettingsData] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [togglingDoctor, setTogglingDoctor] = useState(null);
+  const [rfidRoll, setRfidRoll] = useState("");
+  const [rfidUid, setRfidUid] = useState("");
+  const [rfidBusy, setRfidBusy] = useState(false);
+
+  const loadSettings = () => {
+    setLoading(true);
+    fetchTerminalSettings()
+      .then((res) => setSettingsData(res))
+      .catch((err) => console.warn("Failed to load terminal settings:", err.message))
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    loadSettings();
+  }, []);
+
+  const handleToggleDoctor = async (docId, currentAvail) => {
+    try {
+      setTogglingDoctor(docId);
+      const newStatus = currentAvail ? "UNAVAILABLE" : "AVAILABLE";
+      await updateDoctorAvailability(docId, newStatus);
+      flash(`Doctor Cabin #${docId} marked ${newStatus}`);
+      loadSettings();
+    } catch (err) {
+      flash(`Failed to update doctor availability: ${err.message}`);
+    } finally {
+      setTogglingDoctor(null);
+    }
+  };
+
+  const handleEnrollCard = async (e) => {
+    e.preventDefault();
+    if (!rfidRoll.trim() || !rfidUid.trim()) {
+      flash("Please provide roll number and card UID");
+      return;
+    }
+    try {
+      setRfidBusy(true);
+      await enrollRfidCard(rfidRoll.trim(), rfidUid.trim());
+      flash(`RFID Card ${rfidUid} mapped to ${rfidRoll}`);
+      setRfidRoll("");
+      setRfidUid("");
+    } catch (err) {
+      flash(`RFID enrollment failed: ${err.message}`);
+    } finally {
+      setRfidBusy(false);
+    }
+  };
+
+  const terminal = settingsData?.terminal || {};
+  const activeDoctors = settingsData?.activeDoctors || [];
+
   return (
-    <div className="max-w-xl mx-auto py-2 space-y-6">
-      <PageHead title="Settings" sub="Front desk preferences and demonstration queue controls" />
- 
+    <div className="max-w-2xl mx-auto py-2 space-y-6">
+      <PageHead
+        title="Terminal & Cabin Settings"
+        sub="Front desk preferences, doctor cabin availability, and RFID provisioning"
+      />
+
+      {/* Terminal Details */}
       <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs p-6 space-y-4 text-xs">
-        <h3 className="text-sm font-bold text-slate-900 pb-2 border-b border-slate-100">Terminal Information</h3>
- 
+        <h3 className="text-sm font-bold text-slate-900 pb-2 border-b border-slate-100 flex items-center justify-between">
+          <span>Terminal Information</span>
+          {loading && <RotateCw className="w-3.5 h-3.5 animate-spin text-teal-600" />}
+        </h3>
+
         <div className="space-y-2.5">
           <div className="flex justify-between py-1 border-b border-slate-100">
             <span className="text-slate-500">Desk Station:</span>
-            <span className="font-semibold text-slate-900">Front Desk • Counter 1</span>
+            <span className="font-semibold text-slate-900">{terminal.station || "Front Desk • Counter 1"}</span>
           </div>
           <div className="flex justify-between py-1 border-b border-slate-100">
             <span className="text-slate-500">Operational Hours:</span>
-            <span className="font-semibold text-slate-900">09:00 AM - 05:00 PM</span>
+            <span className="font-semibold text-slate-900">{terminal.operatingHours || "09:00 AM - 05:00 PM"}</span>
           </div>
           <div className="flex justify-between py-1 border-b border-slate-100">
-            <span className="text-slate-500">Connected Account:</span>
-            <span className="font-mono text-slate-900">reception@thapar.edu</span>
+            <span className="text-slate-500">Connected Staff Account:</span>
+            <span className="font-mono text-slate-900">{terminal.connectedAccount || "reception@thapar.edu"}</span>
           </div>
           <div className="flex justify-between py-1 border-b border-slate-100">
             <span className="text-slate-500">RFID Scanner State:</span>
             <span className="text-emerald-700 font-bold flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> Connected
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+              {terminal.rfidScannerState || "Connected & Listening"}
             </span>
           </div>
+          <div className="flex justify-between py-1 border-b border-slate-100">
+            <span className="text-slate-500">Live Database Engine:</span>
+            <span className="font-semibold text-teal-800">{terminal.databaseStatus || "Aiven MySQL 8.4 Connected"}</span>
+          </div>
         </div>
- 
-        <div className="pt-4 border-t border-slate-100">
+      </div>
+
+      {/* Doctor Availability Toggles */}
+      <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs p-6 space-y-4 text-xs">
+        <h3 className="text-sm font-bold text-slate-900 pb-2 border-b border-slate-100 flex items-center justify-between">
+          <span>Doctor Cabins Operational Status</span>
+          <span className="text-slate-400 font-normal text-[11px]">{activeDoctors.length} doctors configured</span>
+        </h3>
+
+        <div className="space-y-2">
+          {activeDoctors.map((doc) => (
+            <div
+              key={doc.doctorId}
+              className="p-3 rounded-xl border border-slate-200 bg-slate-50/50 flex items-center justify-between"
+            >
+              <div className="flex items-center gap-2.5">
+                <Avatar name={doc.name} size="sm" />
+                <div>
+                  <p className="font-bold text-slate-900">{doc.name}</p>
+                  <p className="text-[11px] text-teal-800 font-medium">
+                    {doc.cabin ? `${doc.cabin} • ` : ""}{doc.specialty}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                disabled={togglingDoctor === doc.doctorId}
+                onClick={() => handleToggleDoctor(doc.doctorId, doc.available)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all cursor-pointer flex items-center gap-1.5 ${
+                  doc.available
+                    ? "bg-emerald-50 text-emerald-700 border-emerald-300 hover:bg-emerald-100"
+                    : "bg-rose-50 text-rose-700 border-rose-300 hover:bg-rose-100"
+                }`}
+              >
+                {togglingDoctor === doc.doctorId && <RotateCw className="w-3 h-3 animate-spin" />}
+                <span>{doc.available ? "AVAILABLE" : "UNAVAILABLE"}</span>
+              </button>
+            </div>
+          ))}
+          {activeDoctors.length === 0 && (
+            <p className="text-slate-400 py-2">No active doctors loaded.</p>
+          )}
+        </div>
+      </div>
+
+      {/* RFID Card Provisioning */}
+      <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs p-6 space-y-4 text-xs">
+        <h3 className="text-sm font-bold text-slate-900 pb-2 border-b border-slate-100">
+          Quick RFID Card Provisioning
+        </h3>
+        <p className="text-slate-500 text-[11px]">
+          Assign or replace an NFC/RFID smart card UID for quick front desk check-in tap.
+        </p>
+
+        <form onSubmit={handleEnrollCard} className="space-y-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="text-[11px] font-bold text-slate-700 block mb-1">Student Roll Number</label>
+              <input
+                type="text"
+                value={rfidRoll}
+                onChange={(e) => setRfidRoll(e.target.value)}
+                placeholder="e.g. 102203001"
+                className="w-full p-2.5 rounded-xl border border-slate-200 text-xs focus:outline-none focus:border-teal-500"
+              />
+            </div>
+            <div>
+              <label className="text-[11px] font-bold text-slate-700 block mb-1">NFC / RFID Card UID</label>
+              <input
+                type="text"
+                value={rfidUid}
+                onChange={(e) => setRfidUid(e.target.value)}
+                placeholder="e.g. A1B2C3D4"
+                className="w-full p-2.5 rounded-xl border border-slate-200 text-xs font-mono focus:outline-none focus:border-teal-500"
+              />
+            </div>
+          </div>
           <button
-            type="button"
-            onClick={() => {
-              if (window.confirm("Reset all queue data to default demo state?")) {
-                resetDemo();
-                flash("Demo queue data successfully reset");
-              }
-            }}
-            className="w-full py-2.5 px-4 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 font-semibold text-xs transition-colors cursor-pointer"
+            type="submit"
+            disabled={rfidBusy || !rfidRoll || !rfidUid}
+            className="px-4 py-2 rounded-xl bg-teal-700 hover:bg-teal-800 disabled:bg-slate-300 text-white font-semibold text-xs transition-colors flex items-center gap-1.5 cursor-pointer"
           >
-            Reset Demo Data to Initial State
+            {rfidBusy && <RotateCw className="w-3.5 h-3.5 animate-spin" />}
+            <span>Provision RFID Card</span>
           </button>
-        </div>
+        </form>
+      </div>
+
+      {/* Reset Demo Data Button */}
+      <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs p-6 text-xs">
+        <button
+          type="button"
+          onClick={() => {
+            if (window.confirm("Reset all local simulation data to default demo state?")) {
+              resetDemo();
+              flash("Local simulation data reset successfully");
+            }
+          }}
+          className="w-full py-2.5 px-4 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 font-semibold text-xs transition-colors cursor-pointer"
+        >
+          Reset Local Simulation Data to Initial State
+        </button>
       </div>
     </div>
   );
 }
- 
+
 const CSS = `
 @media print {
   aside, nav, button, .rc-toast { display: none !important; }

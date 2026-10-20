@@ -470,3 +470,72 @@ export function updateStudentEmergencyContact(rollNumber, payload) {
     body: JSON.stringify(payload),
   })
 }
+
+
+export function updateEmergencyLog(emergencyId, payload) {
+  return request(`/api/emergency/logs/${emergencyId}`, {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  })
+}
+
+// ── Student Directory & Profiles ────────────────────────────────────────
+export function fetchStudentsDirectory({ q, dept, limit = 50, offset = 0 } = {}) {
+  const params = new URLSearchParams()
+  if (q) params.append('q', q)
+  if (dept) params.append('dept', dept)
+  if (limit) params.append('limit', limit)
+  if (offset) params.append('offset', offset)
+  const qs = params.toString() ? `?${params.toString()}` : ''
+  return request(`/api/reception/students${qs}`)
+}
+
+export function fetchStudentHistory(rollNumber) {
+  return request(`/api/reception/students/${encodeURIComponent(rollNumber)}/history`)
+}
+
+// ── Completed OPD Visits ────────────────────────────────────────────────
+export function fetchCompletedVisits({ doctorId, date, q, limit = 50, offset = 0 } = {}) {
+  const params = new URLSearchParams()
+  if (doctorId && doctorId !== 'ALL') params.append('doctor_id', doctorId)
+  if (date) params.append('date', date)
+  if (q) params.append('q', q)
+  if (limit) params.append('limit', limit)
+  if (offset) params.append('offset', offset)
+  const qs = params.toString() ? `?${params.toString()}` : ''
+  return request(`/api/reception/visits/completed${qs}`)
+}
+
+// ── Activity & Audit History ────────────────────────────────────────────
+export function fetchActivityLog({ eventType, date, limit = 50, offset = 0 } = {}) {
+  const params = new URLSearchParams()
+  if (eventType) params.append('event_type', eventType)
+  if (date) params.append('date', date)
+  if (limit) params.append('limit', limit)
+  if (offset) params.append('offset', offset)
+  const qs = params.toString() ? `?${params.toString()}` : ''
+  return request(`/api/reception/activity${qs}`)
+}
+
+// ── Terminal Settings & Administration ──────────────────────────────────
+export function fetchTerminalSettings() {
+  return request('/api/reception/settings')
+}
+
+export function updateDoctorAvailability(doctorId, status, date = null) {
+  return request(`/api/reception/doctors/${doctorId}/availability`, {
+    method: 'POST',
+    body: JSON.stringify({ status, date }),
+  })
+}
+
+export function lookupRfidCard(cardUid) {
+  return request(`/api/reception/rfid/lookup/${encodeURIComponent(cardUid)}`)
+}
+
+export function enrollRfidCard(rollNumber, cardUid) {
+  return request('/api/reception/rfid/enroll', {
+    method: 'POST',
+    body: JSON.stringify({ roll_number: rollNumber, card_uid: cardUid }),
+  })
+}
