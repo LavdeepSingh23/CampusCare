@@ -14,7 +14,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
 from app.core.database import get_db_connection
-from app.core.deps import CurrentReceptionist, get_current_receptionist
+from app.core.deps import CurrentReceptionist, get_current_receptionist, CurrentUser, get_current_staff
+from typing import Literal, Dict, Any, List
 from app.core.util import display_name_from_email
 from app.schemas.dispensing import DispenseRequest
 from app.services import queue_lifecycle as ql
@@ -431,6 +432,654 @@ def dispense_visit_prescription(
     finally:
         conn.close()
 
+
+
+
+
+# ── 6. Student Directory Search & Medical Profile History ──────────────
+@router.get("/students")
+def search_students(
+    q: Optional[str] = Query(None, description="Search term for name, roll number, or email"),
+    dept: Optional[str] = Query(None, description="Department filter"),
+    limit: int = Query(50, ge=1, le=200, description="Max results"),
+    offset: int = Query(0, ge=0, description="Result offset"),
+    _: CurrentUser = Depends(get_current_staff),
+):
+    """
+    Search and list registered students with pagination, contact info, and medical telemetry.
+    """
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            sql_count = "SELECT COUNT(*) AS total FROM STUDENT st JOIN USER_ACCOUNT ua ON ua.user_id = st.user_id WHERE 1=1"
+            sql_data = """
+                SELECT st.roll_number, st.full_name, st.date_of_birth, st.sex, st.phone_number,
+                       st.blood_group, st.status,
+                       ua.email,
+                       ec.name AS ec_name, ec.relationship AS ec_relation, ec.phone_number AS ec_phone
+                FROM STUDENT st
+                JOIN USER_ACCOUNT ua ON ua.user_id = st.user_id
+                LEFT JOIN EMERGENCY_CONTACT ec ON ec.roll_number = st.roll_number
+                WHERE 1=1
+            """
+            params = []
+            if q and q.strip():
+                term = f"%{q.strip()}%"
+                clause = " AND (st.roll_number LIKE %s OR st.full_name LIKE %s OR ua.email LIKE %s)"
+                sql_count += clause
+                sql_data += clause
+                params.extend([term, term, term])
+
+            cur.execute(sql_count, tuple(params))
+            total = cur.fetchone()["total"]
+
+            sql_data += " ORDER BY st.roll_number ASC LIMIT %s OFFSET %s"
+            params.extend([limit, offset])
+
+            cur.execute(sql_data, tuple(params))
+            rows = cur.fetchall()
+
+            # Active visits map
+            placeholders = ",".join(["%s"] * len(ACTIVE_VISIT_STATES))
+            cur.execute(
+                f"""SELECT roll_number, visit_id, status FROM VISIT
+                    WHERE status IN ({placeholders})""",
+                tuple(ACTIVE_VISIT_STATES),
+            )
+            active_map = {r["roll_number"]: r for r in cur.fetchall()}
+    finally:
+        conn.close()
+
+    students = []
+    for r in rows:
+        active = active_map.get(r["roll_number"])
+        ec = None
+        if r.get("ec_name"):
+            ec = {
+                "name": r["ec_name"],
+                "relationship": r["ec_relation"],
+                "phoneNumber": r["ec_phone"],
+                "phone_number": r["ec_phone"],
+            }
+
+        students.append({
+            "rollNumber": r["roll_number"],
+            "roll_number": r["roll_number"],
+            "rollNo": r["roll_number"],
+            "name": r["full_name"],
+            "full_name": r["full_name"],
+            "email": r["email"],
+            "bloodGroup": r.get("blood_group"),
+            "blood_group": r.get("blood_group"),
+            "blood": r.get("blood_group"),
+            "phone": r.get("phone_number"),
+            "phoneNumber": r.get("phone_number"),
+            "status": r["status"],
+            "program": "B.Tech",
+            "dept": dept or "Computer Science",
+            "semester": 6,
+            "alreadyInQueue": active is not None,
+            "activeVisitStatus": active["status"] if active else None,
+            "emergencyContact": ec,
+            "emergency_contact": ec,
+            "emergencyPhone": r.get("ec_phone"),
+        })
+
+    return {
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+        "students": students,
+    }
+
+
+@router.get("/students/{roll_number}/history")
+@router.get("/students/{roll_number}/profile")
+def get_student_history(
+    roll_number: str,
+    _: CurrentUser = Depends(get_current_staff),
+):
+    """
+    Returns verified medical telemetry, active/past allergies, emergency contacts,
+    and past visit history for a specific student.
+    """
+    roll_number = roll_number.strip()
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            # 1. Student Info
+            cur.execute(
+                """
+                SELECT st.roll_number, st.full_name, st.date_of_birth, st.sex, st.phone_number,
+                       st.blood_group, st.status, st.created_at,
+                       ua.email
+                FROM STUDENT st
+                JOIN USER_ACCOUNT ua ON ua.user_id = st.user_id
+                WHERE st.roll_number = %s
+                """,
+                (roll_number,),
+            )
+            student = cur.fetchone()
+            if not student:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Student '{roll_number}' not found.")
+
+            # 2. Allergies
+            cur.execute(
+                """
+                SELECT allergy_id, allergen, reaction, severity, recorded_at, ended_at
+                FROM ALLERGY WHERE roll_number = %s
+                ORDER BY recorded_at DESC
+                """,
+                (roll_number,),
+            )
+            allergies = cur.fetchall()
+
+            # 3. Emergency Contact
+            cur.execute(
+                """
+                SELECT emergency_contact_id, name, relationship, phone_number, updated_at
+                FROM EMERGENCY_CONTACT WHERE roll_number = %s
+                """,
+                (roll_number,),
+            )
+            ec = cur.fetchone()
+
+            # 4. Past Visits
+            cur.execute(
+                """
+                SELECT v.visit_id, v.doctor_id, v.status AS visit_status,
+                       v.checked_in_at, v.consultation_started_at, v.consultation_completed_at, v.completed_at,
+                       ua.email AS doctor_email, sp.name AS specialty,
+                       c.reason_for_visit, c.diagnosis, c.clinical_notes,
+                       disp.status AS dispensing_status,
+                       (SELECT COUNT(*) FROM PRESCRIPTION_ITEM pi
+                        JOIN PRESCRIPTION p ON p.prescription_id = pi.prescription_id
+                        WHERE p.consultation_id = c.consultation_id) AS medicines_count
+                FROM VISIT v
+                JOIN DOCTOR d ON d.doctor_id = v.doctor_id
+                JOIN STAFF s ON s.staff_id = d.staff_id
+                JOIN USER_ACCOUNT ua ON ua.user_id = s.user_id
+                LEFT JOIN SPECIALTY sp ON sp.specialty_id = d.specialty_id
+                LEFT JOIN CONSULTATION c ON c.visit_id = v.visit_id
+                LEFT JOIN DISPENSING disp ON disp.visit_id = v.visit_id
+                WHERE v.roll_number = %s
+                ORDER BY v.checked_in_at DESC
+                """,
+                (roll_number,),
+            )
+            visits = cur.fetchall()
+    finally:
+        conn.close()
+
+    formatted_visits = []
+    for v in visits:
+        doc_raw = display_name_from_email(v["doctor_email"])
+        doc_name = doc_raw if doc_raw.startswith("Dr ") else f"Dr {doc_raw}"
+        formatted_visits.append({
+            "visitId": v["visit_id"],
+            "visit_id": v["visit_id"],
+            "doctorId": v["doctor_id"],
+            "doctor_id": v["doctor_id"],
+            "doctorName": doc_name,
+            "doctor_name": doc_name,
+            "specialty": v.get("specialty") or "General Physician",
+            "status": v["visit_status"],
+            "checkedInAt": v["checked_in_at"].isoformat() if v.get("checked_in_at") else None,
+            "completedAt": v["completed_at"].isoformat() if v.get("completed_at") else None,
+            "reasonForVisit": v.get("reason_for_visit"),
+            "diagnosis": v.get("diagnosis"),
+            "clinicalNotes": v.get("clinical_notes"),
+            "dispensingStatus": v.get("dispensing_status"),
+            "medicinesCount": v.get("medicines_count") or 0,
+        })
+
+    ec_data = None
+    if ec:
+        ec_data = {
+            "name": ec["name"],
+            "relationship": ec["relationship"],
+            "phoneNumber": ec["phone_number"],
+            "phone_number": ec["phone_number"],
+            "updatedAt": ec["updated_at"].isoformat() if ec.get("updated_at") else None,
+        }
+
+    return {
+        "rollNumber": student["roll_number"],
+        "roll_number": student["roll_number"],
+        "name": student["full_name"],
+        "fullName": student["full_name"],
+        "email": student["email"],
+        "dateOfBirth": student["date_of_birth"].isoformat() if student.get("date_of_birth") else None,
+        "sex": student.get("sex"),
+        "phoneNumber": student.get("phone_number"),
+        "bloodGroup": student.get("blood_group"),
+        "blood": student.get("blood_group"),
+        "status": student["status"],
+        "program": "B.Tech",
+        "dept": "Computer Science",
+        "semester": 6,
+        "allergies": [
+            {
+                "allergyId": a["allergy_id"],
+                "allergen": a["allergen"],
+                "reaction": a.get("reaction"),
+                "severity": a["severity"],
+                "recordedAt": a["recorded_at"].isoformat() if a.get("recorded_at") else None,
+                "isActive": a.get("ended_at") is None,
+            }
+            for a in allergies
+        ],
+        "emergencyContact": ec_data,
+        "emergency_contact": ec_data,
+        "visits": formatted_visits,
+        "pastVisitsCount": len(formatted_visits),
+    }
+
+
+# ── 7. Completed OPD Visits ─────────────────────────────────────────────
+@router.get("/visits/completed")
+@router.get("/completed")
+def list_completed_visits(
+    doctor_id: Optional[int] = Query(None, description="Optional doctor ID filter"),
+    date: Optional[str] = Query(None, description="Date filter YYYY-MM-DD or 'ALL' (defaults to CURDATE())"),
+    q: Optional[str] = Query(None, description="Search student name or roll number"),
+    limit: int = Query(50, ge=1, le=200, description="Max results"),
+    offset: int = Query(0, ge=0, description="Result offset"),
+    _: CurrentUser = Depends(get_current_staff),
+):
+    """
+    Returns list of discharged / completed OPD visits with patient telemetry,
+    consultation timestamps, and dispensing fulfillment records.
+    """
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            sql = """
+                SELECT v.visit_id, v.roll_number, v.doctor_id, v.status AS visit_status,
+                       v.checked_in_at, v.consultation_started_at, v.consultation_completed_at, v.completed_at,
+                       st.full_name AS student_name, st.blood_group,
+                       ua.email AS doctor_email, sp.name AS specialty,
+                       disp.dispensing_id, disp.status AS dispensing_status, disp.change_reason,
+                       (SELECT ve.notes FROM VISIT_EVENT ve
+                        WHERE ve.visit_id = v.visit_id AND ve.event_type = 'CHECKED_IN'
+                        ORDER BY ve.event_id DESC LIMIT 1) AS checkin_notes
+                FROM VISIT v
+                JOIN STUDENT st ON st.roll_number = v.roll_number
+                JOIN DOCTOR d ON d.doctor_id = v.doctor_id
+                JOIN STAFF s ON s.staff_id = d.staff_id
+                JOIN USER_ACCOUNT ua ON ua.user_id = s.user_id
+                LEFT JOIN SPECIALTY sp ON sp.specialty_id = d.specialty_id
+                LEFT JOIN DISPENSING disp ON disp.visit_id = v.visit_id
+                WHERE v.status = 'COMPLETED'
+            """
+            params = []
+            if doctor_id is not None:
+                sql += " AND v.doctor_id = %s"
+                params.append(doctor_id)
+
+            if date and date.upper() != "ALL":
+                sql += " AND DATE(v.completed_at) = %s"
+                params.append(date)
+            elif not date:
+                # Default to today's completed visits
+                sql += " AND (DATE(v.completed_at) = CURDATE() OR v.completed_at IS NULL)"
+
+            if q and q.strip():
+                term = f"%{q.strip()}%"
+                sql += " AND (st.roll_number LIKE %s OR st.full_name LIKE %s)"
+                params.extend([term, term])
+
+            sql += " ORDER BY v.completed_at DESC, v.visit_id DESC LIMIT %s OFFSET %s"
+            params.extend([limit, offset])
+
+            cur.execute(sql, tuple(params))
+            rows = cur.fetchall()
+    finally:
+        conn.close()
+
+    results = []
+    for r in rows:
+        raw_name = display_name_from_email(r["doctor_email"])
+        doc_name = raw_name if raw_name.startswith("Dr ") else f"Dr {raw_name}"
+
+        complaint = ""
+        notes = r.get("checkin_notes")
+        if notes and " - " in notes:
+            complaint = notes.split(" - ", 1)[1].strip()
+        elif notes:
+            complaint = notes.strip()
+
+        chk_iso = r["checked_in_at"].isoformat() if r.get("checked_in_at") else None
+        comp_iso = r["completed_at"].isoformat() if r.get("completed_at") else None
+        consult_comp_iso = r["consultation_completed_at"].isoformat() if r.get("consultation_completed_at") else None
+
+        disp_status = r.get("dispensing_status") or "DISPENSED"
+        if disp_status in ("FULL", "DISPENSED"):
+            disp_status_display = "Dispensed as prescribed"
+        elif disp_status in ("PARTIAL", "PARTIALLY_DISPENSED"):
+            disp_status_display = "Partially dispensed"
+        elif disp_status == "PENDING":
+            disp_status_display = "Pending dispensing"
+        else:
+            disp_status_display = disp_status
+
+        results.append({
+            "id": r["visit_id"],
+            "visitId": r["visit_id"],
+            "visit_id": r["visit_id"],
+            "rollNo": r["roll_number"],
+            "rollNumber": r["roll_number"],
+            "roll_number": r["roll_number"],
+            "name": r["student_name"],
+            "studentName": r["student_name"],
+            "student_name": r["student_name"],
+            "bloodGroup": r.get("blood_group"),
+            "doctorId": r["doctor_id"],
+            "doctor_id": r["doctor_id"],
+            "doctorName": doc_name,
+            "doctor_name": doc_name,
+            "specialty": r.get("specialty") or "General Physician",
+            "checkedIn": chk_iso,
+            "checkedInAt": chk_iso,
+            "checked_in_at": chk_iso,
+            "consultationCompletedAt": consult_comp_iso,
+            "dispensedAt": comp_iso,
+            "completedAt": comp_iso,
+            "completed_at": comp_iso,
+            "dispensingStatus": disp_status_display,
+            "dispensing_status": disp_status_display,
+            "dispensing": {
+                "type": disp_status_display,
+                "status": disp_status,
+                "changeReason": r.get("change_reason"),
+            },
+            "complaint": complaint,
+        })
+
+    return results
+
+
+# ── 8. Activity / Audit History Feed ───────────────────────────────────
+@router.get("/activity")
+@router.get("/activity-log")
+def list_activity_log(
+    event_type: Optional[str] = Query(None, description="Optional filter by event_type"),
+    date: Optional[str] = Query(None, description="Date filter YYYY-MM-DD or 'ALL' (defaults to CURDATE())"),
+    limit: int = Query(50, ge=1, le=200, description="Max events to return"),
+    offset: int = Query(0, ge=0, description="Event offset"),
+    _: CurrentUser = Depends(get_current_staff),
+):
+    """
+    Returns audit event stream from VISIT_EVENT with human-readable event kinds,
+    student names, timestamps, and performer identities.
+    """
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            sql = """
+                SELECT ve.event_id, ve.visit_id, ve.event_type, ve.performed_by_user_id,
+                       ve.created_at, ve.notes,
+                       v.roll_number,
+                       st.full_name AS student_name,
+                       ua.email AS performed_by_email
+                FROM VISIT_EVENT ve
+                JOIN VISIT v ON v.visit_id = ve.visit_id
+                JOIN STUDENT st ON st.roll_number = v.roll_number
+                LEFT JOIN USER_ACCOUNT ua ON ua.user_id = ve.performed_by_user_id
+                WHERE 1=1
+            """
+            params = []
+            if event_type and event_type.strip():
+                sql += " AND ve.event_type = %s"
+                params.append(event_type.strip().upper())
+
+            if date and date.upper() != "ALL":
+                sql += " AND DATE(ve.created_at) = %s"
+                params.append(date)
+            elif not date:
+                sql += " AND DATE(ve.created_at) = CURDATE()"
+
+            sql += " ORDER BY ve.event_id DESC LIMIT %s OFFSET %s"
+            params.extend([limit, offset])
+
+            cur.execute(sql, tuple(params))
+            rows = cur.fetchall()
+    finally:
+        conn.close()
+
+    EVENT_TITLES = {
+        "CHECKED_IN": "STUDENT CHECK-IN",
+        "QUEUED_JOINED_PATIENT": "QUEUE JOINED",
+        "CALLED": "PATIENT CALLED",
+        "NO_SHOW": "MARKED NO-SHOW",
+        "REDIRECTED": "DOCTOR REDIRECT",
+        "CONSULTATION_STARTED": "CONSULTATION STARTED",
+        "CONSULTATION_COMPLETED": "CONSULTATION COMPLETED",
+        "PRESCRIPTION_CREATED": "PRESCRIPTION FINALIZED",
+        "WAITING_FOR_MEDICINE": "QUEUED FOR DISPENSING",
+        "MEDICINE_DISPENSED": "MEDICINE DISPENSED",
+        "COMPLETED": "VISIT COMPLETED",
+        "CANCELLED": "VISIT CANCELLED",
+    }
+
+    results = []
+    for r in rows:
+        evt_type = r["event_type"]
+        kind = EVENT_TITLES.get(evt_type, evt_type.replace("_", " ").title())
+        t_iso = r["created_at"].isoformat() if r.get("created_at") else None
+
+        st_name = r.get("student_name") or r["roll_number"]
+        notes = r.get("notes") or ""
+        text = f"{st_name} ({r['roll_number']}): {notes}" if notes else f"{st_name} ({r['roll_number']})"
+
+        results.append({
+            "event_id": r["event_id"],
+            "eventId": r["event_id"],
+            "visit_id": r["visit_id"],
+            "visitId": r["visit_id"],
+            "event_type": evt_type,
+            "eventType": evt_type,
+            "kind": kind,
+            "text": text,
+            "notes": notes,
+            "student_name": r.get("student_name"),
+            "studentName": r.get("student_name"),
+            "roll_number": r["roll_number"],
+            "rollNumber": r["roll_number"],
+            "performed_by_email": r.get("performed_by_email"),
+            "timestamp": t_iso,
+            "t": t_iso,
+        })
+
+    return results
+
+
+# ── 9. Supported Settings & Administrative Operations ──────────────────
+class DoctorAvailabilityUpdateRequest(BaseModel):
+    status: Literal["AVAILABLE", "UNAVAILABLE"]
+    date: Optional[str] = None
+
+
+class RFIDEnrollRequest(BaseModel):
+    roll_number: str = Field(..., min_length=1, max_length=30)
+    card_uid: str = Field(..., min_length=4, max_length=100)
+
+
+@router.get("/settings")
+@router.get("/terminal-info")
+def get_terminal_settings(
+    me: CurrentUser = Depends(get_current_staff),
+):
+    """
+    Returns reception desk terminal information, operational parameters,
+    and live clinical readiness telemetry.
+    """
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT COUNT(*) AS active_doctors
+                FROM DOCTOR d
+                JOIN STAFF s ON s.staff_id = d.staff_id AND s.status = 'ACTIVE'
+                WHERE (SELECT da.status FROM DOCTOR_AVAILABILITY da
+                       WHERE da.doctor_id = d.doctor_id AND da.availability_date = CURDATE() LIMIT 1) != 'UNAVAILABLE'
+                """
+            )
+            active_docs = cur.fetchone()["active_doctors"]
+    finally:
+        conn.close()
+
+    return {
+        "deskStation": "Front Desk • Station 1",
+        "station": "Front Desk • Station 1",
+        "operationalHours": "09:00 AM - 05:00 PM",
+        "connectedAccount": me.email,
+        "connectedUserRole": me.role,
+        "rfidScannerState": "Connected",
+        "rfidScannerConnected": True,
+        "emergencyHotline": "108 / +91-175-2393108",
+        "activeDoctorsCount": active_docs,
+        "facility": "Thapar Institute Health Centre",
+        "campus": "Patiala Main Campus",
+    }
+
+
+@router.post("/doctors/{doctor_id}/availability")
+def update_doctor_availability(
+    doctor_id: int,
+    payload: DoctorAvailabilityUpdateRequest,
+    me: CurrentUser = Depends(get_current_staff),
+):
+    """
+    Administrative control: Updates doctor availability on CURDATE() (or specified date).
+    Used by receptionists to open/close doctor queues.
+    """
+    status_val = payload.status.upper()
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT doctor_id FROM DOCTOR WHERE doctor_id = %s", (doctor_id,))
+            if not cur.fetchone():
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Doctor #{doctor_id} not found.")
+
+            target_date = payload.date if payload.date else None
+            date_clause = "%s" if target_date else "CURDATE()"
+            params = [doctor_id]
+            if target_date:
+                params.append(target_date)
+            params.extend([status_val, me.user_id, status_val])
+
+            cur.execute(
+                f"""
+                INSERT INTO DOCTOR_AVAILABILITY (doctor_id, availability_date, status, created_by_user_id)
+                VALUES (%s, {date_clause}, %s, %s)
+                ON DUPLICATE KEY UPDATE status = %s
+                """,
+                tuple(params),
+            )
+        conn.commit()
+    finally:
+        conn.close()
+
+    return {
+        "doctor_id": doctor_id,
+        "doctorId": doctor_id,
+        "status": status_val,
+        "updated_by": me.email,
+    }
+
+
+@router.get("/rfid/lookup/{card_uid}")
+def lookup_rfid_card(
+    card_uid: str,
+    _: CurrentUser = Depends(get_current_staff),
+):
+    """
+    Administrative operation: Looks up student enrolled to an RFID card UID for rapid check-in.
+    """
+    card_uid = card_uid.strip()
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT rc.card_uid, rc.status AS card_status,
+                       st.roll_number, st.full_name, st.blood_group,
+                       ua.email
+                FROM RFID_CARD rc
+                JOIN STUDENT st ON st.roll_number = rc.roll_number
+                JOIN USER_ACCOUNT ua ON ua.user_id = st.user_id
+                WHERE rc.card_uid = %s AND rc.status = 'ACTIVE'
+                LIMIT 1
+                """,
+                (card_uid,),
+            )
+            card = cur.fetchone()
+            if not card:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"No active student mapped to RFID card '{card_uid}'.")
+    finally:
+        conn.close()
+
+    return {
+        "cardUid": card["card_uid"],
+        "card_uid": card["card_uid"],
+        "rollNumber": card["roll_number"],
+        "roll_number": card["roll_number"],
+        "name": card["full_name"],
+        "studentName": card["full_name"],
+        "bloodGroup": card.get("blood_group"),
+        "email": card["email"],
+    }
+
+
+@router.post("/rfid/enroll", status_code=status.HTTP_201_CREATED)
+def enroll_rfid_card(
+    payload: RFIDEnrollRequest,
+    _: CurrentUser = Depends(get_current_staff),
+):
+    """
+    Administrative operation: Enrolls or replaces an RFID card for a registered student.
+    """
+    roll = payload.roll_number.strip()
+    card_uid = payload.card_uid.strip()
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT roll_number, full_name FROM STUDENT WHERE roll_number = %s", (roll,))
+            st = cur.fetchone()
+            if not st:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Student '{roll}' not found.")
+
+            # Deactivate previous active card for student
+            cur.execute(
+                "UPDATE RFID_CARD SET status = 'REPLACED', deactivated_at = NOW() WHERE roll_number = %s AND status = 'ACTIVE'",
+                (roll,),
+            )
+
+            # Insert new card
+            cur.execute(
+                """
+                INSERT INTO RFID_CARD (roll_number, card_uid, status, issued_at)
+                VALUES (%s, %s, 'ACTIVE', NOW())
+                """,
+                (roll, card_uid),
+            )
+            card_id = cur.lastrowid
+        conn.commit()
+    finally:
+        conn.close()
+
+    return {
+        "rfid_card_id": card_id,
+        "rfidCardId": card_id,
+        "roll_number": roll,
+        "rollNumber": roll,
+        "card_uid": card_uid,
+        "cardUid": card_uid,
+        "student_name": st["full_name"],
+        "status": "ACTIVE",
+    }
 
 
 def _is_mysql(conn) -> bool:

@@ -10,6 +10,14 @@ from app.routers.reception import (
     list_prescriptions_awaiting_dispense,
     get_prescription_by_visit,
     dispense_visit_prescription,
+    search_students,
+    get_student_history,
+    list_completed_visits,
+    list_activity_log,
+    get_terminal_settings,
+    update_doctor_availability,
+    lookup_rfid_card,
+    enroll_rfid_card,
 )
 
 __all__ = [
@@ -21,6 +29,12 @@ __all__ = [
     "list_prescriptions_awaiting_dispense",
     "get_prescription_by_visit",
     "dispense_visit_prescription",
+    "search_students",
+    "get_student_history",
+    "list_completed_visits",
+    "list_activity_log",
+    "get_terminal_settings",
+    "update_doctor_availability",
+    "lookup_rfid_card",
+    "enroll_rfid_card",
 ]
-
-
