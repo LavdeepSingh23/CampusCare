@@ -4,6 +4,7 @@ import { motion } from "framer-motion";
 import { useQueue, DOCTORS, DIRECTORY, dispense, logAction, resetDemo } from "../../context/queueStore";
 import { lookupStudent, fetchReceptionDoctors, receptionCheckIn, fetchReceptionQueue, fetchAwaitingDispense } from "../../api";
 import DispensingDesk from "./DispensingDesk";
+import EmergencyDesk from "./EmergencyDesk";
 import { useAuth } from "../../context/AuthContext";
 import { Sidebar, SidebarBody, SidebarLink } from "../ui/sidebar";
 import campusCareLogo from "../../assets/campuscare-logo.png";
@@ -43,6 +44,7 @@ const ICONS = {
   queue: <path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" />,
   students: <><circle cx="9" cy="7" r="4" /><path d="M3 21v-2a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v2M17 3.1a4 4 0 0 1 0 7.8M21 21v-2a4 4 0 0 0-3-3.9" /></>,
   dispensing: <path d="M10.5 20.5 3.5 13.5a4.95 4.95 0 0 1 7-7l7 7a4.95 4.95 0 0 1-7 7zM8.5 8.5l7 7" />,
+  emergency: <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" />,
   completed: <path d="M20 6 9 17l-5-5" />,
   activity: <path d="M22 12h-4l-3 9L9 3l-3 9H2" />,
   settings: <><circle cx="12" cy="12" r="3" /><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9 7 7M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1" /></>,
@@ -59,6 +61,7 @@ const NAV = [
   { id: "queue", label: "Live OPD Queue", icon: "queue" },
   { id: "students", label: "Students", icon: "students" },
   { id: "dispensing", label: "Dispensing", icon: "dispensing" },
+  { id: "emergency", label: "Emergency & Dispatch", icon: "emergency" },
   { id: "completed", label: "Completed Visits", icon: "completed" },
   { id: "activity", label: "Activity", icon: "activity" },
 ];
@@ -228,6 +231,7 @@ export default function ReceptionDashboard({ onLogout, initialPage = "reception"
               }}
             />
           )}
+          {page === "emergency" && <EmergencyDesk flash={flash} />}
           {page === "completed" && <Completed {...{ completed }} />}
           {page === "activity" && <Activity {...{ log }} />}
           {page === "settings" && <Settings {...{ flash }} />}
@@ -351,6 +355,13 @@ function Home({ now, visits, waiting, inConsult, forMedicine, log, setPage, live
           >
             <Pill className="w-4 h-4 text-teal-700" />
             <span>Dispensary Queue ({forMedicine.length})</span>
+          </button>
+          <button
+            onClick={() => setPage("emergency")}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-semibold text-xs shadow-xs hover:shadow-sm transition-all cursor-pointer"
+          >
+            <AlertTriangle className="w-4 h-4" />
+            <span>Emergency SOS</span>
           </button>
         </div>
       </div>

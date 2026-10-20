@@ -33,6 +33,14 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
+      <Route
+        path="/emergency"
+        element={
+          <ProtectedRoute>
+            <ReceptionDashboard initialPage="emergency" />
+          </ProtectedRoute>
+        }
+      />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

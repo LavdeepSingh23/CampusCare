@@ -430,4 +430,43 @@ export function dispensePrescription(visitId, payload = {}) {
     method: 'POST',
     body: JSON.stringify(payload),
   })
-}
+}
+
+
+// ── Emergency & Ambulance Dispatch ──────────────────────────────────────
+export function createEmergencyLog(payload) {
+  return request('/api/emergency/logs', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export function fetchEmergencyLogs(severity = null, limit = 50) {
+  const params = new URLSearchParams()
+  if (severity) params.append('severity', severity)
+  if (limit) params.append('limit', limit)
+  const qs = params.toString() ? `?${params.toString()}` : ''
+  return request(`/api/emergency/logs${qs}`)
+}
+
+export function fetchEmergencyDetail(emergencyId) {
+  return request(`/api/emergency/logs/${emergencyId}`)
+}
+
+export function updateAmbulanceDispatch(emergencyId, payload) {
+  return request(`/api/emergency/ambulance/${emergencyId}`, {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  })
+}
+
+export function fetchStudentEmergencyContact(rollNumber) {
+  return request(`/api/emergency/contacts/${encodeURIComponent(rollNumber)}`)
+}
+
+export function updateStudentEmergencyContact(rollNumber, payload) {
+  return request(`/api/emergency/contacts/${encodeURIComponent(rollNumber)}`, {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  })
+}
