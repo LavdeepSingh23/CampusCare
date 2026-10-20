@@ -891,3 +891,117 @@ stateDiagram-v2
 - **Doctor Waiting List**: Poll `GET /api/doctor/{doctor_id}/queue` every **3 to 5 seconds**.
 - **Doctor Active Consultation Widget**: Read from `GET /api/doctor/{doctor_id}/active-consultation` or trigger immediately following `call-next`, `complete`, or `no-show` user actions.
 
+
+
+---
+
+## 7. Emergency & Ambulance Dispatch API (Phase 8)
+
+> **Isolation Principle**: Emergency and trauma cases skip the routine OPD line completely. They do **not** create a row in `VISIT` or `QUEUE_ENTRY`, do not consume doctor sequence numbers, and never block routine check-in for other students.
+
+### 7.1 Record Emergency Case
+- **Route**: `POST /api/emergency/logs` (Alias: `POST /api/emergency/log`)
+- **Authorization**: Staff only (`RECEPTIONIST`, `DOCTOR`).
+- **Request Body**:
+  ```json
+  {
+    "roll_number": "102403499",
+    "emergency_type": "Trauma / Fracture",
+    "description": "Right ankle inversion injury on sports grounds with acute swelling",
+    "severity": "HIGH",
+    "action_taken": "Immobilized with compression splint, ice pack applied",
+    "ambulance_required": true,
+    "ambulance_details": {
+      "ambulance_provider": "TIET Health Center Ambulance Unit",
+      "contact_number": "+91-175-2393108",
+      "vehicle_number": "PB 11 CD 5678",
+      "destination": "Rajindra Hospital, Patiala"
+    }
+  }
+  ```
+- **Success Response (`201 Created`)**:
+  ```json
+  {
+    "emergency_id": 12,
+    "roll_number": "102403499",
+    "student_name": "Simar Singh",
+    "blood_group": "B+",
+    "recorded_by_user_id": 5,
+    "occurred_at": "2026-10-20T16:00:00",
+    "emergency_type": "Trauma / Fracture",
+    "description": "Right ankle inversion injury...",
+    "severity": "HIGH",
+    "action_taken": "Immobilized with compression splint...",
+    "ambulance_required": true,
+    "called_at": "2026-10-20T16:00:00",
+    "created_at": "2026-10-20T16:00:00",
+    "ambulance": {
+      "ambulance_dispatch_id": 4,
+      "emergency_id": 12,
+      "ambulance_provider": "TIET Health Center Ambulance Unit",
+      "contact_number": "+91-175-2393108",
+      "vehicle_number": "PB 11 CD 5678",
+      "called_at": "2026-10-20T16:00:00",
+      "arrived_at": null,
+      "departure_at": null,
+      "destination": "Rajindra Hospital, Patiala",
+      "status": "REQUESTED"
+    },
+    "emergency_contact": {
+      "emergency_contact_id": 2,
+      "roll_number": "102403499",
+      "name": "Col. Rajesh Singh",
+      "relationship": "Father",
+      "phone_number": "+91-9814012345"
+    }
+  }
+  ```
+- **Error Responses**:
+  - `401 Unauthorized`: Missing or invalid Bearer token.
+  - `403 Forbidden`: Authenticated user is not clinic staff (e.g. `STUDENT`).
+  - `404 Not Found`: Student roll number not registered.
+  - `422 Unprocessable Entity`: Invalid severity level (must be `LOW`, `MEDIUM`, `HIGH`, or `CRITICAL`).
+
+---
+
+### 7.2 List Recent Emergency Cases
+- **Route**: `GET /api/emergency/logs` (Alias: `GET /api/emergency`)
+- **Query Parameters**:
+  - `severity`: (Optional) `LOW`, `MEDIUM`, `HIGH`, or `CRITICAL`.
+  - `limit`: (Optional) Integer between 1 and 200 (default: 50).
+- **Authorization**: Staff only (`RECEPTIONIST`, `DOCTOR`).
+- **Success Response (`200 OK`)**: List of emergency logs ordered by `occurred_at DESC`.
+
+---
+
+### 7.3 Get Emergency Detail
+- **Route**: `GET /api/emergency/logs/{emergency_id}` (Alias: `GET /api/emergency/{emergency_id}`)
+- **Authorization**: Staff only (`RECEPTIONIST`, `DOCTOR`).
+- **Success Response (`200 OK`)**: Full incident record including ambulance dispatch details and student emergency contact.
+
+---
+
+### 7.4 Update Ambulance Dispatch
+- **Route**: `PUT /api/emergency/ambulance/{emergency_id}`
+- **Authorization**: Staff only (`RECEPTIONIST`, `DOCTOR`).
+- **Request Body**:
+  ```json
+  {
+    "status": "DISPATCHED",
+    "vehicle_number": "PB 11 CD 5678",
+    "contact_number": "+91-9876500000"
+  }
+  ```
+- **State Machine Transitions**:
+  - `REQUESTED` $\rightarrow$ `DISPATCHED` $\rightarrow$ `ARRIVED` $\rightarrow$ `COMPLETED`
+  - Any non-terminal state may transition to `CANCELLED`.
+  - Backward transitions (e.g. `COMPLETED` $\rightarrow$ `REQUESTED`) are rejected with `409 Conflict`.
+- **Success Response (`200 OK`)**: Updated `AMBULANCE_DISPATCH` object.
+
+---
+
+### 7.5 Student Emergency Contact Lookup & Upsert
+- **Lookup**: `GET /api/emergency/contacts/{roll_number}`
+  - Returns `200 OK` with `{ "name", "relationship", "phone_number" }` or `404 Not Found` if no contact is registered yet.
+- **Upsert**: `PUT /api/emergency/contacts/{roll_number}`
+  - Updates or registers emergency contact for a student.
