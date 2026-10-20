@@ -25,6 +25,7 @@ from app.schemas.emergency import (
     AmbulanceDispatchUpdate,
     EmergencyContactCreate,
     EmergencyLogCreate,
+    EmergencyLogUpdate,
 )
 from app.services import emergency_service as es
 
@@ -113,6 +114,39 @@ def get_emergency_detail(
         return es.get_emergency_log(conn=conn, emergency_id=emergency_id)
     except es.ResourceNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+    finally:
+        conn.close()
+
+
+@router.put("/logs/{emergency_id}")
+@router.put("/{emergency_id}")
+def update_emergency(
+    emergency_id: int,
+    payload: EmergencyLogUpdate,
+    _: CurrentUser = Depends(get_current_staff),
+):
+    """
+    Updates emergency case notes, triage severity, action taken, or ambulance requirement.
+    """
+    conn = get_db_connection()
+    try:
+        result = es.update_emergency_log(
+            conn=conn,
+            emergency_id=emergency_id,
+            update_data=payload.model_dump(exclude_unset=True),
+        )
+        conn.commit()
+        return result
+    except es.ResourceNotFoundError as exc:
+        conn.rollback()
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+    except ValueError as exc:
+        conn.rollback()
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
+    except Exception as exc:
+        conn.rollback()
+        logger.error("Failed to update emergency #%s: %s", emergency_id, exc, exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to update emergency: {exc}")
     finally:
         conn.close()
 

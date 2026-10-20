@@ -88,3 +88,11 @@ class EmergencyLogResponse(BaseModel):
     ambulance: Optional[AmbulanceDispatchResponse] = None
     emergency_contact: Optional[EmergencyContactResponse] = None
 
+
+
+class EmergencyLogUpdate(BaseModel):
+    severity: Optional[SeverityLevel] = None
+    emergency_type: Optional[str] = Field(default=None, min_length=2, max_length=100)
+    description: Optional[str] = Field(default=None, min_length=3)
+    action_taken: Optional[str] = Field(default=None, min_length=2)
+    ambulance_required: Optional[bool] = None

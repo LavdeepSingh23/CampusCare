@@ -671,3 +671,70 @@ def upsert_student_emergency_contact(
         "phoneNumber": ec["phone_number"],
         "updated_at": ec["updated_at"].isoformat() if ec.get("updated_at") else None,
     }
+
+
+def update_emergency_log(
+    conn,
+    emergency_id: int,
+    update_data: Dict[str, Any],
+) -> Dict[str, Any]:
+    """
+    Updates triage details for an emergency incident (severity, clinical notes, action taken, ambulance requirement).
+    """
+    with conn.cursor() as cur:
+        cur.execute("SELECT emergency_id, ambulance_required FROM EMERGENCY_LOG WHERE emergency_id = %s", (emergency_id,))
+        el = cur.fetchone()
+        if not el:
+            raise ResourceNotFoundError(f"Emergency incident #{emergency_id} not found.")
+
+        updates = []
+        params = []
+
+        if "severity" in update_data and update_data["severity"]:
+            sev = update_data["severity"].upper().strip()
+            if sev not in VALID_SEVERITIES:
+                raise ValueError(f"Invalid severity '{sev}'. Must be one of: {', '.join(VALID_SEVERITIES)}")
+            updates.append("severity = %s")
+            params.append(sev)
+
+        if "emergency_type" in update_data and update_data["emergency_type"]:
+            updates.append("emergency_type = %s")
+            params.append(update_data["emergency_type"].strip())
+
+        if "description" in update_data and update_data["description"]:
+            updates.append("description = %s")
+            params.append(update_data["description"].strip())
+
+        if "action_taken" in update_data and update_data["action_taken"]:
+            updates.append("action_taken = %s")
+            params.append(update_data["action_taken"].strip())
+
+        if "ambulance_required" in update_data and update_data["ambulance_required"] is not None:
+            amb_req = bool(update_data["ambulance_required"])
+            updates.append("ambulance_required = %s")
+            params.append(amb_req)
+
+            if amb_req and not el["ambulance_required"]:
+                # Check if dispatch row exists
+                cur.execute("SELECT ambulance_dispatch_id FROM AMBULANCE_DISPATCH WHERE emergency_id = %s", (emergency_id,))
+                if not cur.fetchone():
+                    cur.execute(
+                        """
+                        INSERT INTO AMBULANCE_DISPATCH (
+                            emergency_id, ambulance_provider, contact_number, destination, status, called_at
+                        ) VALUES (%s, %s, %s, %s, 'REQUESTED', NOW())
+                        """,
+                        (
+                            emergency_id,
+                            "Campus Health Center Ambulance Unit",
+                            "+91-175-2393108",
+                            "Rajindra Hospital, Patiala",
+                        ),
+                    )
+
+        if updates:
+            sql = f"UPDATE EMERGENCY_LOG SET {', '.join(updates)} WHERE emergency_id = %s"
+            params.append(emergency_id)
+            cur.execute(sql, tuple(params))
+
+    return get_emergency_log(conn, emergency_id)
