@@ -1005,3 +1005,195 @@ stateDiagram-v2
   - Returns `200 OK` with `{ "name", "relationship", "phone_number" }` or `404 Not Found` if no contact is registered yet.
 - **Upsert**: `PUT /api/emergency/contacts/{roll_number}`
   - Updates or registers emergency contact for a student.
+
+---
+
+### 7.6 Update Emergency Case & Status
+- **Route**: `PUT /api/emergency/logs/{emergency_id}`
+- **Authorization**: Staff only (`RECEPTIONIST`, `DOCTOR`).
+- **Request Body**:
+  ```json
+  {
+    "status": "IN_PROGRESS",
+    "notes": "Patient stabilized; oxygen support initiated.",
+    "is_critical": true,
+    "actions_taken": "Administered IV fluids and notified hostel warden."
+  }
+  ```
+- **Allowed Status Transitions**:
+  - `REPORTED` $\rightarrow$ `TRIAGED` $\rightarrow$ `IN_PROGRESS` $\rightarrow$ `RESOLVED` / `TRANSFERRED`
+  - Re-opening terminal cases (`RESOLVED` or `TRANSFERRED`) is rejected with `409 Conflict`.
+- **Success Response (`200 OK`)**: Updated `EMERGENCY_LOG` object with updated timestamps.
+- **Side Effects**: Sets `resolved_at` when transitioned to `RESOLVED` or `TRANSFERRED`.
+
+---
+
+## 8. Receptionist Extended APIs (Phase 8.2)
+
+### 8.1 Student Directory Search
+- **Route**: `GET /api/reception/students`
+- **Authorization**: Staff only (`RECEPTIONIST`, `DOCTOR`).
+- **Query Parameters**:
+  - `q` (optional): Filter by student name or roll number.
+  - `dept` (optional): Filter by department.
+  - `limit` (optional, default 50): Page size.
+  - `offset` (optional, default 0): Page offset.
+- **Success Response (`200 OK`)**:
+  ```json
+  [
+    {
+      "rollNumber": "102203001",
+      "fullName": "Aarav Sharma",
+      "department": "Computer Science & Engineering",
+      "semester": 6,
+      "bloodGroup": "O+",
+      "email": "aarav.sharma@thapar.edu",
+      "activeVisitStatus": null
+    }
+  ]
+  ```
+
+---
+
+### 8.2 Student Medical Telemetry & Profile
+- **Route**: `GET /api/reception/students/{roll_number}/history`
+- **Authorization**: Staff only (`RECEPTIONIST`, `DOCTOR`).
+- **Path Parameters**: `roll_number` (string).
+- **Success Response (`200 OK`)**:
+  ```json
+  {
+    "student": {
+      "rollNumber": "102203001",
+      "fullName": "Aarav Sharma",
+      "department": "Computer Science & Engineering",
+      "semester": 6,
+      "bloodGroup": "O+",
+      "gender": "M",
+      "program": "B.Tech"
+    },
+    "allergies": [
+      {
+        "allergen": "Penicillin",
+        "reaction": "Anaphylaxis",
+        "severity": "CRITICAL"
+      }
+    ],
+    "emergencyContacts": [
+      {
+        "name": "Dr. R.K. Sharma",
+        "relationship": "Father",
+        "phoneNumber": "+91-9876543210"
+      }
+    ],
+    "history": [
+      {
+        "visitId": 14,
+        "doctorName": "Dr. Anil Sharma",
+        "status": "COMPLETED",
+        "complaint": "Viral throat infection",
+        "checkedInAt": "2026-10-20T10:15:00",
+        "completedAt": "2026-10-20T10:35:00"
+      }
+    ]
+  }
+  ```
+- **Errors**: `404 Not Found` if student roll number does not exist.
+
+---
+
+### 8.3 Completed Visits Feed
+- **Route**: `GET /api/reception/visits/completed`
+- **Authorization**: Staff only (`RECEPTIONIST`, `DOCTOR`).
+- **Query Parameters**:
+  - `date` (optional): ISO date `YYYY-MM-DD` or `"ALL"`. Defaults to today `CURDATE()`.
+  - `doctor_id` (optional): Filter by doctor ID.
+  - `q` (optional): Search by student name or roll number.
+  - `limit` (optional, default 50).
+  - `offset` (optional, default 0).
+- **Success Response (`200 OK`)**:
+  ```json
+  [
+    {
+      "visitId": 28,
+      "rollNumber": "102203001",
+      "name": "Aarav Sharma",
+      "doctorName": "Dr. Anil Sharma",
+      "checkedIn": "2026-10-20T09:30:00",
+      "consultationCompletedAt": "2026-10-20T09:42:00",
+      "completedAt": "2026-10-20T09:50:00",
+      "dispensingStatus": "Dispensed as prescribed",
+      "complaint": "Seasonal allergy and dry cough"
+    }
+  ]
+  ```
+
+---
+
+### 8.4 Front Desk Activity & Audit Log Feed
+- **Route**: `GET /api/reception/activity`
+- **Authorization**: Staff only (`RECEPTIONIST`, `DOCTOR`).
+- **Query Parameters**:
+  - `date` (optional): ISO date or `"ALL"`. Defaults to `CURDATE()`.
+  - `limit` (optional, default 50).
+  - `offset` (optional, default 0).
+- **Success Response (`200 OK`)**: List of `VISIT_EVENT` audit entries with human-readable titles and performer details.
+
+---
+
+### 8.5 Terminal Settings & Station Metadata
+- **Route**: `GET /api/reception/settings`
+- **Authorization**: Staff only (`RECEPTIONIST`, `DOCTOR`).
+- **Success Response (`200 OK`)**:
+  ```json
+  {
+    "terminal": {
+      "station": "Front Desk • Counter 1",
+      "operatingHours": "09:00 AM - 05:00 PM",
+      "connectedAccount": "reception@thapar.edu",
+      "rfidScannerState": "Connected & Listening",
+      "databaseStatus": "Aiven MySQL 8.4 Connected"
+    },
+    "activeDoctors": [
+      {
+        "doctorId": 1,
+        "name": "Dr. Anil Sharma",
+        "cabin": "Cabin 101",
+        "specialty": "General Medicine",
+        "available": true
+      }
+    ]
+  }
+  ```
+
+---
+
+### 8.6 Doctor Cabin Availability Toggle
+- **Route**: `POST /api/reception/doctors/{doctor_id}/availability`
+- **Authorization**: Staff only (`RECEPTIONIST`, `DOCTOR`).
+- **Request Body**:
+  ```json
+  {
+    "status": "AVAILABLE",
+    "date": "2026-10-20"
+  }
+  ```
+- **Success Response (`200 OK`)**:
+  ```json
+  {
+    "success": true,
+    "doctorId": 1,
+    "status": "AVAILABLE",
+    "message": "Doctor #1 marked AVAILABLE"
+  }
+  ```
+
+---
+
+### 8.7 RFID Card Lookup & Provisioning
+- **Card Lookup**: `GET /api/reception/rfid/lookup/{card_uid}`
+  - Returns mapped student details and active visit status.
+  - Returns `404 Not Found` if card UID is not provisioned.
+- **Card Provisioning**: `POST /api/reception/rfid/enroll`
+  - Body: `{ "roll_number": "102203001", "card_uid": "CARD_UID_TEST_888" }`
+  - Replaces or registers active card UID in `RFID_CARD` atomically.
+
