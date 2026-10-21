@@ -548,3 +548,17 @@ export function checkDatabaseReadiness() {
   return request('/api/ready')
 }
 
+
+
+// ── Student Portal & Telemetry (SD-1) ──────────────────────────────────
+export function fetchStudentMe() {
+  return request('/api/student/me')
+}
+
+export function fetchStudentProfileByRoll(rollNumber) {
+  return request(`/api/student/${encodeURIComponent(rollNumber)}`)
+}
+
+export function fetchStudentVisitHistoryByRoll(rollNumber) {
+  return request(`/api/student/${encodeURIComponent(rollNumber)}/history`)
+}

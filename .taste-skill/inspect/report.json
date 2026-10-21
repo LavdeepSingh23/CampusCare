@@ -1,0 +1,1645 @@
+{
+ "url": "d:\\CampusCare\\test.html",
+ "at": "2026-10-20T17:56:17.850Z",
+ "allow": [],
+ "viewports": [
+  {
+   "width": 1440,
+   "height": 900,
+   "load": "load",
+   "screens": 7,
+   "filled": [
+    0.78,
+    0.21,
+    0.25,
+    0.25,
+    0.26,
+    0.19,
+    0.2
+   ],
+   "motion": {
+    "elements": 28,
+    "css": 5,
+    "transitions": 23,
+    "scripted": 0,
+    "videos": 1,
+    "playingVideos": 1
+   },
+   "metrics": {
+    "viewport": {
+     "w": 1440,
+     "h": 900
+    },
+    "page": {
+     "height": 5493,
+     "screens": 6.1,
+     "words": 597,
+     "img": 3,
+     "video": 1,
+     "canvas": 0,
+     "svg": 0,
+     "sections": 6,
+     "horizontalOverflow": 0,
+     "overflowCulprits": [],
+     "uiFragments": 0,
+     "uiAbuse": false,
+     "realPictures": 4,
+     "videoCount": 1,
+     "uiPictures": 0,
+     "pictureSamples": [
+      "1920px-A_view_from_the_Back_Campus_of_the_Univer",
+      "photo-1586773860418-d37222d8fce3?auto=format&fit",
+      "photo-1579684385127-1ef15d508118?auto=format&fit"
+     ],
+     "blendText": 0,
+     "sideScrollers": 0,
+     "brokenImages": [],
+     "emoji": [],
+     "videosNoPoster": 0
+    },
+    "hero": {
+     "text": "Campus health and clinical care.",
+     "words": 5,
+     "chars": 32,
+     "lines": 2,
+     "size": 60,
+     "vw": 4.2,
+     "font": "Work Sans",
+     "weight": 300,
+     "tracking": -0.035,
+     "leading": 1.05,
+     "upper": false,
+     "italic": false,
+     "mono": false,
+     "align": "left",
+     "position": "right",
+     "widthRatio": 0.46,
+     "top": 48,
+     "tag": "h1",
+     "kind": "heading"
+    },
+    "h1": {
+     "text": "Campus health and clinical care.",
+     "words": 5,
+     "lines": 2,
+     "size": 60,
+     "font": "Work Sans"
+    },
+    "headings": [
+     {
+      "text": "Campus health and clinical care.",
+      "words": 5,
+      "chars": 32,
+      "lines": 2,
+      "size": 60,
+      "vw": 4.2,
+      "font": "Work Sans",
+      "weight": 300,
+      "tracking": -0.035,
+      "leading": 1.05,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "left",
+      "position": "right",
+      "widthRatio": 0.46,
+      "top": 48,
+      "tag": "h1",
+      "kind": "heading"
+     },
+     {
+      "text": "Walking directions across campus.",
+      "words": 4,
+      "chars": 33,
+      "lines": 2,
+      "size": 44,
+      "vw": 3.1,
+      "font": "Work Sans",
+      "weight": 300,
+      "tracking": -0.025,
+      "leading": 1.1,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "left",
+      "position": "right",
+      "widthRatio": 0.46,
+      "top": 487,
+      "tag": "h2",
+      "kind": "heading"
+     },
+     {
+      "text": "Consultation timetable.",
+      "words": 2,
+      "chars": 23,
+      "lines": 1,
+      "size": 44,
+      "vw": 3.1,
+      "font": "Work Sans",
+      "weight": 300,
+      "tracking": -0.025,
+      "leading": 1.1,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "left",
+      "position": "right",
+      "widthRatio": 0.46,
+      "top": 1653,
+      "tag": "h2",
+      "kind": "heading"
+     },
+     {
+      "text": "Health centre services.",
+      "words": 3,
+      "chars": 23,
+      "lines": 1,
+      "size": 44,
+      "vw": 3.1,
+      "font": "Work Sans",
+      "weight": 300,
+      "tracking": -0.025,
+      "leading": 1.1,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "left",
+      "position": "right",
+      "widthRatio": 0.46,
+      "top": 2263,
+      "tag": "h2",
+      "kind": "heading"
+     },
+     {
+      "text": "Medical officers on duty.",
+      "words": 4,
+      "chars": 25,
+      "lines": 1,
+      "size": 44,
+      "vw": 3.1,
+      "font": "Work Sans",
+      "weight": 300,
+      "tracking": -0.025,
+      "leading": 1.1,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "left",
+      "position": "right",
+      "widthRatio": 0.46,
+      "top": 3319,
+      "tag": "h2",
+      "kind": "heading"
+     },
+     {
+      "text": "Academic medical leaves.",
+      "words": 3,
+      "chars": 24,
+      "lines": 1,
+      "size": 44,
+      "vw": 3.1,
+      "font": "Work Sans",
+      "weight": 300,
+      "tracking": -0.025,
+      "leading": 1.1,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "left",
+      "position": "right",
+      "widthRatio": 0.46,
+      "top": 4334,
+      "tag": "h2",
+      "kind": "heading"
+     },
+     {
+      "text": "Emergency response.",
+      "words": 2,
+      "chars": 19,
+      "lines": 1,
+      "size": 44,
+      "vw": 3.1,
+      "font": "Work Sans",
+      "weight": 300,
+      "tracking": -0.025,
+      "leading": 1.1,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "left",
+      "position": "right",
+      "widthRatio": 0.46,
+      "top": 4957,
+      "tag": "h2",
+      "kind": "heading"
+     }
+    ],
+    "headingSummary": {
+     "count": 7,
+     "maxLines": 2,
+     "over2Lines": 0,
+     "statements": 0,
+     "centered": 0,
+     "medianWords": 3,
+     "mixedFontHeadings": 0
+    },
+    "type": {
+     "families": [
+      {
+       "family": "Work Sans",
+       "share": 1,
+       "mono": false
+      }
+     ],
+     "familyCount": 1,
+     "sizes": [
+      15,
+      19,
+      44,
+      60
+     ],
+     "sizeCount": 4,
+     "notLoaded": [],
+     "body": {
+      "font": "Work Sans",
+      "size": 19,
+      "leading": 1.55,
+      "weight": 400,
+      "tracking": 0,
+      "contrast": 13
+     },
+     "measureChars": 58,
+     "max": {
+      "size": 60,
+      "vw": 4.2,
+      "font": "Work Sans",
+      "text": "Campus health and"
+     },
+     "monoShare": 0,
+     "monoProseShare": 0,
+     "monoFamilies": [],
+     "monoSamples": [],
+     "microLabels": 0,
+     "microLabelShare": 0,
+     "microSamples": [],
+     "upperShare": 0,
+     "centerShare": 0,
+     "smallText": 0
+    },
+    "eyebrows": [],
+    "numbered": [],
+    "color": {
+     "bodyBg": "#dfdbd3",
+     "bodyBgHsl": {
+      "h": 40,
+      "s": 0.16,
+      "l": 0.85
+     },
+     "dark": false,
+     "sectionBgs": [],
+     "textColors": [
+      {
+       "color": "#171716",
+       "share": 0.88
+      },
+      {
+       "color": "#57544d",
+       "share": 0.08
+      },
+      {
+       "color": "#ffffff",
+       "share": 0.03
+      }
+     ],
+     "button": {
+      "bg": "#171716",
+      "hsl": {
+       "h": 60,
+       "s": 0.02,
+       "l": 0.09
+      },
+      "fg": "#ffffff"
+     },
+     "lowContrast": []
+    },
+    "buttons": {
+     "count": 2,
+     "inHero": 1,
+     "radius": 0,
+     "height": 57,
+     "withShadow": 0,
+     "withGradient": 0,
+     "mono": 0,
+     "upper": 0,
+     "heroLabels": [
+      "View consultation schedule"
+     ]
+    },
+    "surfaces": {
+     "shadowStatic": 0,
+     "shadowOverlay": 0,
+     "shadowSamples": [],
+     "gradients": 0,
+     "scrims": 0,
+     "gradientSamples": [],
+     "gradientText": 0,
+     "hairlines": 0,
+     "hairlineSamples": [],
+     "outlinedBoxes": 0,
+     "dashed": 0,
+     "blurred": 0,
+     "roundedBoxes": 0,
+     "boxRadius": 0,
+     "squareMedia": 4,
+     "roundedMedia": 0,
+     "mediaRadius": 0,
+     "textShadow": 0,
+     "cardRows": []
+    },
+    "heroMedia": [
+     {
+      "type": "img",
+      "ratio": 0.48
+     },
+     {
+      "type": "video",
+      "ratio": 0.1
+     }
+    ],
+    "nav": {
+     "links": 0,
+     "fixed": false,
+     "height": 367,
+     "floatingPill": false,
+     "blur": false
+    },
+    "fontsLoaded": [
+     "work sans"
+    ]
+   },
+   "layout": {
+    "viewport": {
+     "w": 1440,
+     "h": 900
+    },
+    "pageH": 5493,
+    "margins": {
+     "left": 40,
+     "right": 40
+    },
+    "sections": [],
+    "gaps": [],
+    "h1s": [
+     {
+      "text": "Campus health and clinical care.",
+      "size": 60,
+      "top": 48,
+      "firstScreen": true
+     }
+    ],
+    "edgeText": [],
+    "edges": [
+     {
+      "x": 739,
+      "n": 15
+     },
+     {
+      "x": 751,
+      "n": 1
+     }
+    ],
+    "leftBlocks": 16,
+    "bodySize": 19,
+    "stage": false,
+    "explains": true,
+    "slivers": [],
+    "voidShare": 0.05,
+    "voidBox": {
+     "x": 1320,
+     "y": 120,
+     "w": 120,
+     "h": 540
+    }
+   },
+   "app": null,
+   "consoleErrors": []
+  },
+  {
+   "width": 768,
+   "height": 1024,
+   "load": "load",
+   "screens": 6,
+   "filled": [
+    0.53,
+    0.42,
+    0.51,
+    0.54,
+    0.31,
+    0.33
+   ],
+   "motion": {
+    "elements": 28,
+    "css": 5,
+    "transitions": 23,
+    "scripted": 0,
+    "videos": 1,
+    "playingVideos": 1
+   },
+   "metrics": {
+    "viewport": {
+     "w": 768,
+     "h": 1024
+    },
+    "page": {
+     "height": 5574,
+     "screens": 5.4,
+     "words": 597,
+     "img": 3,
+     "video": 1,
+     "canvas": 0,
+     "svg": 0,
+     "sections": 6,
+     "horizontalOverflow": 0,
+     "overflowCulprits": [],
+     "uiFragments": 0,
+     "uiAbuse": false,
+     "realPictures": 4,
+     "videoCount": 1,
+     "uiPictures": 0,
+     "pictureSamples": [
+      "1920px-A_view_from_the_Back_Campus_of_the_Univer",
+      "photo-1586773860418-d37222d8fce3?auto=format&fit",
+      "photo-1579684385127-1ef15d508118?auto=format&fit"
+     ],
+     "blendText": 0,
+     "sideScrollers": 0,
+     "brokenImages": [],
+     "emoji": [],
+     "videosNoPoster": 0
+    },
+    "hero": {
+     "text": "Campus health and clinical care.",
+     "words": 5,
+     "chars": 32,
+     "lines": 2,
+     "size": 48,
+     "vw": 6.3,
+     "font": "Work Sans",
+     "weight": 300,
+     "tracking": -0.035,
+     "leading": 1.05,
+     "upper": false,
+     "italic": false,
+     "mono": false,
+     "align": "left",
+     "position": "center",
+     "widthRatio": 0.94,
+     "top": 462,
+     "tag": "h1",
+     "kind": "heading"
+    },
+    "h1": {
+     "text": "Campus health and clinical care.",
+     "words": 5,
+     "lines": 2,
+     "size": 48,
+     "font": "Work Sans"
+    },
+    "headings": [
+     {
+      "text": "Campus health and clinical care.",
+      "words": 5,
+      "chars": 32,
+      "lines": 2,
+      "size": 48,
+      "vw": 6.3,
+      "font": "Work Sans",
+      "weight": 300,
+      "tracking": -0.035,
+      "leading": 1.05,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "left",
+      "position": "center",
+      "widthRatio": 0.94,
+      "top": 462,
+      "tag": "h1",
+      "kind": "heading"
+     },
+     {
+      "text": "Walking directions across campus.",
+      "words": 4,
+      "chars": 33,
+      "lines": 1,
+      "size": 33.9,
+      "vw": 4.4,
+      "font": "Work Sans",
+      "weight": 300,
+      "tracking": -0.025,
+      "leading": 1.1,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "left",
+      "position": "center",
+      "widthRatio": 0.94,
+      "top": 868,
+      "tag": "h2",
+      "kind": "heading"
+     },
+     {
+      "text": "Consultation timetable.",
+      "words": 2,
+      "chars": 23,
+      "lines": 1,
+      "size": 33.9,
+      "vw": 4.4,
+      "font": "Work Sans",
+      "weight": 300,
+      "tracking": -0.025,
+      "leading": 1.1,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "left",
+      "position": "center",
+      "widthRatio": 0.94,
+      "top": 1943,
+      "tag": "h2",
+      "kind": "heading"
+     },
+     {
+      "text": "Health centre services.",
+      "words": 3,
+      "chars": 23,
+      "lines": 1,
+      "size": 33.9,
+      "vw": 4.4,
+      "font": "Work Sans",
+      "weight": 300,
+      "tracking": -0.025,
+      "leading": 1.1,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "left",
+      "position": "center",
+      "widthRatio": 0.94,
+      "top": 2494,
+      "tag": "h2",
+      "kind": "heading"
+     },
+     {
+      "text": "Medical officers on duty.",
+      "words": 4,
+      "chars": 25,
+      "lines": 1,
+      "size": 33.9,
+      "vw": 4.4,
+      "font": "Work Sans",
+      "weight": 300,
+      "tracking": -0.025,
+      "leading": 1.1,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "left",
+      "position": "center",
+      "widthRatio": 0.94,
+      "top": 3509,
+      "tag": "h2",
+      "kind": "heading"
+     },
+     {
+      "text": "Academic medical leaves.",
+      "words": 3,
+      "chars": 24,
+      "lines": 1,
+      "size": 33.9,
+      "vw": 4.4,
+      "font": "Work Sans",
+      "weight": 300,
+      "tracking": -0.025,
+      "leading": 1.1,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "left",
+      "position": "center",
+      "widthRatio": 0.94,
+      "top": 4484,
+      "tag": "h2",
+      "kind": "heading"
+     },
+     {
+      "text": "Emergency response.",
+      "words": 2,
+      "chars": 19,
+      "lines": 1,
+      "size": 33.9,
+      "vw": 4.4,
+      "font": "Work Sans",
+      "weight": 300,
+      "tracking": -0.025,
+      "leading": 1.1,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "left",
+      "position": "center",
+      "widthRatio": 0.94,
+      "top": 5074,
+      "tag": "h2",
+      "kind": "heading"
+     }
+    ],
+    "headingSummary": {
+     "count": 7,
+     "maxLines": 2,
+     "over2Lines": 0,
+     "statements": 0,
+     "centered": 0,
+     "medianWords": 3,
+     "mixedFontHeadings": 0
+    },
+    "type": {
+     "families": [
+      {
+       "family": "Work Sans",
+       "share": 1,
+       "mono": false
+      }
+     ],
+     "familyCount": 1,
+     "sizes": [
+      14,
+      18,
+      34,
+      48
+     ],
+     "sizeCount": 4,
+     "notLoaded": [],
+     "body": {
+      "font": "Work Sans",
+      "size": 17.9,
+      "leading": 1.55,
+      "weight": 400,
+      "tracking": 0,
+      "contrast": 13
+     },
+     "measureChars": 57,
+     "max": {
+      "size": 48,
+      "vw": 6.3,
+      "font": "Work Sans",
+      "text": "Campus health and"
+     },
+     "monoShare": 0,
+     "monoProseShare": 0,
+     "monoFamilies": [],
+     "monoSamples": [],
+     "microLabels": 0,
+     "microLabelShare": 0,
+     "microSamples": [],
+     "upperShare": 0,
+     "centerShare": 0,
+     "smallText": 0
+    },
+    "eyebrows": [],
+    "numbered": [],
+    "color": {
+     "bodyBg": "#dfdbd3",
+     "bodyBgHsl": {
+      "h": 40,
+      "s": 0.16,
+      "l": 0.85
+     },
+     "dark": false,
+     "sectionBgs": [],
+     "textColors": [
+      {
+       "color": "#171716",
+       "share": 0.88
+      },
+      {
+       "color": "#57544d",
+       "share": 0.08
+      },
+      {
+       "color": "#ffffff",
+       "share": 0.03
+      }
+     ],
+     "button": {
+      "bg": "#171716",
+      "hsl": {
+       "h": 60,
+       "s": 0.02,
+       "l": 0.09
+      },
+      "fg": "#ffffff"
+     },
+     "lowContrast": []
+    },
+    "buttons": {
+     "count": 2,
+     "inHero": 1,
+     "radius": 0,
+     "height": 56,
+     "withShadow": 0,
+     "withGradient": 0,
+     "mono": 0,
+     "upper": 0,
+     "heroLabels": [
+      "View consultation schedule"
+     ]
+    },
+    "surfaces": {
+     "shadowStatic": 0,
+     "shadowOverlay": 0,
+     "shadowSamples": [],
+     "gradients": 0,
+     "scrims": 0,
+     "gradientSamples": [],
+     "gradientText": 0,
+     "hairlines": 0,
+     "hairlineSamples": [],
+     "outlinedBoxes": 0,
+     "dashed": 0,
+     "blurred": 0,
+     "roundedBoxes": 0,
+     "boxRadius": 0,
+     "squareMedia": 4,
+     "roundedMedia": 0,
+     "mediaRadius": 0,
+     "textShadow": 0,
+     "cardRows": []
+    },
+    "heroMedia": [
+     {
+      "type": "img",
+      "ratio": 0.42
+     }
+    ],
+    "nav": {
+     "links": 0,
+     "fixed": false,
+     "height": 334,
+     "floatingPill": false,
+     "blur": false
+    },
+    "fontsLoaded": [
+     "work sans"
+    ]
+   },
+   "layout": {
+    "viewport": {
+     "w": 768,
+     "h": 1024
+    },
+    "pageH": 5574,
+    "margins": {
+     "left": 24,
+     "right": 24
+    },
+    "sections": [
+     {
+      "sel": "div.stage-column",
+      "tag": "div",
+      "top": 0,
+      "height": 430,
+      "words": 12,
+      "media": 1,
+      "middle": 0,
+      "heading": null,
+      "left": 40,
+      "right": 174,
+      "textLeft": 40,
+      "textRight": 174,
+      "fullBleed": true,
+      "footer": false,
+      "hero": true,
+      "continues": false,
+      "pinned": false
+     },
+     {
+      "sel": "header",
+      "tag": "header",
+      "top": 462,
+      "height": 334,
+      "words": 38,
+      "media": 0,
+      "middle": 0,
+      "heading": {
+       "text": "clinical care.",
+       "size": 48,
+       "tag": "h1"
+      },
+      "left": 24,
+      "right": 223,
+      "textLeft": 24,
+      "textRight": 223,
+      "fullBleed": false,
+      "footer": false,
+      "hero": true,
+      "continues": true,
+      "pinned": false
+     },
+     {
+      "sel": "section#campus-map.section-block",
+      "tag": "section",
+      "top": 868,
+      "height": 1003,
+      "words": 131,
+      "media": 1,
+      "middle": 0,
+      "heading": {
+       "text": "Walking directions across campus.",
+       "size": 34,
+       "tag": "h2"
+      },
+      "left": 24,
+      "right": 24,
+      "textLeft": 24,
+      "textRight": 225,
+      "fullBleed": false,
+      "footer": false,
+      "hero": false,
+      "continues": true,
+      "pinned": false
+     },
+     {
+      "sel": "section#opd-timings.section-block",
+      "tag": "section",
+      "top": 1943,
+      "height": 479,
+      "words": 69,
+      "media": 0,
+      "middle": 19,
+      "heading": {
+       "text": "Consultation timetable.",
+       "size": 34,
+       "tag": "h2"
+      },
+      "left": 24,
+      "right": 27,
+      "textLeft": 24,
+      "textRight": 27,
+      "fullBleed": false,
+      "footer": false,
+      "hero": false,
+      "continues": true,
+      "pinned": false
+     },
+     {
+      "sel": "section#facilities.section-block",
+      "tag": "section",
+      "top": 2494,
+      "height": 943,
+      "words": 128,
+      "media": 1,
+      "middle": 0,
+      "heading": {
+       "text": "Health centre services.",
+       "size": 34,
+       "tag": "h2"
+      },
+      "left": 24,
+      "right": 24,
+      "textLeft": 24,
+      "textRight": 238,
+      "fullBleed": false,
+      "footer": false,
+      "hero": false,
+      "continues": true,
+      "pinned": false
+     },
+     {
+      "sel": "section#doctors.section-block",
+      "tag": "section",
+      "top": 3509,
+      "height": 903,
+      "words": 122,
+      "media": 1,
+      "middle": 0,
+      "heading": {
+       "text": "Medical officers on duty.",
+       "size": 34,
+       "tag": "h2"
+      },
+      "left": 24,
+      "right": 24,
+      "textLeft": 24,
+      "textRight": 240,
+      "fullBleed": false,
+      "footer": false,
+      "hero": false,
+      "continues": true,
+      "pinned": false
+     },
+     {
+      "sel": "section#guidelines.section-block",
+      "tag": "section",
+      "top": 4484,
+      "height": 518,
+      "words": 102,
+      "media": 0,
+      "middle": 0,
+      "heading": {
+       "text": "Academic medical leaves.",
+       "size": 34,
+       "tag": "h2"
+      },
+      "left": 24,
+      "right": 238,
+      "textLeft": 24,
+      "textRight": 238,
+      "fullBleed": false,
+      "footer": false,
+      "hero": false,
+      "continues": true,
+      "pinned": false
+     },
+     {
+      "sel": "section#emergency.section-block",
+      "tag": "section",
+      "top": 5074,
+      "height": 293,
+      "words": 47,
+      "media": 0,
+      "middle": 0,
+      "heading": {
+       "text": "Emergency response.",
+       "size": 34,
+       "tag": "h2"
+      },
+      "left": 24,
+      "right": 239,
+      "textLeft": 24,
+      "textRight": 239,
+      "fullBleed": false,
+      "footer": true,
+      "hero": false,
+      "continues": true,
+      "pinned": false
+     }
+    ],
+    "gaps": [],
+    "h1s": [
+     {
+      "text": "Campus health and clinical care.",
+      "size": 48,
+      "top": 462,
+      "firstScreen": true
+     }
+    ],
+    "edgeText": [],
+    "edges": [
+     {
+      "x": 24,
+      "n": 15
+     },
+     {
+      "x": 36,
+      "n": 1
+     }
+    ],
+    "leftBlocks": 16,
+    "bodySize": 18,
+    "stage": false,
+    "explains": false,
+    "slivers": [],
+    "voidShare": 0,
+    "voidBox": null
+   },
+   "app": null,
+   "consoleErrors": []
+  },
+  {
+   "width": 390,
+   "height": 844,
+   "load": "load",
+   "screens": 8,
+   "filled": [
+    0.66,
+    0.6,
+    0.39,
+    0.54,
+    0.53,
+    0.61,
+    0.58,
+    0.54
+   ],
+   "motion": {
+    "elements": 28,
+    "css": 5,
+    "transitions": 23,
+    "scripted": 0,
+    "videos": 1,
+    "playingVideos": 1
+   },
+   "metrics": {
+    "viewport": {
+     "w": 390,
+     "h": 844
+    },
+    "page": {
+     "height": 6284,
+     "screens": 7.4,
+     "words": 597,
+     "img": 3,
+     "video": 1,
+     "canvas": 0,
+     "svg": 0,
+     "sections": 6,
+     "horizontalOverflow": 0,
+     "overflowCulprits": [],
+     "uiFragments": 0,
+     "uiAbuse": false,
+     "realPictures": 4,
+     "videoCount": 1,
+     "uiPictures": 0,
+     "pictureSamples": [
+      "1920px-A_view_from_the_Back_Campus_of_the_Univer",
+      "photo-1586773860418-d37222d8fce3?auto=format&fit",
+      "photo-1579684385127-1ef15d508118?auto=format&fit"
+     ],
+     "blendText": 0,
+     "sideScrollers": 0,
+     "brokenImages": [],
+     "emoji": [],
+     "videosNoPoster": 0
+    },
+    "hero": {
+     "text": "Campus health and clinical care.",
+     "words": 5,
+     "chars": 32,
+     "lines": 2,
+     "size": 38.6,
+     "vw": 9.9,
+     "font": "Work Sans",
+     "weight": 300,
+     "tracking": -0.035,
+     "leading": 1.05,
+     "upper": false,
+     "italic": false,
+     "mono": false,
+     "align": "left",
+     "position": "center",
+     "widthRatio": 0.88,
+     "top": 386,
+     "tag": "h1",
+     "kind": "heading"
+    },
+    "h1": {
+     "text": "Campus health and clinical care.",
+     "words": 5,
+     "lines": 2,
+     "size": 38.6,
+     "font": "Work Sans"
+    },
+    "headings": [
+     {
+      "text": "Campus health and clinical care.",
+      "words": 5,
+      "chars": 32,
+      "lines": 2,
+      "size": 38.6,
+      "vw": 9.9,
+      "font": "Work Sans",
+      "weight": 300,
+      "tracking": -0.035,
+      "leading": 1.05,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "left",
+      "position": "center",
+      "widthRatio": 0.88,
+      "top": 386,
+      "tag": "h1",
+      "kind": "heading"
+     },
+     {
+      "text": "Walking directions across campus.",
+      "words": 4,
+      "chars": 33,
+      "lines": 2,
+      "size": 28.3,
+      "vw": 7.3,
+      "font": "Work Sans",
+      "weight": 300,
+      "tracking": -0.025,
+      "leading": 1.1,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "left",
+      "position": "center",
+      "widthRatio": 0.88,
+      "top": 865,
+      "tag": "h2",
+      "kind": "heading"
+     },
+     {
+      "text": "Consultation timetable.",
+      "words": 2,
+      "chars": 23,
+      "lines": 1,
+      "size": 28.3,
+      "vw": 7.3,
+      "font": "Work Sans",
+      "weight": 300,
+      "tracking": -0.025,
+      "leading": 1.1,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "left",
+      "position": "center",
+      "widthRatio": 0.88,
+      "top": 2069,
+      "tag": "h2",
+      "kind": "heading"
+     },
+     {
+      "text": "Health centre services.",
+      "words": 3,
+      "chars": 23,
+      "lines": 1,
+      "size": 28.3,
+      "vw": 7.3,
+      "font": "Work Sans",
+      "weight": 300,
+      "tracking": -0.025,
+      "leading": 1.1,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "left",
+      "position": "center",
+      "widthRatio": 0.88,
+      "top": 2756,
+      "tag": "h2",
+      "kind": "heading"
+     },
+     {
+      "text": "Medical officers on duty.",
+      "words": 4,
+      "chars": 25,
+      "lines": 1,
+      "size": 28.3,
+      "vw": 7.3,
+      "font": "Work Sans",
+      "weight": 300,
+      "tracking": -0.025,
+      "leading": 1.1,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "left",
+      "position": "center",
+      "widthRatio": 0.88,
+      "top": 3924,
+      "tag": "h2",
+      "kind": "heading"
+     },
+     {
+      "text": "Academic medical leaves.",
+      "words": 3,
+      "chars": 24,
+      "lines": 1,
+      "size": 28.3,
+      "vw": 7.3,
+      "font": "Work Sans",
+      "weight": 300,
+      "tracking": -0.025,
+      "leading": 1.1,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "left",
+      "position": "center",
+      "widthRatio": 0.88,
+      "top": 5000,
+      "tag": "h2",
+      "kind": "heading"
+     },
+     {
+      "text": "Emergency response.",
+      "words": 2,
+      "chars": 19,
+      "lines": 1,
+      "size": 28.3,
+      "vw": 7.3,
+      "font": "Work Sans",
+      "weight": 300,
+      "tracking": -0.025,
+      "leading": 1.1,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "left",
+      "position": "center",
+      "widthRatio": 0.88,
+      "top": 5698,
+      "tag": "h2",
+      "kind": "heading"
+     }
+    ],
+    "headingSummary": {
+     "count": 7,
+     "maxLines": 2,
+     "over2Lines": 0,
+     "statements": 0,
+     "centered": 0,
+     "medianWords": 3,
+     "mixedFontHeadings": 0
+    },
+    "type": {
+     "families": [
+      {
+       "family": "Work Sans",
+       "share": 1,
+       "mono": false
+      }
+     ],
+     "familyCount": 1,
+     "sizes": [
+      14,
+      17,
+      28,
+      39
+     ],
+     "sizeCount": 4,
+     "notLoaded": [],
+     "body": {
+      "font": "Work Sans",
+      "size": 17,
+      "leading": 1.55,
+      "weight": 400,
+      "tracking": 0,
+      "contrast": 13
+     },
+     "measureChars": 40,
+     "max": {
+      "size": 38.6,
+      "vw": 9.9,
+      "font": "Work Sans",
+      "text": "Campus health and"
+     },
+     "monoShare": 0,
+     "monoProseShare": 0,
+     "monoFamilies": [],
+     "monoSamples": [],
+     "microLabels": 0,
+     "microLabelShare": 0,
+     "microSamples": [],
+     "upperShare": 0,
+     "centerShare": 0,
+     "smallText": 0
+    },
+    "eyebrows": [],
+    "numbered": [],
+    "color": {
+     "bodyBg": "#dfdbd3",
+     "bodyBgHsl": {
+      "h": 40,
+      "s": 0.16,
+      "l": 0.85
+     },
+     "dark": false,
+     "sectionBgs": [],
+     "textColors": [
+      {
+       "color": "#171716",
+       "share": 0.88
+      },
+      {
+       "color": "#57544d",
+       "share": 0.08
+      },
+      {
+       "color": "#ffffff",
+       "share": 0.03
+      }
+     ],
+     "button": {
+      "bg": "#171716",
+      "hsl": {
+       "h": 60,
+       "s": 0.02,
+       "l": 0.09
+      },
+      "fg": "#ffffff"
+     },
+     "lowContrast": []
+    },
+    "buttons": {
+     "count": 2,
+     "inHero": 1,
+     "radius": 0,
+     "height": 54,
+     "withShadow": 0,
+     "withGradient": 0,
+     "mono": 0,
+     "upper": 0,
+     "heroLabels": [
+      "View consultation schedule"
+     ]
+    },
+    "surfaces": {
+     "shadowStatic": 0,
+     "shadowOverlay": 0,
+     "shadowSamples": [],
+     "gradients": 0,
+     "scrims": 0,
+     "gradientSamples": [],
+     "gradientText": 0,
+     "hairlines": 0,
+     "hairlineSamples": [],
+     "outlinedBoxes": 0,
+     "dashed": 0,
+     "blurred": 0,
+     "roundedBoxes": 0,
+     "boxRadius": 0,
+     "squareMedia": 4,
+     "roundedMedia": 0,
+     "mediaRadius": 0,
+     "textShadow": 0,
+     "cardRows": []
+    },
+    "heroMedia": [
+     {
+      "type": "img",
+      "ratio": 0.42
+     }
+    ],
+    "nav": {
+     "links": 0,
+     "fixed": false,
+     "height": 406,
+     "floatingPill": false,
+     "blur": false
+    },
+    "fontsLoaded": [
+     "work sans"
+    ]
+   },
+   "layout": {
+    "viewport": {
+     "w": 390,
+     "h": 844
+    },
+    "pageH": 6284,
+    "margins": {
+     "left": 24,
+     "right": 24
+    },
+    "sections": [
+     {
+      "sel": "div.stage-column",
+      "tag": "div",
+      "top": 0,
+      "height": 354,
+      "words": 12,
+      "media": 1,
+      "middle": 0,
+      "heading": null,
+      "left": 40,
+      "right": 74,
+      "textLeft": 40,
+      "textRight": 74,
+      "fullBleed": true,
+      "footer": false,
+      "hero": true,
+      "continues": false,
+      "pinned": false
+     },
+     {
+      "sel": "header",
+      "tag": "header",
+      "top": 386,
+      "height": 406,
+      "words": 38,
+      "media": 0,
+      "middle": 0,
+      "heading": {
+       "text": "clinical care.",
+       "size": 39,
+       "tag": "h1"
+      },
+      "left": 24,
+      "right": 39,
+      "textLeft": 24,
+      "textRight": 39,
+      "fullBleed": false,
+      "footer": false,
+      "hero": true,
+      "continues": true,
+      "pinned": false
+     },
+     {
+      "sel": "section#campus-map.section-block",
+      "tag": "section",
+      "top": 865,
+      "height": 1132,
+      "words": 131,
+      "media": 1,
+      "middle": 0,
+      "heading": {
+       "text": "Walking directions across campus.",
+       "size": 28,
+       "tag": "h2"
+      },
+      "left": 24,
+      "right": 24,
+      "textLeft": 24,
+      "textRight": 29,
+      "fullBleed": false,
+      "footer": false,
+      "hero": false,
+      "continues": true,
+      "pinned": false
+     },
+     {
+      "sel": "section#opd-timings.section-block",
+      "tag": "section",
+      "top": 2069,
+      "height": 615,
+      "words": 69,
+      "media": 0,
+      "middle": 0,
+      "heading": {
+       "text": "Consultation timetable.",
+       "size": 28,
+       "tag": "h2"
+      },
+      "left": 24,
+      "right": 31,
+      "textLeft": 24,
+      "textRight": 31,
+      "fullBleed": false,
+      "footer": false,
+      "hero": false,
+      "continues": true,
+      "pinned": false
+     },
+     {
+      "sel": "section#facilities.section-block",
+      "tag": "section",
+      "top": 2756,
+      "height": 1096,
+      "words": 128,
+      "media": 1,
+      "middle": 0,
+      "heading": {
+       "text": "Health centre services.",
+       "size": 28,
+       "tag": "h2"
+      },
+      "left": 24,
+      "right": 24,
+      "textLeft": 24,
+      "textRight": 30,
+      "fullBleed": false,
+      "footer": false,
+      "hero": false,
+      "continues": true,
+      "pinned": false
+     },
+     {
+      "sel": "section#doctors.section-block",
+      "tag": "section",
+      "top": 3924,
+      "height": 1005,
+      "words": 122,
+      "media": 1,
+      "middle": 0,
+      "heading": {
+       "text": "Medical officers on duty.",
+       "size": 28,
+       "tag": "h2"
+      },
+      "left": 24,
+      "right": 24,
+      "textLeft": 24,
+      "textRight": 24,
+      "fullBleed": false,
+      "footer": false,
+      "hero": false,
+      "continues": true,
+      "pinned": false
+     },
+     {
+      "sel": "section#guidelines.section-block",
+      "tag": "section",
+      "top": 5000,
+      "height": 625,
+      "words": 102,
+      "media": 0,
+      "middle": 0,
+      "heading": {
+       "text": "Academic medical leaves.",
+       "size": 28,
+       "tag": "h2"
+      },
+      "left": 24,
+      "right": 25,
+      "textLeft": 24,
+      "textRight": 25,
+      "fullBleed": false,
+      "footer": false,
+      "hero": false,
+      "continues": true,
+      "pinned": false
+     },
+     {
+      "sel": "section#emergency.section-block",
+      "tag": "section",
+      "top": 5698,
+      "height": 359,
+      "words": 47,
+      "media": 0,
+      "middle": 0,
+      "heading": {
+       "text": "Emergency response.",
+       "size": 28,
+       "tag": "h2"
+      },
+      "left": 24,
+      "right": 26,
+      "textLeft": 24,
+      "textRight": 26,
+      "fullBleed": false,
+      "footer": true,
+      "hero": false,
+      "continues": true,
+      "pinned": false
+     }
+    ],
+    "gaps": [],
+    "h1s": [
+     {
+      "text": "Campus health and clinical care.",
+      "size": 39,
+      "top": 386,
+      "firstScreen": true
+     }
+    ],
+    "edgeText": [],
+    "edges": [
+     {
+      "x": 24,
+      "n": 15
+     },
+     {
+      "x": 36,
+      "n": 1
+     }
+    ],
+    "leftBlocks": 16,
+    "bodySize": 17,
+    "stage": false,
+    "explains": false,
+    "slivers": [],
+    "voidShare": 0,
+    "voidBox": null
+   },
+   "app": null,
+   "consoleErrors": []
+  }
+ ],
+ "findings": [],
+ "images": [
+  {
+   "viewport": "desktop",
+   "width": 1440,
+   "fold": "D:\\CampusCare\\.taste-skill\\inspect\\desktop-fold.jpg",
+   "pages": [
+    "D:\\CampusCare\\.taste-skill\\inspect\\desktop-page-01.jpg",
+    "D:\\CampusCare\\.taste-skill\\inspect\\desktop-page-02.jpg"
+   ],
+   "film": []
+  },
+  {
+   "viewport": "tablet",
+   "width": 768,
+   "fold": "D:\\CampusCare\\.taste-skill\\inspect\\tablet-fold.jpg",
+   "pages": [
+    "D:\\CampusCare\\.taste-skill\\inspect\\tablet-page-01.jpg"
+   ],
+   "film": []
+  },
+  {
+   "viewport": "mobile",
+   "width": 390,
+   "fold": "D:\\CampusCare\\.taste-skill\\inspect\\mobile-fold.jpg",
+   "pages": [
+    "D:\\CampusCare\\.taste-skill\\inspect\\mobile-page-01.jpg"
+   ],
+   "film": []
+  }
+ ]
+}

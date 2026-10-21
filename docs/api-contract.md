@@ -1197,3 +1197,114 @@ stateDiagram-v2
   - Body: `{ "roll_number": "102203001", "card_uid": "CARD_UID_TEST_888" }`
   - Replaces or registers active card UID in `RFID_CARD` atomically.
 
+---
+
+## 9. Student Portal & Authentication API (SD-1)
+
+### 9.1 Google Student OAuth Login & Account Linking
+- **Route**: `POST /api/auth/google/student`
+- **Authorization**: Public (requires valid Google ID token).
+- **Request Body**:
+  ```json
+  {
+    "credential": "<Google_ID_Token_JWT>"
+  }
+  ```
+- **Server Verification Rules**:
+  - Cryptographically verifies signature, issuer (`accounts.google.com`), and expiry.
+  - Validates audience (`aud`) against configured `GOOGLE_CLIENT_ID`.
+  - Rejects unverified emails (`email_verified == false`) with `401 Unauthorized`.
+  - Enforces official university domain (`@thapar.edu`). Rejects external domains with `403 Forbidden`.
+- **Account Linking Logic**:
+  1. Searches `USER_ACCOUNT` by `google_subject` (`sub`) or `email`.
+  2. If found, links/refreshes `google_subject` and updates `last_login_at = NOW()`.
+  3. If account is disabled, rejects with `403 Forbidden`.
+  4. If no account exists, matches against pre-seeded `STUDENT` roster by derived roll number and provisions `USER_ACCOUNT` linked to the student profile atomically.
+  5. If neither exists, creates `USER_ACCOUNT` and `STUDENT` records in one transaction.
+- **Success Response (`200 OK`)**:
+  ```json
+  {
+    "access_token": "eyJhbGciOi...",
+    "token_type": "bearer",
+    "expires_in_minutes": 1440,
+    "roll_number": "102203001",
+    "name": "Aarav Sharma",
+    "email": "asharma102203001@thapar.edu",
+    "user_id": 42
+  }
+  ```
+
+---
+
+### 9.2 Current Student Telemetry (`GET /api/student/me`)
+- **Route**: `GET /api/student/me`
+- **Authorization**: Authenticated Student only (`role="STUDENT"` required).
+- **Errors**:
+  - `401 Unauthorized`: Unauthenticated or expired token.
+  - `403 Forbidden`: Authenticated as non-student role (e.g. Doctor, Receptionist).
+- **Success Response (`200 OK`)**:
+  ```json
+  {
+    "student": {
+      "userId": 42,
+      "rollNumber": "102203001",
+      "fullName": "Aarav Sharma",
+      "email": "asharma102203001@thapar.edu",
+      "dateOfBirth": "2004-05-15",
+      "sex": "MALE",
+      "phoneNumber": "+91-9876543210",
+      "bloodGroup": "O+",
+      "status": "ACTIVE",
+      "program": "B.E.",
+      "branch": "Computer Engineering",
+      "department": "Computer Science & Engineering",
+      "semester": 6
+    },
+    "allergies": [
+      {
+        "allergyId": 5,
+        "allergen": "Amoxicillin",
+        "reaction": "Urticaria and facial rash",
+        "severity": "MODERATE"
+      }
+    ],
+    "chronicConditions": [
+      "Asthma"
+    ],
+    "currentMedications": [
+      "Salbutamol Inhaler (100mcg As needed)"
+    ],
+    "emergencyContacts": [
+      {
+        "contactId": 1,
+        "name": "Col. R.S. Sharma",
+        "relationship": "Father",
+        "phoneNumber": "+91-9876500011"
+      }
+    ],
+    "activeVisit": {
+      "visitId": 18,
+      "queueEntryId": 32,
+      "doctorId": 1,
+      "doctorName": "Dr. Anil Sharma",
+      "specialty": "General Medicine",
+      "queueSequence": 5,
+      "status": "WAITING_FOR_DOCTOR",
+      "checkedInAt": "2026-10-22T09:15:00",
+      "calledAt": null,
+      "complaint": "Acute sinus headache"
+    }
+  }
+  ```
+
+---
+
+### 9.3 Cross-Student Boundary Protection (`GET /api/student/{roll_number}`)
+- **Route**: `GET /api/student/{roll_number}`
+- **Authorization**: Authenticated user.
+- **Enforcement**:
+  - A student can **only** request their own roll number (`current.roll_number.upper() == roll_number.upper()`).
+  - Requesting another student's record returns `403 Forbidden` (`detail: "Access forbidden: You are not authorized to view other students' records."`).
+  - Medical staff and receptionists may query any student profile.
+
+

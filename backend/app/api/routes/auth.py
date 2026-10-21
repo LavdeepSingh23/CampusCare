@@ -11,6 +11,7 @@ from app.core.config import ACCESS_TOKEN_EXPIRE_MINUTES, GOOGLE_CLIENT_ID
 from app.core.database import get_db_connection
 from app.core.security import create_access_token, verify_password
 from app.core.util import display_name_from_email
+from app.services.student_service import resolve_or_create_student_account
 from app.schemas.auth import (
     GoogleStudentLoginRequest,
     LoginRequest,
@@ -160,6 +161,13 @@ def verify_google_oauth_token(credential: str) -> dict:
                 detail=f"Token audience '{aud}' does not match configured Google Client ID.",
             )
 
+    # Validate Email Verified
+    if idinfo.get("email_verified") is False:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Google account email is not verified. Please verify your email with Google.",
+        )
+
     return idinfo
 
 
@@ -168,6 +176,7 @@ def google_student_login(payload: GoogleStudentLoginRequest):
     """
     Authenticates a Thapar student via verified Google ID token.
     Validates token signature, issuer, audience, and @thapar.edu domain.
+    Deterministically links Google subject with student record.
     """
     idinfo = verify_google_oauth_token(payload.credential)
 
@@ -188,69 +197,15 @@ def google_student_login(payload: GoogleStudentLoginRequest):
     name = idinfo.get("name") or display_name_from_email(email)
     google_sub = idinfo.get("sub") or str(abs(hash(email)))
 
-    match = re.search(r"\d{6,10}", email)
-    derived_roll = match.group(0) if match else email.split("@")[0].upper()
-
-    roll_number = derived_roll
-    user_id = 1000
-
-    connection = get_db_connection()
-    try:
-        with connection.cursor() as cursor:
-            cursor.execute(
-                "SELECT user_id FROM USER_ACCOUNT WHERE email = %s OR google_subject = %s",
-                (email, google_sub),
-            )
-            user_row = cursor.fetchone()
-            if user_row:
-                user_id = user_row["user_id"]
-                cursor.execute(
-                    "UPDATE USER_ACCOUNT SET last_login_at = NOW(), google_subject = %s WHERE user_id = %s",
-                    (google_sub, user_id),
-                )
-                cursor.execute(
-                    "SELECT roll_number, full_name FROM STUDENT WHERE user_id = %s",
-                    (user_id,),
-                )
-                student_row = cursor.fetchone()
-                if student_row:
-                    roll_number = student_row["roll_number"]
-                    if student_row.get("full_name"):
-                        name = student_row["full_name"]
-            else:
-                cursor.execute(
-                    """
-                    INSERT INTO USER_ACCOUNT (email, google_subject, account_type, status, last_login_at)
-                    VALUES (%s, %s, 'STUDENT', 'ACTIVE', NOW())
-                    """,
-                    (email, google_sub),
-                )
-                user_id = cursor.lastrowid
-                cursor.execute(
-                    """
-                    INSERT INTO STUDENT (roll_number, user_id, full_name, date_of_birth, sex, status)
-                    VALUES (%s, %s, %s, '2004-01-01', 'OTHER', 'ACTIVE')
-                    ON DUPLICATE KEY UPDATE full_name = VALUES(full_name)
-                    """,
-                    (derived_roll, user_id, name),
-                )
-                roll_number = derived_roll
-        connection.commit()
-    except Exception as exc:
-        try:
-            connection.rollback()
-        except Exception:
-            pass
-        logger.error("Database error during student login for %s: %s", email, exc)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Database error during student login: {exc}",
-        )
-    finally:
-        try:
-            connection.close()
-        except Exception:
-            pass
+    # Deterministic account resolution and linking via service
+    account = resolve_or_create_student_account(
+        email=email,
+        google_sub=google_sub,
+        name=name,
+    )
+    user_id = account["user_id"]
+    roll_number = account["roll_number"]
+    full_name = account["full_name"]
 
     token = create_access_token(
         {
@@ -265,7 +220,7 @@ def google_student_login(payload: GoogleStudentLoginRequest):
         access_token=token,
         expires_in_minutes=ACCESS_TOKEN_EXPIRE_MINUTES,
         roll_number=roll_number,
-        name=name,
+        name=full_name,
         email=email,
         user_id=user_id,
     )

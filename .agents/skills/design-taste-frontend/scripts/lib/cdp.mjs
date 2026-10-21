@@ -139,9 +139,7 @@ export class Browser {
     await p.send('Page.enable');
     await p.send('Runtime.enable');
     await p.setViewport({ width, height, dsf, mobile });
-    if (reducedMotion) {
-      await p.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] });
-    }
+    await p.send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: reducedMotion ? 'reduce' : 'no-preference' }] });
     return p;
   }
 
