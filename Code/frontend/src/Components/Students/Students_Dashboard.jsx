@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react'
-import { useParams } from 'react-router-dom'
+import { useParams, useNavigate } from 'react-router-dom'
 import campusCareLogo from '../../assets/campuscare-logo.png'
 import {
   Sun,
@@ -30,6 +30,9 @@ import {
   fetchPatientProfile,
   fetchPatientSummary,
   fetchPatientHistory,
+  fetchStudentMe,
+  fetchStudentProfileByRoll,
+  fetchStudentVisitHistoryByRoll,
 } from '../../api'
 
 // ── Constants ──────────────────────────────────────────────────────────
@@ -369,7 +372,7 @@ function LatestPrescription({ latest }) {
 
 // ── Tab views ──────────────────────────────────────────────────────────
 
-function HomeView({ profile, latest, history, hasAllergies, summary, hour, goTo }) {
+function HomeView({ profile, latest, history, hasAllergies, summary, hour, activeVisit, goTo }) {
   const firstName = (profile.name || '').split(' ')[0]
   return (
     <div className="space-y-4">
@@ -398,6 +401,39 @@ function HomeView({ profile, latest, history, hasAllergies, summary, hour, goTo 
           </div>
         </div>
       </section>
+
+      {/* Live OPD Queue Telemetry Card (Active Check-In) */}
+      {activeVisit && (
+        <section className="rounded-3xl bg-gradient-to-r from-teal-800 to-teal-950 text-white p-5 border border-teal-700/80 shadow-md">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
+              <span className="text-xs uppercase font-bold tracking-wider text-teal-200">
+                Live OPD Queue Status
+              </span>
+            </div>
+            <span className="text-xs font-semibold px-3 py-1 rounded-full bg-teal-900 text-teal-100 border border-teal-600/70 shadow-xs">
+              Position #{activeVisit.queueSequence || activeVisit.queueEntryId || '1'}
+            </span>
+          </div>
+          <div className="mt-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pt-2 border-t border-teal-700/60">
+            <div>
+              <p className="text-sm sm:text-base font-semibold text-white">
+                {activeVisit.doctorName || 'Assigned Physician'}
+              </p>
+              <p className="text-xs text-teal-200/80">
+                {activeVisit.specialty || 'General Medicine'}
+                {activeVisit.complaint ? ` • ${activeVisit.complaint}` : ''}
+              </p>
+            </div>
+            <div className="text-xs bg-white/10 px-3 py-1.5 rounded-xl border border-white/15 text-teal-100 self-start sm:self-auto font-medium">
+              {activeVisit.status === 'IN_CONSULTATION'
+                ? '🩺 In Consultation with Doctor'
+                : '⏳ Waiting for Call in Waiting Lounge'}
+            </div>
+          </div>
+        </section>
+      )}
 
       {hasAllergies && <AllergyAlert allergies={summary.allergies} />}
 
@@ -620,43 +656,109 @@ function AccountView({ profile, logout }) {
 // ── Main component ─────────────────────────────────────────────────────
 
 function StudentDashboard() {
-  const { rollNumber } = useParams()
-  const { logout } = useAuth()
+  const { rollNumber: urlRollNumber } = useParams()
+  const { student: authStudent, userRole, logout } = useAuth()
+  const navigate = useNavigate()
 
   const [tab, setTab] = useState('home')
   const [profile, setProfile] = useState({
-    name: '',
-    rollNumber: rollNumber ?? '',
+    name: authStudent?.name || '',
+    rollNumber: authStudent?.rollNumber || '',
     course: '',
     branch: '',
     bloodGroup: '',
-    email: '',
+    email: authStudent?.email || '',
     contact: '',
   })
   const [summary, setSummary] = useState(EMPTY_SUMMARY)
   const [history, setHistory] = useState([])
+  const [activeVisit, setActiveVisit] = useState(null)
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
 
+  const handleLogout = useCallback(() => {
+    logout()
+    navigate('/user_login', { replace: true })
+  }, [logout, navigate])
+
   const loadAll = useCallback(async () => {
-    if (!rollNumber) return
     setLoading(true)
     setLoadError('')
     try {
-      const [profileRes, summaryRes, historyRes] = await Promise.all([
-        fetchPatientProfile(rollNumber),
-        fetchPatientSummary(rollNumber),
-        fetchPatientHistory(rollNumber),
-      ])
-      setProfile((prev) => ({ ...prev, ...profileRes }))
-      setSummary(summaryRes)
-      setHistory(historyRes)
+      if (userRole === 'STUDENT') {
+        // Enforce SD-1: Authenticated session determines student identity, NOT URL params
+        // If a student tries accessing another roll number via URL, normalize to their dashboard
+        if (urlRollNumber && authStudent?.rollNumber && urlRollNumber.toUpperCase() !== authStudent.rollNumber.toUpperCase()) {
+          navigate('/student_dashboard', { replace: true })
+        }
+
+        const [meData, historyRes] = await Promise.all([
+          fetchStudentMe(),
+          fetchStudentVisitHistoryByRoll(authStudent?.rollNumber || ''),
+        ])
+
+        const s = meData?.student || {}
+        setProfile({
+          name: s.fullName || s.name || authStudent?.name || 'Student',
+          rollNumber: s.rollNumber || authStudent?.rollNumber || '',
+          course: s.program || s.course || '',
+          branch: s.branch || s.department || '',
+          bloodGroup: s.bloodGroup || '',
+          email: s.email || authStudent?.email || '',
+          contact: s.phoneNumber || s.contact || '',
+        })
+
+        const conditionsList =
+          meData?.chronicConditions && meData.chronicConditions.length > 0
+            ? meData.chronicConditions.join(', ')
+            : NONE
+        const allergiesList =
+          meData?.allergies && meData.allergies.length > 0
+            ? meData.allergies
+                .map((a) =>
+                  typeof a === 'string'
+                    ? a
+                    : `${a.allergen}${a.severity ? ` (${a.severity})` : ''}`
+                )
+                .join(', ')
+            : NONE
+        const medicationsList =
+          meData?.currentMedications && meData.currentMedications.length > 0
+            ? meData.currentMedications.join(', ')
+            : NONE
+
+        setSummary({
+          conditions: conditionsList,
+          allergies: allergiesList,
+          medication: medicationsList,
+        })
+        setHistory(Array.isArray(historyRes) ? historyRes : [])
+        setActiveVisit(meData?.activeVisit || null)
+      } else {
+        // Medical staff view (Doctor or Receptionist)
+        const targetRoll = urlRollNumber || authStudent?.rollNumber
+        if (!targetRoll) {
+          throw new Error('No student roll number specified')
+        }
+        const [profileRes, summaryRes, historyRes] = await Promise.all([
+          fetchStudentProfileByRoll(targetRoll),
+          fetchPatientSummary(targetRoll),
+          fetchStudentVisitHistoryByRoll(targetRoll),
+        ])
+        setProfile((prev) => ({ ...prev, ...profileRes }))
+        setSummary(summaryRes)
+        setHistory(Array.isArray(historyRes) ? historyRes : [])
+      }
     } catch (err) {
+      if (err.status === 401 || err.message?.includes('Session expired')) {
+        handleLogout()
+        return
+      }
       setLoadError(err.message || 'Failed to load your health record')
     } finally {
       setLoading(false)
     }
-  }, [rollNumber])
+  }, [userRole, urlRollNumber, authStudent, navigate, handleLogout])
 
   useEffect(() => {
     loadAll()
@@ -675,8 +777,9 @@ function StudentDashboard() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#F2F6F5] flex items-center justify-center">
-        <p className="text-slate-400 text-sm">Loading your dashboard…</p>
+      <div className="min-h-screen bg-[#F2F6F5] flex flex-col items-center justify-center gap-3">
+        <div className="w-8 h-8 border-3 border-teal-700 border-t-transparent rounded-full animate-spin" />
+        <p className="text-slate-500 font-medium text-sm">Loading your verified health records…</p>
       </div>
     )
   }
@@ -723,7 +826,7 @@ function StudentDashboard() {
             )}
 
             <button
-              onClick={logout}
+              onClick={handleLogout}
               title="Log out"
               aria-label="Log out"
               className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors cursor-pointer"
@@ -736,7 +839,7 @@ function StudentDashboard() {
         {loadError && (
           <div role="alert" className="bg-red-50 border border-red-200 rounded-2xl px-4 py-3 mb-4 text-sm text-red-700 flex items-center justify-between">
             <span>{loadError}</span>
-            <button onClick={loadAll} className="underline text-xs">Retry</button>
+            <button onClick={loadAll} className="underline text-xs cursor-pointer">Retry</button>
           </div>
         )}
 
@@ -749,13 +852,14 @@ function StudentDashboard() {
               hasAllergies={hasAllergies}
               summary={summary}
               hour={hour}
+              activeVisit={activeVisit}
               goTo={setTab}
             />
           )}
           {tab === 'prescription' && <PrescriptionView latest={latest} history={history} />}
           {tab === 'health' && <HealthView profile={profile} summary={summary} hasAllergies={hasAllergies} />}
           {tab === 'help' && <HelpView />}
-          {tab === 'account' && <AccountView profile={profile} logout={logout} />}
+          {tab === 'account' && <AccountView profile={profile} logout={handleLogout} />}
         </main>
       </div>
 

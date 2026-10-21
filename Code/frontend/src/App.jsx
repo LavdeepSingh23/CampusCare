@@ -12,6 +12,7 @@ function ProtectedRoute({ children, allowedRoles }) {
   if (allowedRoles && !allowedRoles.includes(userRole)) {
     if (userRole === 'DOCTOR') return <Navigate to="/doctor_dashboard" replace />;
     if (userRole === 'RECEPTIONIST') return <Navigate to="/reception_dashboard" replace />;
+    if (userRole === 'STUDENT') return <Navigate to="/student_dashboard" replace />;
     return <Navigate to="/user_login" replace />;
   }
   return children;
@@ -22,6 +23,8 @@ function AppRoutes() {
     <Routes>
       <Route path="/" element={<LandingPage />} />
       <Route path="/user_login" element={<Login />} />
+      <Route path="/login" element={<Navigate to="/user_login" replace />} />
+      <Route path="/student_login" element={<Navigate to="/user_login?role=student" replace />} />
       <Route
         path="/doctor_dashboard"
         element={
@@ -30,7 +33,22 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
-      <Route path="/student_dashboard/:rollNumber" element={<Students_Dashboard />} />
+      <Route
+        path="/student_dashboard"
+        element={
+          <ProtectedRoute allowedRoles={['STUDENT']}>
+            <Students_Dashboard />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/student_dashboard/:rollNumber"
+        element={
+          <ProtectedRoute allowedRoles={['STUDENT', 'DOCTOR', 'RECEPTIONIST']}>
+            <Students_Dashboard />
+          </ProtectedRoute>
+        }
+      />
       <Route
         path="/reception_dashboard"
         element={

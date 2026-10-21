@@ -1,7 +1,23 @@
 import React, { useState, useEffect, useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams, useLocation } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
-import { Eye, EyeOff, Stethoscope, Building2, ArrowLeft, CheckCircle2, AlertCircle, GraduationCap, X, Loader2, UserCheck } from 'lucide-react'
+import {
+  Eye,
+  EyeOff,
+  Stethoscope,
+  Building2,
+  ArrowLeft,
+  CheckCircle2,
+  AlertCircle,
+  GraduationCap,
+  X,
+  Loader2,
+  UserCheck,
+  Clock,
+  ShieldAlert,
+  AlertTriangle,
+  RotateCcw,
+} from 'lucide-react'
 import tiMark from '../../assets/ti-mark.png'
 import campusCareLogo from '../../assets/campuscare-logo.png'
 
@@ -56,11 +72,27 @@ const TestimonialCard = ({ avatarText, name, handle, text, isSpecial }) => (
 
 // --- MAIN LOGIN COMPONENT ---
 
-export default function Login() {
-  const { login, loginReceptionist, loginStudentGoogle, error, setError, loading } = useAuth()
+export default function Login({ defaultMode }) {
+  const {
+    login,
+    loginReceptionist,
+    loginStudentGoogle,
+    error,
+    setError,
+    loading,
+    sessionExpired,
+    setSessionExpired,
+  } = useAuth()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const location = useLocation()
 
-  const [mode, setMode] = useState('doctor') // 'doctor' | 'student' | 'receptionist'
+  const queryRole = searchParams.get('role') || searchParams.get('mode')
+  const initialMode =
+    defaultMode ||
+    (queryRole === 'student' ? 'student' : queryRole === 'receptionist' ? 'receptionist' : location.state?.mode || 'doctor')
+
+  const [mode, setMode] = useState(initialMode) // 'doctor' | 'student' | 'receptionist'
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
@@ -72,14 +104,14 @@ export default function Login() {
   const [showReceptionPassword, setShowReceptionPassword] = useState(false)
   const [receptionKeepSignedIn, setReceptionKeepSignedIn] = useState(false)
 
-  const [rollNumber, setRollNumber] = useState('')
-  const [rollError, setRollError] = useState('')
-
   // Google Student Authorization State
   const [googleError, setGoogleError] = useState('')
+  const [unauthorizedDomain, setUnauthorizedDomain] = useState('')
   const [googleLoading, setGoogleLoading] = useState(false)
   const [showSandboxModal, setShowSandboxModal] = useState(false)
   const [customTestEmail, setCustomTestEmail] = useState('')
+
+  const isSessionExpired = sessionExpired || searchParams.get('expired') === 'true' || location.state?.sessionExpired
 
   const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || ''
   const googleBtnRef = useRef(null)
@@ -140,7 +172,10 @@ export default function Login() {
   function handleSubmit(e) {
     e.preventDefault()
     login(email, password).then((success) => {
-      if (success) navigate('/doctor_dashboard')
+      if (success) {
+        setSessionExpired(false)
+        navigate('/doctor_dashboard')
+      }
     })
   }
 
@@ -149,6 +184,7 @@ export default function Login() {
     setError('')
     const success = await loginReceptionist(receptionEmail, receptionPassword)
     if (success) {
+      setSessionExpired(false)
       navigate('/reception_dashboard')
     }
   }
@@ -163,13 +199,19 @@ export default function Login() {
     if (!response?.credential) return
     setGoogleLoading(true)
     setGoogleError('')
+    setUnauthorizedDomain('')
     try {
       const student = await loginStudentGoogle(response.credential)
       if (student) {
-        navigate(`/student_dashboard/${student.rollNumber}`)
+        setSessionExpired(false)
+        navigate('/student_dashboard')
       }
     } catch (err) {
-      setGoogleError(err.message || 'Google sign-in failed. Please ensure you use an official @thapar.edu account.')
+      const msg = err.message || 'Google sign-in failed. Please ensure you use an official @thapar.edu account.'
+      if (msg.toLowerCase().includes('@thapar.edu') || msg.toLowerCase().includes('domain') || msg.toLowerCase().includes('restricted')) {
+        setUnauthorizedDomain('@thapar.edu required')
+      }
+      setGoogleError(msg)
     } finally {
       setGoogleLoading(false)
     }
@@ -178,13 +220,21 @@ export default function Login() {
   async function handleSimulatedSignIn(simulatedUser) {
     setGoogleLoading(true)
     setGoogleError('')
+    setUnauthorizedDomain('')
     setShowSandboxModal(false)
     try {
       const student = await loginStudentGoogle(null, simulatedUser)
       if (student) {
-        navigate(`/student_dashboard/${student.rollNumber}`)
+        setSessionExpired(false)
+        navigate('/student_dashboard')
       }
     } catch (err) {
+      const email = simulatedUser?.email || ''
+      const isDomainMismatch = !email.toLowerCase().endsWith('@thapar.edu')
+      if (isDomainMismatch) {
+        const d = email.includes('@') ? '@' + email.split('@')[1] : 'unauthorized domain'
+        setUnauthorizedDomain(d)
+      }
       setGoogleError(err.message || 'Domain rejected. Only @thapar.edu accounts are permitted.')
     } finally {
       setGoogleLoading(false)
@@ -193,6 +243,7 @@ export default function Login() {
 
   function handleGoogleSignInClick() {
     setGoogleError('')
+    setUnauthorizedDomain('')
     if (googleClientId && window.google?.accounts?.id) {
       try {
         window.google.accounts.id.prompt((notification) => {
@@ -273,6 +324,8 @@ export default function Login() {
                 onClick={() => {
                   setMode('doctor')
                   setError('')
+                  setGoogleError('')
+                  setUnauthorizedDomain('')
                 }}
                 className={`px-4 sm:px-5 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer ${
                   mode === 'doctor'
@@ -287,6 +340,8 @@ export default function Login() {
                 onClick={() => {
                   setMode('student')
                   setError('')
+                  setGoogleError('')
+                  setUnauthorizedDomain('')
                 }}
                 className={`px-4 sm:px-5 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer ${
                   mode === 'student'
@@ -301,6 +356,8 @@ export default function Login() {
                 onClick={() => {
                   setMode('receptionist')
                   setError('')
+                  setGoogleError('')
+                  setUnauthorizedDomain('')
                 }}
                 className={`px-4 sm:px-5 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer ${
                   mode === 'receptionist'
@@ -311,6 +368,19 @@ export default function Login() {
                 Receptionist Portal
               </button>
             </div>
+
+            {/* Expired Session Alert */}
+            {isSessionExpired && (
+              <div className="bg-amber-50 border border-amber-300 rounded-2xl p-4 text-xs text-amber-950 font-medium flex items-start gap-3 shadow-xs">
+                <Clock className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-bold text-amber-950">Session Expired</p>
+                  <p className="mt-0.5 text-amber-800 leading-relaxed">
+                    Your previous session has expired. For your medical privacy, please authenticate again with your institutional credentials.
+                  </p>
+                </div>
+              </div>
+            )}
 
             {/* Error Message */}
             {(mode === 'doctor' || mode === 'receptionist') && error && (
@@ -528,24 +598,100 @@ export default function Login() {
                       TIET Student Single Sign-On
                     </h3>
                     <p className="text-[11px] text-teal-800/80 leading-relaxed mt-0.5">
-                      Log in with your official Thapar University Google account to view prescriptions, medical history, and queue position.
+                      Log in with your official Thapar University Google account to view prescriptions, medical history, and OPD queue telemetry.
                     </p>
                   </div>
                 </div>
 
-                {/* Domain Mismatch Alert */}
-                {googleError && (
-                  <div className="bg-red-50 border border-red-200 rounded-2xl p-4 text-xs text-red-700 font-medium flex items-start gap-2.5">
-                    <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
-                    <div>
-                      <p className="font-semibold text-red-800">Thapar Account Required</p>
-                      <p className="mt-0.5 text-red-700 leading-relaxed">{googleError}</p>
+                {/* 1. LOADING STATE */}
+                {googleLoading && (
+                  <div className="rounded-2xl border border-teal-300 bg-teal-50/90 p-4 flex items-center gap-3 animate-pulse shadow-xs">
+                    <Loader2 className="w-5 h-5 text-teal-700 animate-spin shrink-0" />
+                    <div className="text-xs">
+                      <p className="font-bold text-teal-950">Verifying Thapar Credentials…</p>
+                      <p className="text-teal-800 mt-0.5">Authorizing Google Workspace session & fetching student telemetry.</p>
                     </div>
                   </div>
                 )}
 
+                {/* 2. EXPIRED-SESSION STATE */}
+                {isSessionExpired && !googleLoading && (
+                  <div className="rounded-2xl border border-amber-300 bg-amber-50 p-4 text-xs text-amber-950 flex items-start gap-3 shadow-xs">
+                    <Clock className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-bold text-amber-950">Session Expired</p>
+                      <p className="mt-0.5 text-amber-800 leading-relaxed">
+                        Your previous session has timed out. Please authenticate with your university account to resume your dashboard.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {/* 3. UNAUTHORIZED-DOMAIN STATE */}
+                {unauthorizedDomain && !googleLoading && (
+                  <div className="rounded-2xl border-2 border-rose-300 bg-rose-50/90 p-4 text-xs text-rose-950 flex flex-col gap-3 shadow-xs">
+                    <div className="flex items-start gap-2.5">
+                      <ShieldAlert className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+                      <div>
+                        <p className="font-bold text-rose-950 text-sm">Unauthorized Domain Detected</p>
+                        <p className="mt-1 text-rose-800 leading-relaxed">
+                          Access is restricted to verified <strong>@thapar.edu</strong> Google accounts. Personal accounts cannot access student health records.
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 pt-1 border-t border-rose-200/80">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setUnauthorizedDomain('')
+                          setGoogleError('')
+                          handleGoogleSignInClick()
+                        }}
+                        className="px-3 py-1.5 rounded-xl bg-rose-700 hover:bg-rose-800 text-white font-semibold text-xs transition-colors cursor-pointer"
+                      >
+                        Try @thapar.edu Account
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setUnauthorizedDomain('')
+                          setGoogleError('')
+                          setShowSandboxModal(true)
+                        }}
+                        className="px-3 py-1.5 rounded-xl bg-white border border-rose-300 text-rose-800 hover:bg-rose-100 font-semibold text-xs transition-colors cursor-pointer"
+                      >
+                        Dev Sandbox
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* 4. AUTHENTICATION-ERROR STATE */}
+                {googleError && !unauthorizedDomain && !googleLoading && (
+                  <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-xs text-red-800 flex items-start justify-between gap-3 shadow-xs">
+                    <div className="flex items-start gap-2.5">
+                      <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+                      <div>
+                        <p className="font-bold text-red-950">Authentication Failed</p>
+                        <p className="mt-0.5 text-red-700 leading-relaxed">{googleError}</p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setGoogleError('')
+                        handleGoogleSignInClick()
+                      }}
+                      className="px-2.5 py-1 rounded-lg bg-red-100 hover:bg-red-200 text-red-800 text-xs font-semibold flex items-center gap-1 shrink-0 cursor-pointer transition-colors"
+                    >
+                      <RotateCcw className="w-3 h-3" />
+                      Retry
+                    </button>
+                  </div>
+                )}
+
                 {/* Official Google Workspace Sign-In Area */}
-                <div className="w-full flex flex-col items-center gap-3">
+                <div className="w-full flex flex-col items-center gap-3 pt-1">
                   {/* Official Google GIS Button Container */}
                   <div
                     ref={googleBtnRef}
@@ -558,7 +704,7 @@ export default function Login() {
                       type="button"
                       onClick={handleGoogleSignInClick}
                       disabled={googleLoading}
-                      className="w-full flex items-center justify-between gap-3 border-2 border-slate-200/90 rounded-2xl p-3.5 hover:border-teal-600 hover:bg-teal-50/40 text-slate-800 font-semibold text-xs sm:text-sm transition-all shadow-sm hover:shadow-md cursor-pointer group"
+                      className="w-full flex items-center justify-between gap-3 border-2 border-slate-200/90 rounded-2xl p-3.5 hover:border-teal-600 hover:bg-teal-50/40 text-slate-800 font-semibold text-xs sm:text-sm transition-all shadow-sm hover:shadow-md cursor-pointer group disabled:opacity-60"
                     >
                       <div className="flex items-center gap-3">
                         <div className="p-1.5 rounded-xl bg-white shadow-xs group-hover:scale-105 transition-transform">
@@ -579,13 +725,6 @@ export default function Login() {
                     </button>
                   )}
 
-                  {googleLoading && (
-                    <div className="flex items-center gap-2 text-xs text-teal-700 font-medium py-1">
-                      <Loader2 className="w-4 h-4 animate-spin text-teal-600" />
-                      <span>Verifying your Thapar account…</span>
-                    </div>
-                  )}
-
                   <div className="flex items-center justify-between w-full px-1 pt-0.5">
                     <span className="text-[10px] font-semibold text-teal-700 bg-teal-50 px-2 py-0.5 rounded-full border border-teal-200/80">
                       @thapar.edu only
@@ -593,55 +732,23 @@ export default function Login() {
                     <button
                       type="button"
                       onClick={() => setShowSandboxModal(true)}
-                      className="text-[11px] text-slate-400 hover:text-teal-700 transition-colors underline cursor-pointer"
+                      className="text-[11px] text-slate-500 hover:text-teal-700 font-medium transition-colors underline cursor-pointer"
                     >
                       Dev Sandbox Chooser
                     </button>
                   </div>
                 </div>
 
-                {/* Divider */}
-                <div className="relative flex items-center justify-center my-2">
-                  <span className="w-full border-t border-slate-200"></span>
-                  <span className="px-3 text-xs text-slate-400 bg-white absolute">
-                    Or direct ID lookup
-                  </span>
-                </div>
-
-                {/* Roll Number Form */}
-                <form className="space-y-3" onSubmit={handleStudentSubmit}>
-                  <div>
-                    <label className="text-xs font-semibold text-slate-600 mb-1.5 block">
-                      University Roll Number
-                    </label>
-                    <GlassInputWrapper>
-                      <input
-                        name="rollNumber"
-                        type="text"
-                        value={rollNumber}
-                        onChange={(e) => {
-                          setRollNumber(e.target.value)
-                          if (rollError) setRollError('')
-                        }}
-                        placeholder="e.g. 102403499 or CS21B045"
-                        className="w-full bg-transparent text-sm p-4 rounded-2xl focus:outline-none text-slate-900 placeholder:text-slate-400"
-                      />
-                    </GlassInputWrapper>
+                {/* Account Security Information Card */}
+                <div className="rounded-2xl border border-slate-200/80 bg-slate-50/70 p-4 space-y-2 mt-2">
+                  <div className="flex items-center gap-2 text-xs font-semibold text-slate-700">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-teal-700" />
+                    <span>Identity-Linked Medical Records</span>
                   </div>
-
-                  {rollError && (
-                    <div className="bg-red-50 border border-red-200 rounded-2xl px-4 py-3 text-xs text-red-700 font-medium">
-                      {rollError}
-                    </div>
-                  )}
-
-                  <button
-                    type="submit"
-                    className="w-full rounded-2xl bg-slate-100 hover:bg-slate-200 py-3 font-semibold text-slate-700 transition-all cursor-pointer text-xs"
-                  >
-                    View My Student Dashboard
-                  </button>
-                </form>
+                  <p className="text-[11px] text-slate-500 leading-relaxed">
+                    Under CampusCare security protocols, your health files are cryptographically linked to your Thapar SSO identity. Direct unauthenticated URL access is prohibited to guarantee personal privacy.
+                  </p>
+                </div>
               </div>
             )}
 

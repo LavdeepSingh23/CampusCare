@@ -23,15 +23,17 @@ export function AuthProvider({ children }) {
   const [userRole, setUserRole] = useState(() => (getToken() ? getUserRole() : null))
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [sessionExpired, setSessionExpired] = useState(false)
 
   useEffect(() => {
-    // If any API call gets a 401 (expired/invalid token), drop back to the login screen.
+    // If any API call gets a 401 (expired/invalid token), drop back to the login screen with expired notice.
     setUnauthorizedHandler(() => {
       clearSession()
       setDoctor(null)
       setStudent(null)
       setReceptionist(null)
       setUserRole(null)
+      setSessionExpired(true)
     })
   }, [])
 
@@ -139,6 +141,7 @@ export function AuthProvider({ children }) {
     setReceptionist(null)
     setUserRole(null)
     setError('')
+    setSessionExpired(false)
   }
 
   return (
@@ -155,6 +158,8 @@ export function AuthProvider({ children }) {
         error,
         setError,
         loading,
+        sessionExpired,
+        setSessionExpired,
         isAuthenticated: !!doctor || !!student || !!receptionist,
       }}
     >
