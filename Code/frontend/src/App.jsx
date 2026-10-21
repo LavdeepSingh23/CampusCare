@@ -4,6 +4,7 @@ import LandingPage from './Components/Landing/landing_page';
 import Login from './Components/Auth/Login';
 import Doctors_Dashboard from './Components/Doctors/Doctors_Dashboard';
 import Students_Dashboard from './Components/Students/Students_Dashboard';
+import StudentProfileOnboarding from './Components/Students/StudentProfileOnboarding';
 import ReceptionDashboard from './Components/Receptionist/receptionist';
 
 function ProtectedRoute({ children, allowedRoles }) {
@@ -49,6 +50,23 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
+      <Route
+        path="/student/onboarding"
+        element={
+          <ProtectedRoute allowedRoles={['STUDENT']}>
+            <StudentProfileOnboarding isOnboarding={true} />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/student/profile"
+        element={
+          <ProtectedRoute allowedRoles={['STUDENT']}>
+            <StudentProfileOnboarding isOnboarding={false} />
+          </ProtectedRoute>
+        }
+      />
+      <Route path="/student_profile" element={<Navigate to="/student/profile" replace />} />
       <Route
         path="/reception_dashboard"
         element={
