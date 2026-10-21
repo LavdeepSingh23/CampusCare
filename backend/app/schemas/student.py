@@ -1,5 +1,5 @@
 """
-Pydantic schemas for Student Identity, Profile, and Telemetry (SD-1).
+Pydantic schemas for Student Identity, Profile, Telemetry, and Onboarding (SD-1 & SD-2).
 """
 
 from typing import List, Optional
@@ -49,6 +49,14 @@ class StudentActiveVisit(BaseModel):
     complaint: Optional[str] = None
 
 
+class ProfileCompletionStatus(BaseModel):
+    isComplete: bool
+    percentage: int
+    status: str  # "INCOMPLETE" | "COMPLETED"
+    missingFields: List[str] = []
+    completedFields: List[str] = []
+
+
 class StudentMeResponse(BaseModel):
     student: StudentIdentity
     allergies: List[StudentAllergyItem] = []
@@ -56,6 +64,7 @@ class StudentMeResponse(BaseModel):
     currentMedications: List[str] = []
     emergencyContacts: List[StudentEmergencyContactItem] = []
     activeVisit: Optional[StudentActiveVisit] = None
+    profileCompletion: Optional[ProfileCompletionStatus] = None
 
 
 class StudentProfileHistoryItem(BaseModel):
@@ -70,3 +79,50 @@ class StudentProfileHistoryItem(BaseModel):
     completedAt: Optional[str] = None
     medicines: List[str] = []
 
+
+# ==========================================
+# SD-2: Onboarding & Profile Update Schemas
+# ==========================================
+
+class EmergencyContactInput(BaseModel):
+    name: str = Field(..., min_length=2, max_length=150, description="Full name of emergency contact")
+    relationship: str = Field(..., min_length=2, max_length=50, description="Relationship to student (e.g. Father, Mother, Guardian)")
+    phoneNumber: str = Field(..., min_length=7, max_length=20, description="Primary contact phone number")
+
+
+class AllergyInput(BaseModel):
+    allergen: str = Field(..., min_length=1, max_length=150, description="Name of allergen (e.g. Penicillin, Peanuts)")
+    reaction: Optional[str] = Field(None, max_length=255, description="Reaction symptoms (e.g. Hives, Anaphylaxis)")
+    severity: Optional[str] = Field("MILD", description="MILD, MODERATE, SEVERE, UNKNOWN")
+
+
+class MedicationInput(BaseModel):
+    medicineName: str = Field(..., min_length=1, max_length=150, description="Brand or generic medicine name")
+    strength: Optional[str] = Field(None, max_length=50, description="e.g. 500mg, 10mg")
+    dose: Optional[str] = Field(None, max_length=50, description="e.g. 1 tablet OD, 2 puffs PRN")
+    reason: Optional[str] = Field(None, max_length=255, description="Indication for use")
+
+
+class StudentProfileUpdateRequest(BaseModel):
+    phoneNumber: Optional[str] = Field(None, max_length=20, description="Student personal phone number")
+    dateOfBirth: Optional[str] = Field(None, description="Date of birth in YYYY-MM-DD format")
+    sex: Optional[str] = Field(None, description="Gender identity: MALE, FEMALE, OTHER")
+    bloodGroup: Optional[str] = Field(None, description="Blood group: A+, A-, B+, B-, AB+, AB-, O+, O-")
+    emergencyContact: Optional[EmergencyContactInput] = None
+    
+    # Declarations for medical history
+    hasAllergies: Optional[bool] = None
+    allergies: Optional[List[AllergyInput]] = None
+    
+    hasChronicConditions: Optional[bool] = None
+    chronicConditions: Optional[List[str]] = None
+    
+    hasCurrentMedications: Optional[bool] = None
+    currentMedications: Optional[List[MedicationInput]] = None
+
+
+class StudentProfileUpdateResponse(BaseModel):
+    success: bool = True
+    message: str
+    profileCompletion: ProfileCompletionStatus
+    data: StudentMeResponse

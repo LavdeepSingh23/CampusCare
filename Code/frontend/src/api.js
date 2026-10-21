@@ -628,3 +628,42 @@ export async function fetchStudentVisitHistoryByRoll(rollNumber) {
   }
 }
 
+export async function updateStudentProfile(payload) {
+  try {
+    return await request('/api/student/profile', {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    })
+  } catch (err) {
+    if (DEMO_MODE || getToken()?.startsWith('demo-') || err.message?.includes('Failed to fetch')) {
+      return mockDelay({
+        success: true,
+        message: 'Student profile updated successfully (demo).',
+        profileCompletion: {
+          isComplete: true,
+          percentage: 100,
+          status: 'COMPLETED',
+          missingFields: [],
+          completedFields: [
+            'Phone Number',
+            'Date of Birth',
+            'Gender Identity',
+            'Blood Group',
+            'Emergency Contact',
+            'Allergy Declaration',
+            'Chronic Condition Declaration',
+            'Medication Declaration',
+          ],
+        },
+        data: {
+          student: {
+            ...payload,
+            status: 'ACTIVE',
+          },
+        },
+      })
+    }
+    throw err
+  }
+}
+

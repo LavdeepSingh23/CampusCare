@@ -1,15 +1,20 @@
 """
-Service layer for Student identity, profile telemetry, and account linking (SD-1).
+Service layer for Student identity, profile telemetry, account linking, and onboarding (SD-1 & SD-2).
 """
 
 import logging
 import re
+from datetime import date, datetime
 from typing import Optional, Dict, Any, List
 
 from fastapi import HTTPException, status
 from app.core.database import get_db_connection
 
 logger = logging.getLogger(__name__)
+
+VALID_BLOOD_GROUPS = {"A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"}
+VALID_SEX_OPTIONS = {"MALE", "FEMALE", "OTHER"}
+VALID_SEVERITY_OPTIONS = {"MILD", "MODERATE", "SEVERE", "UNKNOWN"}
 
 
 def derive_academic_info(roll_number: str) -> Dict[str, Any]:
@@ -52,6 +57,100 @@ def derive_academic_info(roll_number: str) -> Dict[str, Any]:
         "branch": branch,
         "department": department,
         "semester": semester,
+    }
+
+
+def calculate_profile_completion(
+    identity: Dict[str, Any],
+    emergency_contacts: List[Dict[str, Any]],
+    medical_status: Dict[str, str],
+) -> Dict[str, Any]:
+    """
+    Computes checklist items, completion percentage, and completion status.
+    Checklist (8 items total, each 12.5%):
+    1. Personal Phone Number
+    2. Date of Birth
+    3. Gender Identity
+    4. Blood Group
+    5. Emergency Contact
+    6. Allergy Status Declaration
+    7. Chronic Condition Status Declaration
+    8. Current Medication Status Declaration
+    """
+    completed_fields = []
+    missing_fields = []
+
+    # 1. Phone Number
+    phone = identity.get("phoneNumber")
+    if phone and len(re.sub(r"\D", "", str(phone))) >= 10:
+        completed_fields.append("Phone Number")
+    else:
+        missing_fields.append("Phone Number")
+
+    # 2. Date of Birth
+    dob = identity.get("dateOfBirth")
+    if dob:
+        completed_fields.append("Date of Birth")
+    else:
+        missing_fields.append("Date of Birth")
+
+    # 3. Gender / Sex
+    sex = identity.get("sex")
+    if sex and sex in VALID_SEX_OPTIONS:
+        completed_fields.append("Gender Identity")
+    else:
+        missing_fields.append("Gender Identity")
+
+    # 4. Blood Group
+    bg = identity.get("bloodGroup")
+    if bg and bg.strip().upper() in VALID_BLOOD_GROUPS:
+        completed_fields.append("Blood Group")
+    else:
+        missing_fields.append("Blood Group")
+
+    # 5. Emergency Contact
+    if emergency_contacts and len(emergency_contacts) > 0:
+        c = emergency_contacts[0]
+        if c.get("name") and c.get("phoneNumber") and c.get("relationship"):
+            completed_fields.append("Emergency Contact")
+        else:
+            missing_fields.append("Emergency Contact")
+    else:
+        missing_fields.append("Emergency Contact")
+
+    # 6. Allergy Declaration
+    allergy_stat = medical_status.get("allergy_status", "NOT_REPORTED")
+    if allergy_stat in ("NONE_REPORTED", "HAS_RECORDS"):
+        completed_fields.append("Allergy Declaration")
+    else:
+        missing_fields.append("Allergy Declaration")
+
+    # 7. Chronic Condition Declaration
+    cond_stat = medical_status.get("condition_status", "NOT_REPORTED")
+    if cond_stat in ("NONE_REPORTED", "HAS_RECORDS"):
+        completed_fields.append("Chronic Condition Declaration")
+    else:
+        missing_fields.append("Chronic Condition Declaration")
+
+    # 8. Medication Declaration
+    med_stat = medical_status.get("medication_status", "NOT_REPORTED")
+    if med_stat in ("NONE_REPORTED", "HAS_RECORDS"):
+        completed_fields.append("Medication Declaration")
+    else:
+        missing_fields.append("Medication Declaration")
+
+    total_checks = 8
+    passed_checks = len(completed_fields)
+    percentage = int(round((passed_checks / float(total_checks)) * 100))
+    is_complete = (passed_checks == total_checks)
+    status_label = "COMPLETED" if is_complete else "INCOMPLETE"
+
+    return {
+        "isComplete": is_complete,
+        "percentage": percentage,
+        "status": status_label,
+        "missingFields": missing_fields,
+        "completedFields": completed_fields,
     }
 
 
@@ -131,7 +230,7 @@ def resolve_or_create_student_account(
                 else:
                     # Check if pre-seeded by derived_roll
                     cur.execute(
-                        "SELECT roll_number, status FROM STUDENT WHERE roll_number = %s FOR UPDATE",
+                        "SELECT roll_number, status, full_name FROM STUDENT WHERE roll_number = %s FOR UPDATE",
                         (derived_roll,),
                     )
                     pre_seeded = cur.fetchone()
@@ -141,7 +240,7 @@ def resolve_or_create_student_account(
                             (user_id, name, derived_roll),
                         )
                         roll_number = derived_roll
-                        full_name = name
+                        full_name = pre_seeded["full_name"] or name
                     else:
                         cur.execute(
                             """
@@ -197,6 +296,15 @@ def resolve_or_create_student_account(
                     roll_number = derived_roll
                     full_name = name
 
+            # Ensure default MEDICAL_PROFILE_STATUS row exists
+            cur.execute(
+                """
+                INSERT IGNORE INTO MEDICAL_PROFILE_STATUS (roll_number, allergy_status, condition_status, medication_status, updated_at)
+                VALUES (%s, 'NOT_REPORTED', 'NOT_REPORTED', 'NOT_REPORTED', NOW())
+                """,
+                (roll_number,),
+            )
+
         conn.commit()
     except HTTPException:
         try:
@@ -228,7 +336,7 @@ def resolve_or_create_student_account(
 def get_student_me_telemetry(user_id: int, roll_number: str) -> Dict[str, Any]:
     """
     Fetches full student profile telemetry, medical summary, emergency contacts,
-    and active OPD visit status for the current student.
+    profile completion status, and active OPD visit status for the current student.
     """
     conn = get_db_connection()
     try:
@@ -345,7 +453,29 @@ def get_student_me_telemetry(user_id: int, roll_number: str) -> Dict[str, Any]:
                 for r in contact_rows
             ]
 
-            # 6. Active OPD Consultation / Queue Entry (if any)
+            # 6. Medical Profile Status (Onboarding completeness tracking)
+            cur.execute(
+                """
+                SELECT allergy_status, condition_status, medication_status
+                FROM MEDICAL_PROFILE_STATUS
+                WHERE roll_number = %s
+                LIMIT 1
+                """,
+                (roll_number,),
+            )
+            med_stat_row = cur.fetchone() or {
+                "allergy_status": "NOT_REPORTED",
+                "condition_status": "NOT_REPORTED",
+                "medication_status": "NOT_REPORTED",
+            }
+
+            profile_completion = calculate_profile_completion(
+                identity=identity,
+                emergency_contacts=contacts,
+                medical_status=med_stat_row,
+            )
+
+            # 7. Active OPD Consultation / Queue Entry (if any)
             cur.execute(
                 """
                 SELECT v.visit_id, v.doctor_id, v.status AS visit_status, v.checked_in_at,
@@ -396,6 +526,360 @@ def get_student_me_telemetry(user_id: int, roll_number: str) -> Dict[str, Any]:
                 "currentMedications": medications,
                 "emergencyContacts": contacts,
                 "activeVisit": active_visit,
+                "profileCompletion": profile_completion,
             }
     finally:
         conn.close()
+
+
+def update_student_profile(
+    user_id: int,
+    roll_number: str,
+    payload: Dict[str, Any],
+) -> Dict[str, Any]:
+    """
+    SD-2: Atomically updates student demographic data, primary emergency contact,
+    and medical declaration status (allergies, chronic conditions, medications).
+    
+    Guarantees:
+    - Strictly preserves authoritative institutional fields (roll_number, user_id, status, email, roster full_name).
+    - Enforces demographic validation (DOB reasonable age, Blood Group enum, Phone length).
+    - Fully transactional: updates STUDENT, EMERGENCY_CONTACT, and MEDICAL_PROFILE_STATUS atomically.
+    """
+    clean_roll = roll_number.strip().upper()
+
+    # 1. Field-level validation
+    # Phone number validation
+    phone_number = payload.get("phoneNumber")
+    if phone_number is not None:
+        clean_phone = phone_number.strip()
+        phone_digits = re.sub(r"\D", "", clean_phone)
+        if len(phone_digits) < 10 or len(phone_digits) > 15:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid phone number: must contain between 10 and 15 digits.",
+            )
+        phone_number = clean_phone
+
+    # Date of birth validation
+    dob_str = payload.get("dateOfBirth")
+    if dob_str is not None:
+        try:
+            dob_date = datetime.strptime(dob_str.strip(), "%Y-%m-%d").date()
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid date of birth format. Must be YYYY-MM-DD.",
+            )
+        today = date.today()
+        if dob_date > today:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Date of birth cannot be in the future.",
+            )
+        age = (today - dob_date).days // 365
+        if age < 15 or age > 100:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid date of birth: student age must be between 15 and 100 years (calculated: {age}).",
+            )
+        dob_str = dob_date.isoformat()
+
+    # Sex validation
+    sex = payload.get("sex")
+    if sex is not None:
+        sex = sex.strip().upper()
+        if sex not in VALID_SEX_OPTIONS:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid sex: must be one of {sorted(list(VALID_SEX_OPTIONS))}.",
+            )
+
+    # Blood group validation
+    blood_group = payload.get("bloodGroup")
+    if blood_group is not None:
+        blood_group = blood_group.strip().upper()
+        if blood_group not in VALID_BLOOD_GROUPS:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid blood group: must be one of {sorted(list(VALID_BLOOD_GROUPS))}.",
+            )
+
+    # Emergency Contact validation
+    emergency_contact = payload.get("emergencyContact")
+    if emergency_contact is not None:
+        c_name = (emergency_contact.get("name") or "").strip()
+        c_rel = (emergency_contact.get("relationship") or "").strip()
+        c_phone = (emergency_contact.get("phoneNumber") or "").strip()
+
+        if len(c_name) < 2:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Emergency contact name must be at least 2 characters.",
+            )
+        if len(c_rel) < 2:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Emergency contact relationship must be at least 2 characters.",
+            )
+        c_digits = re.sub(r"\D", "", c_phone)
+        if len(c_digits) < 7 or len(c_digits) > 15:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Emergency contact phone number must contain between 7 and 15 digits.",
+            )
+        emergency_contact = {
+            "name": c_name,
+            "relationship": c_rel,
+            "phoneNumber": c_phone,
+        }
+
+    # Declarations extraction
+    has_allergies = payload.get("hasAllergies")
+    allergies = payload.get("allergies")
+    if has_allergies is True and allergies:
+        for al in allergies:
+            if not (al.get("allergen") or "").strip():
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Allergen name cannot be empty.",
+                )
+            sev = (al.get("severity") or "MILD").strip().upper()
+            if sev not in VALID_SEVERITY_OPTIONS:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Invalid allergy severity: must be one of {sorted(list(VALID_SEVERITY_OPTIONS))}.",
+                )
+
+    has_conditions = payload.get("hasChronicConditions")
+    chronic_conditions = payload.get("chronicConditions")
+
+    has_medications = payload.get("hasCurrentMedications")
+    current_medications = payload.get("currentMedications")
+    if has_medications is True and current_medications:
+        for med in current_medications:
+            if not (med.get("medicineName") or "").strip():
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Medication medicine name cannot be empty.",
+                )
+
+    # 2. Database Atomic Execution
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            # Check student exists and lock row
+            cur.execute(
+                "SELECT roll_number, user_id, status FROM STUDENT WHERE roll_number = %s LIMIT 1 FOR UPDATE",
+                (clean_roll,),
+            )
+            st_row = cur.fetchone()
+            if not st_row:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Student record '{clean_roll}' not found.",
+                )
+            if st_row["status"] == "INACTIVE":
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Student record is inactive. Cannot update profile.",
+                )
+
+            # 2.1 Update STUDENT demographic columns
+            student_cols = []
+            student_vals = []
+            if phone_number is not None:
+                student_cols.append("phone_number = %s")
+                student_vals.append(phone_number)
+            if dob_str is not None:
+                student_cols.append("date_of_birth = %s")
+                student_vals.append(dob_str)
+            if sex is not None:
+                student_cols.append("sex = %s")
+                student_vals.append(sex)
+            if blood_group is not None:
+                student_cols.append("blood_group = %s")
+                student_vals.append(blood_group)
+
+            if student_cols:
+                student_cols.append("updated_at = NOW()")
+                sql_update_student = f"UPDATE STUDENT SET {', '.join(student_cols)} WHERE roll_number = %s"
+                student_vals.append(clean_roll)
+                cur.execute(sql_update_student, tuple(student_vals))
+
+            # 2.2 Upsert EMERGENCY_CONTACT
+            if emergency_contact is not None:
+                cur.execute(
+                    """
+                    INSERT INTO EMERGENCY_CONTACT (roll_number, name, relationship, phone_number, updated_at)
+                    VALUES (%s, %s, %s, %s, NOW())
+                    ON DUPLICATE KEY UPDATE
+                        name = VALUES(name),
+                        relationship = VALUES(relationship),
+                        phone_number = VALUES(phone_number),
+                        updated_at = NOW()
+                    """,
+                    (
+                        clean_roll,
+                        emergency_contact["name"],
+                        emergency_contact["relationship"],
+                        emergency_contact["phoneNumber"],
+                    ),
+                )
+
+            # 2.3 Fetch existing medical profile status
+            cur.execute(
+                """
+                SELECT allergy_status, condition_status, medication_status
+                FROM MEDICAL_PROFILE_STATUS
+                WHERE roll_number = %s
+                FOR UPDATE
+                """,
+                (clean_roll,),
+            )
+            med_row = cur.fetchone() or {
+                "allergy_status": "NOT_REPORTED",
+                "condition_status": "NOT_REPORTED",
+                "medication_status": "NOT_REPORTED",
+            }
+
+            new_allergy_status = med_row["allergy_status"]
+            new_condition_status = med_row["condition_status"]
+            new_medication_status = med_row["medication_status"]
+
+            # Process Allergies
+            if has_allergies is not None:
+                if has_allergies:
+                    new_allergy_status = "HAS_RECORDS"
+                    if allergies is not None:
+                        # Soft-end previous student allergies
+                        cur.execute(
+                            "UPDATE ALLERGY SET ended_at = NOW() WHERE roll_number = %s AND ended_at IS NULL",
+                            (clean_roll,),
+                        )
+                        for al in allergies:
+                            cur.execute(
+                                """
+                                INSERT INTO ALLERGY (roll_number, allergen, reaction, severity, recorded_at, recorded_by_user_id)
+                                VALUES (%s, %s, %s, %s, NOW(), %s)
+                                """,
+                                (
+                                    clean_roll,
+                                    al["allergen"].strip(),
+                                    al.get("reaction"),
+                                    (al.get("severity") or "MILD").strip().upper(),
+                                    user_id,
+                                ),
+                            )
+                else:
+                    new_allergy_status = "NONE_REPORTED"
+                    cur.execute(
+                        "UPDATE ALLERGY SET ended_at = NOW() WHERE roll_number = %s AND ended_at IS NULL",
+                        (clean_roll,),
+                    )
+
+            # Process Chronic Conditions
+            if has_conditions is not None:
+                if has_conditions:
+                    new_condition_status = "HAS_RECORDS"
+                    if chronic_conditions is not None:
+                        cur.execute(
+                            "UPDATE STUDENT_CONDITION SET ended_at = NOW() WHERE roll_number = %s AND ended_at IS NULL",
+                            (clean_roll,),
+                        )
+                        for c_name in chronic_conditions:
+                            c_clean = (c_name or "").strip()
+                            if not c_clean:
+                                continue
+                            cur.execute("SELECT condition_id FROM `CONDITION` WHERE name = %s LIMIT 1", (c_clean,))
+                            cond_row = cur.fetchone()
+                            if cond_row:
+                                cond_id = cond_row["condition_id"]
+                            else:
+                                cur.execute(
+                                    "INSERT INTO `CONDITION` (name, description, is_active) VALUES (%s, %s, 1)",
+                                    (c_clean, f"Self-reported condition: {c_clean}"),
+                                )
+                                cond_id = cur.lastrowid
+
+                            cur.execute(
+                                """
+                                INSERT INTO STUDENT_CONDITION (roll_number, condition_id, other_description, recorded_at, recorded_by_user_id)
+                                VALUES (%s, %s, %s, NOW(), %s)
+                                """,
+                                (clean_roll, cond_id, c_clean, user_id),
+                            )
+                else:
+                    new_condition_status = "NONE_REPORTED"
+                    cur.execute(
+                        "UPDATE STUDENT_CONDITION SET ended_at = NOW() WHERE roll_number = %s AND ended_at IS NULL",
+                        (clean_roll,),
+                    )
+
+            # Process Medications
+            if has_medications is not None:
+                if has_medications:
+                    new_medication_status = "HAS_RECORDS"
+                    if current_medications is not None:
+                        cur.execute(
+                            "UPDATE STUDENT_MEDICATION SET ended_at = NOW() WHERE roll_number = %s AND ended_at IS NULL",
+                            (clean_roll,),
+                        )
+                        for med in current_medications:
+                            cur.execute(
+                                """
+                                INSERT INTO STUDENT_MEDICATION (roll_number, medicine_name, strength, dose, reason, started_at, recorded_by_user_id)
+                                VALUES (%s, %s, %s, %s, %s, CURDATE(), %s)
+                                """,
+                                (
+                                    clean_roll,
+                                    med["medicineName"].strip(),
+                                    med.get("strength"),
+                                    med.get("dose"),
+                                    med.get("reason"),
+                                    user_id,
+                                ),
+                            )
+                else:
+                    new_medication_status = "NONE_REPORTED"
+                    cur.execute(
+                        "UPDATE STUDENT_MEDICATION SET ended_at = NOW() WHERE roll_number = %s AND ended_at IS NULL",
+                        (clean_roll,),
+                    )
+
+            # 2.4 Upsert MEDICAL_PROFILE_STATUS
+            cur.execute(
+                """
+                INSERT INTO MEDICAL_PROFILE_STATUS (roll_number, allergy_status, condition_status, medication_status, updated_at)
+                VALUES (%s, %s, %s, %s, NOW())
+                ON DUPLICATE KEY UPDATE
+                    allergy_status = VALUES(allergy_status),
+                    condition_status = VALUES(condition_status),
+                    medication_status = VALUES(medication_status),
+                    updated_at = NOW()
+                """,
+                (clean_roll, new_allergy_status, new_condition_status, new_medication_status),
+            )
+
+        conn.commit()
+    except HTTPException:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        raise
+    except Exception as exc:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        logger.error("Failed to update student profile for %s: %s", clean_roll, exc)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Database transaction error during student profile update: {exc}",
+        )
+    finally:
+        conn.close()
+
+    # Return refreshed telemetry
+    return get_student_me_telemetry(user_id, clean_roll)

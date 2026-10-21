@@ -1307,4 +1307,127 @@ stateDiagram-v2
   - Requesting another student's record returns `403 Forbidden` (`detail: "Access forbidden: You are not authorized to view other students' records."`).
   - Medical staff and receptionists may query any student profile.
 
+---
+
+### 9.4 Student Profile Registration & Onboarding (`PUT /api/student/profile` | `PUT /api/student/me`)
+- **Route**: `PUT /api/student/profile` (canonical) or `PUT /api/student/me` (alias)
+- **Authorization**: Authenticated Student (`role="STUDENT"` required).
+- **Security & Immutability**:
+  - **Authoritative Institutional Data (Immutable by student)**: `roll_number`, `user_id`, `email`, academic `status`, and roster `full_name` are protected and cannot be modified.
+  - **Student-Editable Demographics**: `phoneNumber`, `dateOfBirth`, `sex`, `bloodGroup`, `emergencyContact`.
+  - **Clinical History Declarations**: `hasAllergies` (with allergy list), `hasChronicConditions` (with conditions list), `hasCurrentMedications` (with medication list).
+- **Validation Rules**:
+  - `dateOfBirth`: Format `YYYY-MM-DD`. Must not be in the future. Student age must be between 15 and 100 years.
+  - `phoneNumber`: Must contain between 10 and 15 digits.
+  - `bloodGroup`: Must be one of `A+`, `A-`, `B+`, `B-`, `AB+`, `AB-`, `O+`, `O-`.
+  - `sex`: Must be one of `MALE`, `FEMALE`, `OTHER`.
+  - `emergencyContact`: `name` (min 2 chars), `relationship` (min 2 chars), `phoneNumber` (7-15 digits). Upserts on unique `roll_number`.
+  - `allergies`: `allergen` (non-empty), `severity` (`MILD`, `MODERATE`, `SEVERE`, `UNKNOWN`). Soft-ends previous active records on update.
+  - `chronicConditions`: Condition name string. Automatically resolves against master `CONDITION` table or registers new condition; records student link in `STUDENT_CONDITION`.
+  - `currentMedications`: `medicineName` (non-empty), `strength`, `dose`, `reason`. Soft-ends previous active records on update.
+- **Request Body**:
+  ```json
+  {
+    "phoneNumber": "+91-9876543210",
+    "dateOfBirth": "2004-05-15",
+    "sex": "FEMALE",
+    "bloodGroup": "AB+",
+    "emergencyContact": {
+      "name": "Col. R.S. Sodhi",
+      "relationship": "Father",
+      "phoneNumber": "+91-9876500011"
+    },
+    "hasAllergies": true,
+    "allergies": [
+      {
+        "allergen": "Penicillin",
+        "reaction": "Anaphylaxis and hives",
+        "severity": "SEVERE"
+      }
+    ],
+    "hasChronicConditions": true,
+    "chronicConditions": ["Asthma", "Allergic Rhinitis"],
+    "hasCurrentMedications": true,
+    "currentMedications": [
+      {
+        "medicineName": "Salbutamol Inhaler",
+        "strength": "100mcg",
+        "dose": "2 puffs PRN",
+        "reason": "Acute bronchospasm"
+      }
+    ]
+  }
+  ```
+- **Success Response (`200 OK`)**:
+  ```json
+  {
+    "success": true,
+    "message": "Student profile updated successfully.",
+    "profileCompletion": {
+      "isComplete": true,
+      "percentage": 100,
+      "status": "COMPLETED",
+      "missingFields": [],
+      "completedFields": [
+        "Phone Number",
+        "Date of Birth",
+        "Gender Identity",
+        "Blood Group",
+        "Emergency Contact",
+        "Allergy Declaration",
+        "Chronic Condition Declaration",
+        "Medication Declaration"
+      ]
+    },
+    "data": {
+      "student": {
+        "userId": 405,
+        "rollNumber": "102203777",
+        "fullName": "Simar Singh",
+        "email": "simar.singh102203777@thapar.edu",
+        "dateOfBirth": "2004-05-15",
+        "sex": "FEMALE",
+        "phoneNumber": "+91-9876543210",
+        "bloodGroup": "AB+",
+        "status": "ACTIVE",
+        "program": "B.E.",
+        "branch": "Computer Engineering",
+        "department": "Computer Science & Engineering",
+        "semester": 6
+      },
+      "allergies": [
+        {
+          "allergyId": 14,
+          "allergen": "Penicillin",
+          "reaction": "Anaphylaxis and hives",
+          "severity": "SEVERE"
+        }
+      ],
+      "chronicConditions": ["Asthma", "Allergic Rhinitis"],
+      "currentMedications": ["Salbutamol Inhaler (100mcg 2 puffs PRN)"],
+      "emergencyContacts": [
+        {
+          "contactId": 3,
+          "name": "Col. R.S. Sodhi",
+          "relationship": "Father",
+          "phoneNumber": "+91-9876500011"
+        }
+      ],
+      "activeVisit": null,
+      "profileCompletion": {
+        "isComplete": true,
+        "percentage": 100,
+        "status": "COMPLETED",
+        "missingFields": [],
+        "completedFields": [...]
+      }
+    }
+  }
+  ```
+- **Negative Medical Declaration Support**:
+  - Setting `hasAllergies: false`, `hasChronicConditions: false`, `hasCurrentMedications: false` sets the corresponding `MEDICAL_PROFILE_STATUS` flag to `NONE_REPORTED` and soft-ends previous entries, fulfilling the clinical checklist item and contributing to 100% completion.
+- **Error Responses**:
+  - `400 Bad Request`: Validation failure (underage student, future DOB, invalid blood group enum, invalid phone format).
+  - `401 Unauthorized`: Missing or expired JWT.
+  - `403 Forbidden`: Non-student user attempting self-onboarding or student record is inactive.
 
