@@ -6,9 +6,15 @@ import Doctors_Dashboard from './Components/Doctors/Doctors_Dashboard';
 import Students_Dashboard from './Components/Students/Students_Dashboard';
 import ReceptionDashboard from './Components/Receptionist/receptionist';
 
-function ProtectedRoute({ children }) {
-  const { isAuthenticated } = useAuth();
-  return isAuthenticated ? children : <Navigate to="/user_login" replace />;
+function ProtectedRoute({ children, allowedRoles }) {
+  const { isAuthenticated, userRole } = useAuth();
+  if (!isAuthenticated) return <Navigate to="/user_login" replace />;
+  if (allowedRoles && !allowedRoles.includes(userRole)) {
+    if (userRole === 'DOCTOR') return <Navigate to="/doctor_dashboard" replace />;
+    if (userRole === 'RECEPTIONIST') return <Navigate to="/reception_dashboard" replace />;
+    return <Navigate to="/user_login" replace />;
+  }
+  return children;
 }
 
 function AppRoutes() {
@@ -19,7 +25,7 @@ function AppRoutes() {
       <Route
         path="/doctor_dashboard"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute allowedRoles={['DOCTOR']}>
             <Doctors_Dashboard />
           </ProtectedRoute>
         }
@@ -28,7 +34,7 @@ function AppRoutes() {
       <Route
         path="/reception_dashboard"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute allowedRoles={['RECEPTIONIST']}>
             <ReceptionDashboard />
           </ProtectedRoute>
         }
@@ -36,7 +42,7 @@ function AppRoutes() {
       <Route
         path="/emergency"
         element={
-          <ProtectedRoute>
+          <ProtectedRoute allowedRoles={['RECEPTIONIST']}>
             <ReceptionDashboard initialPage="emergency" />
           </ProtectedRoute>
         }

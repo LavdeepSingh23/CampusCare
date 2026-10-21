@@ -1,7 +1,6 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { useQueue, DOCTORS, DIRECTORY, dispense, logAction, resetDemo } from "../../context/queueStore";
 import {
   lookupStudent,
   fetchReceptionDoctors,
@@ -15,6 +14,9 @@ import {
   fetchTerminalSettings,
   updateDoctorAvailability,
   enrollRfidCard,
+  fetchEmergencyLogs,
+  checkSystemHealth,
+  checkDatabaseReadiness,
 } from "../../api";
 import DispensingDesk from "./DispensingDesk";
 import EmergencyDesk from "./EmergencyDesk";
@@ -41,6 +43,9 @@ import {
   Clock,
   Activity as ActivityIcon,
   AlertCircle,
+  Server,
+  Database,
+  Filter,
 } from "lucide-react";
  
 /* CampusCare – Receptionist Desk
@@ -79,11 +84,9 @@ const NAV = [
   { id: "activity", label: "Activity", icon: "activity" },
 ];
 const hhmm = (t) => (t ? new Date(t).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: false }) : "—");
-const dname = (id) => DOCTORS.find((d) => d.id === id)?.name || "—";
 const pad = (n) => String(n).padStart(2, "0");
  
 export default function ReceptionDashboard({ onLogout, initialPage = "reception" }) {
-  const { visits, log } = useQueue();
   const { receptionist, logout } = useAuth();
   const navigate = useNavigate();
   const [page, setPage] = useState(initialPage);
@@ -104,39 +107,43 @@ export default function ReceptionDashboard({ onLogout, initialPage = "reception"
   const [liveQueue, setLiveQueue] = useState([]);
   const [liveDoctors, setLiveDoctors] = useState([]);
   const [liveDispensing, setLiveDispensing] = useState([]);
+  const [liveCompletedVisits, setLiveCompletedVisits] = useState([]);
+  const [liveActivity, setLiveActivity] = useState([]);
+  const [liveEmergencies, setLiveEmergencies] = useState([]);
+
+  const refreshAllFeeds = () => {
+    fetchReceptionQueue()
+      .then((q) => Array.isArray(q) && setLiveQueue(q))
+      .catch(() => {});
+    fetchReceptionDoctors()
+      .then((d) => Array.isArray(d) && setLiveDoctors(d))
+      .catch(() => {});
+    fetchAwaitingDispense()
+      .then((disp) => Array.isArray(disp) && setLiveDispensing(disp))
+      .catch(() => {});
+    fetchCompletedVisits({ limit: 50, date: "ALL" })
+      .then((comp) => Array.isArray(comp) && setLiveCompletedVisits(comp))
+      .catch(() => {});
+    fetchActivityLog({ limit: 10, date: "ALL" })
+      .then((act) => Array.isArray(act) && setLiveActivity(act))
+      .catch(() => {});
+    fetchEmergencyLogs()
+      .then((em) => Array.isArray(em) && setLiveEmergencies(em))
+      .catch(() => {});
+  };
 
   useEffect(() => {
-    const fetchLive = () => {
-      fetchReceptionQueue()
-        .then((q) => {
-          if (Array.isArray(q)) setLiveQueue(q);
-        })
-        .catch(() => {});
-      fetchReceptionDoctors()
-        .then((d) => {
-          if (Array.isArray(d)) setLiveDoctors(d);
-        })
-        .catch(() => {});
-      fetchAwaitingDispense()
-        .then((disp) => {
-          if (Array.isArray(disp)) setLiveDispensing(disp);
-        })
-        .catch(() => {});
-    };
-    fetchLive();
-    const timer = setInterval(fetchLive, 4000);
+    refreshAllFeeds();
+    const timer = setInterval(refreshAllFeeds, 4000);
     return () => clearInterval(timer);
   }, []);
 
-  const active = visits.filter((v) => v.status === "waiting" || v.status === "cabin");
-  const waiting = visits.filter((v) => v.status === "waiting");
-  const inConsult = visits.filter((v) => v.status === "cabin");
-  const forMedicine = visits.filter((v) => v.status === "done").sort((a, b) => a.doneAt - b.doneAt);
-  const completed = visits.filter((v) => v.status === "dispensed").sort((a, b) => b.dispensedAt - a.dispensedAt);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const counts = {
-    queue: liveQueue.length > 0 ? liveQueue.length : active.length,
-    dispensing: liveDispensing.length > 0 ? liveDispensing.length : forMedicine.length,
+    queue: liveQueue.length,
+    dispensing: liveDispensing.length,
+    emergency: liveEmergencies.length,
+    completed: liveCompletedVisits.length,
   };
  
   return (
@@ -225,29 +232,41 @@ export default function ReceptionDashboard({ onLogout, initialPage = "reception"
         </div>
  
         <div className="flex-1">
-          {page === "reception" && <Home {...{ now, visits, active, waiting, inConsult, forMedicine, log, setPage, liveQueue, liveDoctors, liveDispensing }} />}
-          {page === "checkin" && <CheckIn {...{ flash, setPage }} />}
+          {page === "reception" && (
+            <Home
+              now={now}
+              setPage={setPage}
+              liveQueue={liveQueue}
+              liveDoctors={liveDoctors}
+              liveDispensing={liveDispensing}
+              liveCompletedVisits={liveCompletedVisits}
+              liveActivity={liveActivity}
+            />
+          )}
+          {page === "checkin" && <CheckIn flash={flash} setPage={setPage} />}
           {page === "queue" && <LiveQueue setPage={setPage} />}
-          {page === "students" && <Students {...{ visits }} />}
+          {page === "students" && <Students />}
           {page === "dispensing" && (
             <DispensingDesk
               flash={flash}
-              onDispensed={(res) => {
-                try {
-                  logAction(`Dispensed: ${res?.dispensingStatus || "DISPENSED"} for Visit #${res?.visitId || ""}`, "dispensing");
-                } catch {
-                  // ignore
-                }
-                fetchAwaitingDispense().then((d) => {
-                  if (Array.isArray(d)) setLiveDispensing(d);
-                }).catch(() => {});
+              onDispensed={() => {
+                refreshAllFeeds();
               }}
             />
           )}
-          {page === "emergency" && <EmergencyDesk flash={flash} />}
-          {page === "completed" && <Completed {...{ completed }} />}
-          {page === "activity" && <Activity {...{ log }} />}
-          {page === "settings" && <Settings {...{ flash }} />}
+          {page === "emergency" && (
+            <EmergencyDesk
+              flash={flash}
+              onEmergencyUpdated={() => {
+                fetchEmergencyLogs()
+                  .then((em) => Array.isArray(em) && setLiveEmergencies(em))
+                  .catch(() => {});
+              }}
+            />
+          )}
+          {page === "completed" && <Completed />}
+          {page === "activity" && <Activity />}
+          {page === "settings" && <Settings flash={flash} />}
         </div>
       </main>
  
@@ -323,17 +342,26 @@ const PageHead = ({ title, sub, badge, right }) => (
 );
  
 /* ====================== 1. RECEPTION (Home Overview) ====================== */
-function Home({ now, visits, waiting, inConsult, forMedicine, log, setPage, liveQueue = [], liveDoctors = [], liveDispensing = [] }) {
+function Home({
+  now,
+  setPage,
+  liveQueue = [],
+  liveDoctors = [],
+  liveDispensing = [],
+  liveCompletedVisits = [],
+  liveActivity = [],
+}) {
   const h = now.getHours();
   const greet = h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening";
-  const completedToday = visits.filter((v) => v.status === "dispensed");
 
-  const realWaiting = liveQueue.length > 0
-    ? liveQueue.filter((v) => (v.statusCode || v.status || "").toUpperCase() === "WAITING")
-    : waiting;
-  const realInConsult = liveQueue.length > 0
-    ? liveQueue.filter((v) => (v.statusCode || v.status || "").toUpperCase() === "IN_CONSULTATION")
-    : inConsult;
+  const realWaiting = liveQueue.filter(
+    (v) => (v.statusCode || v.status || "").toUpperCase() === "WAITING"
+  );
+  const realInConsult = liveQueue.filter(
+    (v) => (v.statusCode || v.status || "").toUpperCase() === "IN_CONSULTATION"
+  );
+  const forMedicineCount = liveDispensing.length;
+  const completedCount = liveCompletedVisits.length;
 
   return (
     <div className="space-y-6">
@@ -367,7 +395,7 @@ function Home({ now, visits, waiting, inConsult, forMedicine, log, setPage, live
             className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white hover:bg-slate-50 text-slate-700 border border-slate-200/90 font-semibold text-xs shadow-2xs transition-all cursor-pointer"
           >
             <Pill className="w-4 h-4 text-teal-700" />
-            <span>Dispensary Queue ({forMedicine.length})</span>
+            <span>Dispensary Queue ({forMedicineCount})</span>
           </button>
           <button
             onClick={() => setPage("emergency")}
@@ -408,7 +436,7 @@ function Home({ now, visits, waiting, inConsult, forMedicine, log, setPage, live
             <div className="p-2 rounded-xl bg-orange-50 text-orange-700 border border-orange-100"><Pill className="w-4 h-4" /></div>
           </div>
           <div className="mt-3">
-            <span className="text-2xl sm:text-3xl font-extrabold text-orange-600 tracking-tight">{forMedicine.length}</span>
+            <span className="text-2xl sm:text-3xl font-extrabold text-orange-600 tracking-tight">{forMedicineCount}</span>
             <span className="text-[11px] text-slate-400 block mt-0.5">Ready for pharmacy</span>
           </div>
         </div>
@@ -419,7 +447,7 @@ function Home({ now, visits, waiting, inConsult, forMedicine, log, setPage, live
             <div className="p-2 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-100"><CheckCircle2 className="w-4 h-4" /></div>
           </div>
           <div className="mt-3">
-            <span className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">{completedToday.length}</span>
+            <span className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">{completedCount}</span>
             <span className="text-[11px] text-slate-400 block mt-0.5">Discharged & dispensed</span>
           </div>
         </div>
@@ -442,14 +470,14 @@ function Home({ now, visits, waiting, inConsult, forMedicine, log, setPage, live
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-            {(liveDoctors.length > 0 ? liveDoctors : DOCTORS).map((d) => {
+            {liveDoctors.map((d) => {
               const docId = d.doctorId ?? d.id;
-              const q = liveQueue.length > 0
-                ? liveQueue.filter((v) => (v.doctorId ?? v.doctor_id) === docId && ((v.statusCode || v.status || "").toUpperCase() === "WAITING")).length
-                : visits.filter((v) => v.doctorId === docId && (v.status === "waiting" || v.status === "cabin")).length;
-              const busy = liveQueue.length > 0
-                ? liveQueue.some((v) => (v.doctorId ?? v.doctor_id) === docId && ((v.statusCode || v.status || "").toUpperCase() === "IN_CONSULTATION"))
-                : visits.some((v) => v.doctorId === docId && v.status === "cabin");
+              const q = liveQueue.filter(
+                (v) => (v.doctorId ?? v.doctor_id) === docId && ((v.statusCode || v.status || "").toUpperCase() === "WAITING")
+              ).length;
+              const busy = liveQueue.some(
+                (v) => (v.doctorId ?? v.doctor_id) === docId && ((v.statusCode || v.status || "").toUpperCase() === "IN_CONSULTATION")
+              );
 
               return (
                 <div
@@ -485,6 +513,9 @@ function Home({ now, visits, waiting, inConsult, forMedicine, log, setPage, live
                 </div>
               );
             })}
+            {liveDoctors.length === 0 && (
+              <p className="col-span-2 text-xs text-slate-400 text-center py-6">Connecting to doctor cabins…</p>
+            )}
           </div>
         </div>
 
@@ -496,36 +527,33 @@ function Home({ now, visits, waiting, inConsult, forMedicine, log, setPage, live
             </div>
  
             <div className="mt-4">
-              {(() => {
-                const pendingCount = liveDispensing.length > 0 ? liveDispensing.length : forMedicine.length;
-                return pendingCount > 0 ? (
-                  <div className="p-4 rounded-xl bg-orange-50/80 border border-orange-200/80 text-orange-950 space-y-2">
-                    <div className="flex items-center gap-2">
-                      <Pill className="w-4 h-4 text-orange-600" />
-                      <span className="text-xs font-bold">
-                        {pendingCount} prescription{pendingCount > 1 ? "s" : ""} waiting for pickup
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-orange-800/90 leading-relaxed">
-                      Doctor consultations are completed. Students are waiting at the medicine counter.
-                    </p>
-                    <div className="pt-2">
-                      <button
-                        onClick={() => setPage("dispensing")}
-                        className="w-full py-2 px-3 rounded-lg bg-orange-600 hover:bg-orange-700 text-white font-semibold text-xs shadow-2xs transition-all cursor-pointer"
-                      >
-                        Open Dispensing Station ({pendingCount})
-                      </button>
-                    </div>
+              {forMedicineCount > 0 ? (
+                <div className="p-4 rounded-xl bg-orange-50/80 border border-orange-200/80 text-orange-950 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Pill className="w-4 h-4 text-orange-600" />
+                    <span className="text-xs font-bold">
+                      {forMedicineCount} prescription{forMedicineCount > 1 ? "s" : ""} waiting for pickup
+                    </span>
                   </div>
-                ) : (
-                  <div className="p-4 rounded-xl bg-slate-50 border border-slate-200/70 text-center py-6">
-                    <CheckCircle className="w-6 h-6 text-emerald-600 mx-auto mb-1.5" />
-                    <p className="text-xs font-bold text-slate-800">All Prescriptions Cleared</p>
-                    <p className="text-[11px] text-slate-400 mt-0.5">No students are currently waiting at the medicine desk.</p>
+                  <p className="text-[11px] text-orange-800/90 leading-relaxed">
+                    Doctor consultations are completed. Students are waiting at the medicine counter.
+                  </p>
+                  <div className="pt-2">
+                    <button
+                      onClick={() => setPage("dispensing")}
+                      className="w-full py-2 px-3 rounded-lg bg-orange-600 hover:bg-orange-700 text-white font-semibold text-xs shadow-2xs transition-all cursor-pointer"
+                    >
+                      Open Dispensing Station ({forMedicineCount})
+                    </button>
                   </div>
-                );
-              })()}
+                </div>
+              ) : (
+                <div className="p-4 rounded-xl bg-slate-50 border border-slate-200/70 text-center py-6">
+                  <CheckCircle className="w-6 h-6 text-emerald-600 mx-auto mb-1.5" />
+                  <p className="text-xs font-bold text-slate-800">All Prescriptions Cleared</p>
+                  <p className="text-[11px] text-slate-400 mt-0.5">No students are currently waiting at the medicine desk.</p>
+                </div>
+              )}
             </div>
           </div>
  
@@ -543,18 +571,26 @@ function Home({ now, visits, waiting, inConsult, forMedicine, log, setPage, live
         </div>
  
         <div className="divide-y divide-slate-100">
-          {log.slice(0, 5).map((l, i) => (
-            <div key={i} className="py-2.5 flex items-center justify-between gap-4 text-xs">
-              <div className="flex items-center gap-3">
-                <span className="font-mono text-slate-400 text-[11px]">{hhmm(l.t)}</span>
-                <span className="font-semibold text-slate-800">{l.text}</span>
+          {liveActivity.slice(0, 5).map((l, i) => {
+            const timeStr = l.timestamp
+              ? (l.timestamp.includes("T") ? l.timestamp.split("T")[1].slice(0, 5) : l.timestamp)
+              : (l.t ? hhmm(l.t) : "—");
+            const kind = l.eventTitle || l.kind || l.eventType || "SYSTEM EVENT";
+            const desc = l.notes || l.text || (l.studentName ? `Student: ${l.studentName} (${l.rollNumber || ""})` : "");
+
+            return (
+              <div key={l.eventId || i} className="py-2.5 flex items-center justify-between gap-4 text-xs">
+                <div className="flex items-center gap-3">
+                  <span className="font-mono text-slate-400 text-[11px]">{timeStr}</span>
+                  <span className="font-semibold text-slate-800">{desc || kind}</span>
+                </div>
+                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200/60">
+                  {kind}
+                </span>
               </div>
-              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200/60">
-                {l.kind}
-              </span>
-            </div>
-          ))}
-          {log.length === 0 && <p className="text-xs text-slate-400 text-center py-4">No recent activity recorded.</p>}
+            );
+          })}
+          {liveActivity.length === 0 && <p className="text-xs text-slate-400 text-center py-4">No recent activity recorded.</p>}
         </div>
       </div>
     </div>
@@ -1378,7 +1414,7 @@ function Students({ visits }) {
     };
   }, [openRoll]);
 
-  const rawList = backendStudents.length > 0 ? backendStudents : DIRECTORY;
+  const rawList = backendStudents;
   const depts = [...new Set(rawList.map((s) => s.department || s.dept).filter(Boolean))];
 
   const list = useMemo(() => {
@@ -1395,16 +1431,12 @@ function Students({ visits }) {
   }, [rawList, q, dept, sem]);
 
   const s = studentProfile?.student || studentProfile || rawList.find((x) => (x.rollNumber || x.rollNo) === openRoll);
-  const past = studentProfile?.history || visits.filter((v) => (v.rollNumber || v.rollNo) === openRoll);
+  const past = studentProfile?.visits || studentProfile?.history || [];
   const allergies = studentProfile?.allergies || (s?.allergies ? [{ allergen: s.allergies }] : []);
   const emergencyContacts = studentProfile?.emergencyContacts || [];
 
   const open = (roll) => {
     setOpenRoll(roll);
-    const target = rawList.find((x) => (x.rollNumber || x.rollNo) === roll);
-    if (target) {
-      logAction("STUDENT PROFILE VIEWED", target.fullName || target.name);
-    }
   };
 
   return (
@@ -1611,225 +1643,30 @@ function Students({ visits }) {
   );
 }
 
-/* ====================== 5. DISPENSING ====================== */
-function Dispensing({ forMedicine, flash }) {
-  const [openId, setOpenId] = useState(null);
-  const [type, setType] = useState("Dispensed as prescribed");
-  const [remarks, setRemarks] = useState("");
-  const v = forMedicine.find((x) => x.id === openId);
-  useEffect(() => { if (openId && !v) setOpenId(null); }, [v, openId]);
- 
-  const start = (id) => { setOpenId(id); setType("Dispensed as prescribed"); setRemarks(""); };
-  const confirm = () => {
-    if (type !== "Dispensed as prescribed" && !remarks.trim()) return flash("Please add a remark for this dispensing type");
-    dispense(v.id, { type, remarks: remarks.trim() });
-    flash(`${v.name}: dispensing recorded`);
-    setOpenId(null);
-  };
- 
-  return (
-    <div className="space-y-6">
-      <PageHead
-        title="Dispensing Desk"
-        sub="Fulfill completed doctor prescriptions and record dispensed medications"
-        badge={`${forMedicine.length} ready`}
-      />
- 
-      {forMedicine.length === 0 && (
-        <div className="p-10 rounded-2xl border border-slate-200 bg-white text-center shadow-xs">
-          <CheckCircle className="w-10 h-10 text-emerald-600 mx-auto mb-2" />
-          <h3 className="text-base font-bold text-slate-800">All Prescriptions Dispensed</h3>
-          <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
-            New prescriptions will arrive here automatically when doctors complete consultations.
-          </p>
-        </div>
-      )}
- 
-      <div className="space-y-4">
-        {forMedicine.map((x) => (
-          <div
-            key={x.id}
-            className="p-5 rounded-2xl border border-slate-200/90 bg-white shadow-xs hover:border-teal-300 transition-all flex flex-col lg:flex-row lg:items-center justify-between gap-5"
-          >
-            <div className="flex items-start gap-3.5 min-w-[260px]">
-              <Avatar name={x.name} size="md" />
-              <div>
-                <h3 className="text-base font-bold text-slate-900">{x.name}</h3>
-                <div className="flex items-center gap-2 mt-1">
-                  <span className="font-mono text-xs font-bold px-2 py-0.5 rounded bg-slate-100 text-slate-700">{x.rollNo}</span>
-                  <span className="text-xs text-slate-500">{dname(x.doctorId)}</span>
-                </div>
-                <p className="text-[11px] text-teal-800 font-semibold mt-0.5">Prescription #{x.rxNo || "1042"}</p>
-              </div>
-            </div>
- 
-            <div className="flex-1 space-y-2">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block">
-                Prescribed Medicines ({x.rx?.length || 0})
-              </span>
-              <div className="flex flex-wrap gap-1.5">
-                {(x.rx || []).map((r, i) => (
-                  <span
-                    key={i}
-                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-teal-50 border border-teal-200/70 text-teal-900 text-xs font-medium"
-                  >
-                    <Pill className="w-3 h-3 text-teal-700" />
-                    <span>{r.med}</span>
-                    <span className="text-[10px] text-teal-700 font-bold">({r.qty} units)</span>
-                  </span>
-                ))}
-              </div>
- 
-              {x.allergy && x.allergy !== "None known" && (
-                <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-rose-50 border border-rose-200 text-rose-800 text-[11px] font-semibold">
-                  <ShieldAlert className="w-3 h-3 text-rose-600" />
-                  <span>Allergy flagged: {x.allergy}</span>
-                </div>
-              )}
-            </div>
- 
-            <div className="flex lg:flex-col items-center lg:items-end justify-between gap-2 shrink-0">
-              <button
-                type="button"
-                onClick={() => start(x.id)}
-                className="px-5 py-2.5 rounded-xl bg-teal-700 hover:bg-teal-800 text-white font-semibold text-xs shadow-xs hover:shadow-md transition-all cursor-pointer flex items-center gap-2"
-              >
-                <Pill className="w-4 h-4" />
-                <span>Dispense Medication</span>
-              </button>
-            </div>
-          </div>
-        ))}
-      </div>
- 
-      {v && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm" onClick={() => setOpenId(null)}>
-          <div className="bg-white rounded-3xl shadow-2xl max-w-lg w-full p-6 border border-slate-100 relative space-y-5" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-              <div className="flex items-center gap-2">
-                <div className="p-2 rounded-xl bg-teal-50 text-teal-700 border border-teal-100">
-                  <Pill className="w-4 h-4" />
-                </div>
-                <div>
-                  <h3 className="text-base font-bold text-slate-900">Dispense Prescription</h3>
-                  <p className="text-xs text-slate-500">Prescription #{v.rxNo || "1042"} • {dname(v.doctorId)}</p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setOpenId(null)}
-                className="p-1.5 rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
- 
-            <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/80 flex items-center gap-3">
-              <Avatar name={v.name} size="md" />
-              <div>
-                <p className="text-sm font-bold text-slate-900">{v.name}</p>
-                <p className="text-xs text-slate-500">Roll No: {v.rollNo}</p>
-              </div>
-            </div>
- 
-            <div className="space-y-2">
-              <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider">Medicines to Dispense</h4>
-              <div className="space-y-2">
-                {(v.rx || []).map((r, i) => (
-                  <div key={i} className="p-3 rounded-xl border border-slate-200 bg-white flex items-center justify-between text-xs">
-                    <div>
-                      <p className="font-bold text-slate-900">{r.med}</p>
-                      <p className="text-[11px] text-slate-500">{r.freq} • {r.days} days{r.note ? ` • ${r.note}` : ""}</p>
-                    </div>
-                    <span className="font-mono font-bold text-teal-800 bg-teal-50 px-2.5 py-1 rounded-lg border border-teal-200/60">
-                      Qty: {r.qty}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
- 
-            {v.advice && (
-              <div className="p-3 rounded-xl bg-slate-50 text-xs text-slate-600 border border-slate-200/60">
-                <strong>Doctor's Advice: </strong>{v.advice}
-              </div>
-            )}
- 
-            <div className="space-y-2">
-              <h4 className="text-xs font-bold text-slate-700">Dispensing Fulfillment Status</h4>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                {["Dispensed as prescribed", "Partially dispensed", "Substituted"].map((t) => (
-                  <button
-                    key={t}
-                    type="button"
-                    onClick={() => setType(t)}
-                    className={`p-2.5 rounded-xl border text-xs font-semibold transition-all cursor-pointer text-center ${
-                      type === t
-                        ? "bg-teal-700 text-white border-teal-700"
-                        : "bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200"
-                    }`}
-                  >
-                    {t}
-                  </button>
-                ))}
-              </div>
-            </div>
- 
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-slate-700 block">
-                Pharmacist Remarks {type !== "Dispensed as prescribed" ? "(Required)" : "(Optional)"}
-              </label>
-              <textarea
-                rows="2"
-                value={remarks}
-                onChange={(e) => setRemarks(e.target.value)}
-                placeholder="e.g. Verified dosage with student, advised taking after meals."
-                className="w-full p-2.5 rounded-xl border border-slate-200 text-xs text-slate-900 focus:outline-none focus:border-teal-500"
-              />
-            </div>
- 
-            <div className="pt-2 flex items-center justify-end gap-2.5 border-t border-slate-100">
-              <button
-                type="button"
-                onClick={() => window.print()}
-                className="px-3.5 py-2.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer"
-              >
-                <Printer className="w-3.5 h-3.5" />
-                <span>Print Slip</span>
-              </button>
-              <button
-                type="button"
-                onClick={confirm}
-                className="px-5 py-2.5 rounded-xl bg-teal-700 hover:bg-teal-800 text-white text-xs font-semibold transition-all shadow-xs cursor-pointer"
-              >
-                Confirm Dispensing
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
- 
-/* ====================== 6. COMPLETED VISITS ====================== */
-function Completed({ completed: fallbackCompleted }) {
+/* ====================== 5. COMPLETED VISITS ====================== */
+function Completed() {
   const [q, setQ] = useState("");
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
   const [liveCompleted, setLiveCompleted] = useState([]);
+  const [selectedVisit, setSelectedVisit] = useState(null);
 
-  useEffect(() => {
+  const loadData = useCallback(() => {
     let active = true;
     setLoading(true);
-    fetchCompletedVisits({ q, date: "ALL", limit: 50 })
+    setError(null);
+    fetchCompletedVisits({ q: q.trim(), date: "ALL", limit: 50 })
       .then((data) => {
         if (!active) return;
         if (Array.isArray(data)) {
           setLiveCompleted(data);
+        } else {
+          setLiveCompleted([]);
         }
       })
       .catch((err) => {
-        console.warn("Using local completed visits store:", err.message);
+        if (!active) return;
+        setError(err.detail || err.message || "Failed to load completed visits from server");
       })
       .finally(() => {
         if (active) setLoading(false);
@@ -1839,8 +1676,12 @@ function Completed({ completed: fallbackCompleted }) {
     };
   }, [q]);
 
-  const list = liveCompleted.length > 0 ? liveCompleted : (fallbackCompleted || []);
-  const rows = list.filter((v) => {
+  useEffect(() => {
+    const cancel = loadData();
+    return cancel;
+  }, [loadData]);
+
+  const rows = liveCompleted.filter((v) => {
     const name = v.name || v.studentName || v.student_name || "";
     const roll = v.rollNo || v.rollNumber || v.roll_number || "";
     return (name + roll).toLowerCase().includes(q.toLowerCase());
@@ -1850,23 +1691,53 @@ function Completed({ completed: fallbackCompleted }) {
     <div className="space-y-6">
       <PageHead
         title="Completed Visits"
-        sub="Today's completed and discharged OPD patient consultations"
+        sub="Today's completed consultations and discharged OPD patients"
         badge={`${rows.length} completed`}
+        right={
+          <button
+            type="button"
+            onClick={() => loadData()}
+            disabled={loading}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-semibold transition-colors cursor-pointer"
+          >
+            <RotateCw className={`w-3.5 h-3.5 ${loading ? "animate-spin text-teal-600" : ""}`} />
+            <span>Refresh</span>
+          </button>
+        }
       />
 
+      {error && (
+        <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
+            <span>{error}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => loadData()}
+            className="px-3 py-1 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-semibold text-xs cursor-pointer"
+          >
+            Retry
+          </button>
+        </div>
+      )}
+
       <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs p-5 space-y-4">
-        <div className="flex items-center gap-3">
-          <div className="relative max-w-sm flex-1">
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+          <div className="relative max-w-sm w-full">
             <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
             <input
               type="text"
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="Search completed student by name or roll..."
-              className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 bg-slate-50/60 text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-teal-500 focus:bg-white"
+              placeholder="Search by student name or roll number..."
+              className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 bg-slate-50/60 text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-teal-500 focus:bg-white transition-all font-medium"
             />
           </div>
-          {loading && <RotateCw className="w-4 h-4 animate-spin text-teal-600" />}
+          <div className="text-xs text-slate-500 flex items-center gap-2">
+            <span>Showing real-time database records</span>
+            {loading && <RotateCw className="w-3.5 h-3.5 animate-spin text-teal-600" />}
+          </div>
         </div>
 
         <div className="overflow-x-auto">
@@ -1876,9 +1747,10 @@ function Completed({ completed: fallbackCompleted }) {
                 <th className="py-3 px-4">Student</th>
                 <th className="py-3 px-4">Roll Number</th>
                 <th className="py-3 px-4">Doctor</th>
-                <th className="py-3 px-4">Check-in Time</th>
-                <th className="py-3 px-4">Discharged Time</th>
+                <th className="py-3 px-4">Check-in</th>
+                <th className="py-3 px-4">Discharged</th>
                 <th className="py-3 px-4">Dispensing Status</th>
+                <th className="py-3 px-4 text-right">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -1893,55 +1765,191 @@ function Completed({ completed: fallbackCompleted }) {
                 const dispStatus = v.dispensingStatus || v.dispensing?.type || "Dispensed as prescribed";
 
                 return (
-                  <tr key={v.visitId || v.id || i} className="hover:bg-slate-50/60 transition-colors">
+                  <tr
+                    key={v.visitId || v.id || i}
+                    onClick={() => setSelectedVisit(v)}
+                    className="hover:bg-slate-50/70 transition-colors cursor-pointer group"
+                  >
                     <td className="py-3 px-4">
                       <div className="flex items-center gap-2.5">
                         <Avatar name={sName} size="sm" />
-                        <span className="font-bold text-slate-900">{sName}</span>
+                        <span className="font-bold text-slate-900 group-hover:text-teal-900">{sName}</span>
                       </div>
                     </td>
-                    <td className="py-3 px-4 font-mono text-slate-600">{sRoll}</td>
+                    <td className="py-3 px-4 font-mono text-slate-600 font-semibold">{sRoll}</td>
                     <td className="py-3 px-4 text-slate-700 font-medium">{docName}</td>
                     <td className="py-3 px-4 font-mono text-slate-500">{chkStr}</td>
                     <td className="py-3 px-4 font-mono text-slate-500">{disStr}</td>
                     <td className="py-3 px-4">
-                      <span className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200/60">
-                        {dispStatus}
+                      <span className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200/60 inline-flex items-center gap-1">
+                        <Check className="w-3 h-3 text-emerald-600" />
+                        <span>{dispStatus}</span>
                       </span>
+                    </td>
+                    <td className="py-3 px-4 text-right">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedVisit(v);
+                        }}
+                        className="px-2.5 py-1 rounded-lg border border-slate-200 hover:border-teal-500 hover:bg-teal-50 text-slate-600 hover:text-teal-800 text-[11px] font-semibold transition-colors cursor-pointer"
+                      >
+                        View Summary
+                      </button>
                     </td>
                   </tr>
                 );
               })}
-              {rows.length === 0 && !loading && (
+              {rows.length === 0 && !loading && !error && (
                 <tr>
-                  <td colSpan="6" className="py-8 text-center text-slate-400 text-xs">No completed visits recorded today yet.</td>
+                  <td colSpan="7" className="py-12 text-center">
+                    <div className="max-w-xs mx-auto space-y-2">
+                      <div className="w-12 h-12 rounded-full bg-slate-50 border border-slate-200 text-slate-400 flex items-center justify-center mx-auto">
+                        <CheckCircle2 className="w-6 h-6" />
+                      </div>
+                      <p className="text-xs font-bold text-slate-700">No completed visits recorded today</p>
+                      <p className="text-[11px] text-slate-400">
+                        Patients will appear here automatically as soon as consultations are concluded and medication dispensing is finalized.
+                      </p>
+                    </div>
+                  </td>
                 </tr>
               )}
             </tbody>
           </table>
         </div>
       </div>
+
+      {/* Detail Modal for Selected Visit */}
+      {selectedVisit && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm"
+          onClick={() => setSelectedVisit(null)}
+        >
+          <div
+            className="bg-white rounded-3xl shadow-2xl max-w-lg w-full p-6 border border-slate-100 relative space-y-5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-teal-50 text-teal-700 border border-teal-100">
+                  <CheckCircle2 className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">Visit Summary & Slip</h3>
+                  <p className="text-xs text-slate-500 font-mono">
+                    Visit #{selectedVisit.visitId || selectedVisit.id || "REC-OPD"}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedVisit(null)}
+                className="p-1.5 rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 flex items-center gap-3">
+              <Avatar name={selectedVisit.name || selectedVisit.studentName} size="md" />
+              <div>
+                <p className="text-sm font-bold text-slate-900">
+                  {selectedVisit.name || selectedVisit.studentName}
+                </p>
+                <p className="text-xs text-slate-500 font-mono">
+                  Roll: {selectedVisit.rollNo || selectedVisit.rollNumber}
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 text-xs">
+              <div className="p-3 rounded-xl border border-slate-200 bg-white">
+                <span className="text-[10px] font-bold uppercase text-slate-400 block">Attending Doctor</span>
+                <span className="font-semibold text-slate-800">
+                  {selectedVisit.doctorName || selectedVisit.doctor_name || "Consulting Doctor"}
+                </span>
+              </div>
+              <div className="p-3 rounded-xl border border-slate-200 bg-white">
+                <span className="text-[10px] font-bold uppercase text-slate-400 block">Dispensing Type</span>
+                <span className="font-semibold text-emerald-800">
+                  {selectedVisit.dispensingStatus || selectedVisit.dispensing?.type || "Dispensed as prescribed"}
+                </span>
+              </div>
+            </div>
+
+            {selectedVisit.diagnosis && (
+              <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs space-y-1">
+                <span className="font-bold text-slate-700 block">Clinical Diagnosis:</span>
+                <p className="text-slate-600">{selectedVisit.diagnosis}</p>
+              </div>
+            )}
+
+            {selectedVisit.rx && Array.isArray(selectedVisit.rx) && selectedVisit.rx.length > 0 && (
+              <div className="space-y-2">
+                <span className="text-xs font-bold text-slate-700 uppercase tracking-wider block">
+                  Dispensed Medicines ({selectedVisit.rx.length})
+                </span>
+                <div className="space-y-1.5 max-h-40 overflow-y-auto">
+                  {selectedVisit.rx.map((r, i) => (
+                    <div key={i} className="p-2.5 rounded-xl border border-slate-200 bg-white flex items-center justify-between text-xs">
+                      <span className="font-semibold text-slate-800">{r.med || r.medicine}</span>
+                      <span className="text-slate-500 font-mono">Qty: {r.qty}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="pt-2 flex items-center justify-end gap-2.5 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="px-4 py-2.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-semibold transition-colors flex items-center gap-1.5 cursor-pointer"
+              >
+                <Printer className="w-3.5 h-3.5" />
+                <span>Print Record</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedVisit(null)}
+                className="px-5 py-2.5 rounded-xl bg-teal-700 hover:bg-teal-800 text-white text-xs font-semibold transition-all cursor-pointer"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-/* ====================== 7. ACTIVITY AUDIT LOG ====================== */
-function Activity({ log: fallbackLog }) {
+/* ====================== 6. ACTIVITY AUDIT LOG ====================== */
+function Activity() {
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
   const [liveLog, setLiveLog] = useState([]);
+  const [filterType, setFilterType] = useState("ALL");
+  const [searchFilter, setSearchFilter] = useState("");
 
-  useEffect(() => {
+  const loadLogs = useCallback(() => {
     let active = true;
     setLoading(true);
-    fetchActivityLog({ limit: 50, date: "ALL" })
+    setError(null);
+    fetchActivityLog({ limit: 100, date: "ALL" })
       .then((data) => {
         if (!active) return;
         if (Array.isArray(data)) {
           setLiveLog(data);
+        } else {
+          setLiveLog([]);
         }
       })
       .catch((err) => {
-        console.warn("Using local activity store:", err.message);
+        if (!active) return;
+        setError(err.detail || err.message || "Failed to load audit events");
       })
       .finally(() => {
         if (active) setLoading(false);
@@ -1951,18 +1959,101 @@ function Activity({ log: fallbackLog }) {
     };
   }, []);
 
-  const items = liveLog.length > 0 ? liveLog : (fallbackLog || []);
+  useEffect(() => {
+    const cancel = loadLogs();
+    return cancel;
+  }, [loadLogs]);
+
+  const items = useMemo(() => {
+    return liveLog.filter((l) => {
+      const kind = (l.eventTitle || l.kind || l.eventType || "").toUpperCase();
+      const text = `${l.notes || ""} ${l.text || ""} ${l.studentName || ""} ${l.rollNumber || ""} ${l.performer || ""}`.toLowerCase();
+      
+      const matchesSearch = !searchFilter.trim() || text.includes(searchFilter.toLowerCase().trim());
+      
+      if (!matchesSearch) return false;
+      if (filterType === "ALL") return true;
+      if (filterType === "CHECKIN") return kind.includes("CHECK") || kind.includes("REGISTER");
+      if (filterType === "CABIN") return kind.includes("CABIN") || kind.includes("CONSULT");
+      if (filterType === "DISPENSE") return kind.includes("DISPENSE") || kind.includes("PHARMACY");
+      if (filterType === "EMERGENCY") return kind.includes("EMERGENCY") || kind.includes("AMBULANCE");
+      return true;
+    });
+  }, [liveLog, filterType, searchFilter]);
 
   return (
     <div className="space-y-6">
       <PageHead
         title="Activity Log"
-        sub="Audit feed of front desk check-ins, cabin transitions, and dispensing events"
+        sub="Audit feed of front desk check-ins, cabin transitions, dispensing, and emergency events"
         badge={`${items.length} events`}
-        right={loading && <RotateCw className="w-4 h-4 animate-spin text-teal-600" />}
+        right={
+          <button
+            type="button"
+            onClick={() => loadLogs()}
+            disabled={loading}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-semibold transition-colors cursor-pointer"
+          >
+            <RotateCw className={`w-3.5 h-3.5 ${loading ? "animate-spin text-teal-600" : ""}`} />
+            <span>Refresh</span>
+          </button>
+        }
       />
 
-      <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs p-5">
+      {error && (
+        <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 shrink-0 text-rose-600" />
+            <span>{error}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => loadLogs()}
+            className="px-3 py-1 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-semibold text-xs cursor-pointer"
+          >
+            Retry
+          </button>
+        </div>
+      )}
+
+      {/* Filter and Search Bar */}
+      <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs p-5 space-y-4">
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+          <div className="relative max-w-sm w-full">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              value={searchFilter}
+              onChange={(e) => setSearchFilter(e.target.value)}
+              placeholder="Search activity by student, roll, or staff..."
+              className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 bg-slate-50/60 text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-teal-500 focus:bg-white transition-all font-medium"
+            />
+          </div>
+
+          <div className="flex items-center gap-1.5 overflow-x-auto w-full sm:w-auto">
+            {[
+              { id: "ALL", label: "All Events" },
+              { id: "CHECKIN", label: "Check-ins" },
+              { id: "CABIN", label: "Cabins" },
+              { id: "DISPENSE", label: "Dispensing" },
+              { id: "EMERGENCY", label: "Emergency" },
+            ].map((f) => (
+              <button
+                key={f.id}
+                type="button"
+                onClick={() => setFilterType(f.id)}
+                className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all cursor-pointer shrink-0 ${
+                  filterType === f.id
+                    ? "bg-teal-700 text-white shadow-2xs"
+                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                }`}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
         <div className="divide-y divide-slate-100">
           {items.map((l, i) => {
             const timeStr = l.timestamp
@@ -1973,23 +2064,33 @@ function Activity({ log: fallbackLog }) {
             const performer = l.performer || l.performedByEmail;
 
             return (
-              <div key={l.eventId || i} className="py-3 flex items-center justify-between gap-4 text-xs">
-                <div className="flex items-center gap-3">
-                  <span className="font-mono text-slate-400 text-xs w-14 shrink-0">{timeStr}</span>
+              <div key={l.eventId || i} className="py-3.5 flex items-center justify-between gap-4 text-xs hover:bg-slate-50/50 px-2 rounded-xl transition-colors">
+                <div className="flex items-start gap-3">
+                  <span className="font-mono text-slate-400 text-xs w-14 shrink-0 pt-0.5">{timeStr}</span>
                   <div>
                     <span className="font-bold text-slate-900">{kind}</span>
                     <p className="text-slate-500 text-[11px] mt-0.5">{desc}</p>
                     {performer && <span className="text-[10px] text-teal-700 font-mono">By: {performer}</span>}
                   </div>
                 </div>
-                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 shrink-0">
-                  {l.eventId ? `Event #${l.eventId}` : "Logged"}
+                <span className="text-[10px] font-semibold px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-600 shrink-0 font-mono">
+                  {l.eventId ? `Event #${l.eventId}` : "Audit"}
                 </span>
               </div>
             );
           })}
-          {items.length === 0 && !loading && (
-            <p className="text-center text-slate-400 text-xs py-8">No events logged yet.</p>
+          {items.length === 0 && !loading && !error && (
+            <div className="py-12 text-center">
+              <div className="max-w-xs mx-auto space-y-2">
+                <div className="w-12 h-12 rounded-full bg-slate-50 border border-slate-200 text-slate-400 flex items-center justify-center mx-auto">
+                  <ActivityIcon className="w-6 h-6" />
+                </div>
+                <p className="text-xs font-bold text-slate-700">No activity events recorded yet</p>
+                <p className="text-[11px] text-slate-400">
+                  Real-time events will be logged here as front desk staff and doctors interact with the system.
+                </p>
+              </div>
+            </div>
           )}
         </div>
       </div>
@@ -1997,7 +2098,7 @@ function Activity({ log: fallbackLog }) {
   );
 }
 
-/* ====================== 8. SETTINGS ====================== */
+/* ====================== 7. SETTINGS ====================== */
 function Settings({ flash }) {
   const [settingsData, setSettingsData] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -2005,6 +2106,10 @@ function Settings({ flash }) {
   const [rfidRoll, setRfidRoll] = useState("");
   const [rfidUid, setRfidUid] = useState("");
   const [rfidBusy, setRfidBusy] = useState(false);
+
+  // Live Backend & System Diagnostics state
+  const [diagBusy, setDiagBusy] = useState(false);
+  const [diagResults, setDiagResults] = useState(null);
 
   const loadSettings = () => {
     setLoading(true);
@@ -2051,6 +2156,36 @@ function Settings({ flash }) {
     }
   };
 
+  const runDiagnostics = async () => {
+    setDiagBusy(true);
+    setDiagResults(null);
+    const start = performance.now();
+    try {
+      const [health, ready] = await Promise.all([
+        checkSystemHealth(),
+        checkDatabaseReadiness(),
+      ]);
+      const latency = Math.round(performance.now() - start);
+      setDiagResults({
+        ok: true,
+        latency,
+        health,
+        ready,
+        timestamp: new Date().toLocaleTimeString(),
+      });
+      flash("System & Database Diagnostics: All services operational!");
+    } catch (err) {
+      setDiagResults({
+        ok: false,
+        error: err.detail || err.message || "Failed to reach backend service",
+        timestamp: new Date().toLocaleTimeString(),
+      });
+      flash(`Diagnostic failure: ${err.message}`);
+    } finally {
+      setDiagBusy(false);
+    }
+  };
+
   const terminal = settingsData?.terminal || {};
   const activeDoctors = settingsData?.activeDoctors || [];
 
@@ -2058,7 +2193,7 @@ function Settings({ flash }) {
     <div className="max-w-2xl mx-auto py-2 space-y-6">
       <PageHead
         title="Terminal & Cabin Settings"
-        sub="Front desk preferences, doctor cabin availability, and RFID provisioning"
+        sub="Front desk preferences, doctor cabin availability, and live system diagnostics"
       />
 
       {/* Terminal Details */}
@@ -2181,20 +2316,67 @@ function Settings({ flash }) {
         </form>
       </div>
 
-      {/* Reset Demo Data Button */}
-      <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs p-6 text-xs">
-        <button
-          type="button"
-          onClick={() => {
-            if (window.confirm("Reset all local simulation data to default demo state?")) {
-              resetDemo();
-              flash("Local simulation data reset successfully");
-            }
-          }}
-          className="w-full py-2.5 px-4 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 font-semibold text-xs transition-colors cursor-pointer"
-        >
-          Reset Local Simulation Data to Initial State
-        </button>
+      {/* Backend & System Diagnostics Panel */}
+      <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs p-6 space-y-4 text-xs">
+        <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+          <div className="flex items-center gap-2">
+            <Server className="w-4 h-4 text-teal-700" />
+            <h3 className="text-sm font-bold text-slate-900">Backend & Database Diagnostics</h3>
+          </div>
+          <button
+            type="button"
+            onClick={runDiagnostics}
+            disabled={diagBusy}
+            className="px-3.5 py-1.5 rounded-xl bg-teal-700 hover:bg-teal-800 disabled:bg-slate-300 text-white font-semibold text-xs transition-colors flex items-center gap-1.5 cursor-pointer"
+          >
+            <RotateCw className={`w-3.5 h-3.5 ${diagBusy ? "animate-spin" : ""}`} />
+            <span>{diagBusy ? "Pinging Services..." : "Run Diagnostics"}</span>
+          </button>
+        </div>
+
+        <p className="text-slate-500 text-[11px]">
+          Directly verifies live connectivity with FastAPI backend and Aiven MySQL cluster connection pool.
+        </p>
+
+        {diagResults && (
+          <div className="space-y-3 pt-2">
+            {diagResults.ok ? (
+              <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                    <span className="font-bold text-emerald-900">All Systems Operational</span>
+                  </div>
+                  <span className="font-mono text-[11px] text-emerald-700 font-semibold">
+                    {diagResults.latency}ms ping
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-2 pt-1 text-[11px] text-emerald-800 border-t border-emerald-200/60">
+                  <div>
+                    <span className="text-emerald-600">FastAPI Status: </span>
+                    <span className="font-semibold">{diagResults.health?.status || "HEALTHY"}</span>
+                  </div>
+                  <div>
+                    <span className="text-emerald-600">MySQL Pool: </span>
+                    <span className="font-semibold">{diagResults.ready?.status || "READY"}</span>
+                  </div>
+                </div>
+                <div className="text-[10px] text-emerald-600 font-mono pt-0.5">
+                  Checked at {diagResults.timestamp}
+                </div>
+              </div>
+            ) : (
+              <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 space-y-1">
+                <div className="flex items-center gap-2 text-rose-800 font-bold">
+                  <AlertCircle className="w-4 h-4 text-rose-600" />
+                  <span>Diagnostic Warning</span>
+                </div>
+                <p className="text-rose-700 text-xs">{diagResults.error}</p>
+                <p className="text-[10px] text-rose-500 font-mono">Timestamp: {diagResults.timestamp}</p>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

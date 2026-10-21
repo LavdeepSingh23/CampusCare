@@ -539,3 +539,12 @@ export function enrollRfidCard(rollNumber, cardUid) {
     body: JSON.stringify({ roll_number: rollNumber, card_uid: cardUid }),
   })
 }
+
+export function checkSystemHealth() {
+  return request('/api/health')
+}
+
+export function checkDatabaseReadiness() {
+  return request('/api/ready')
+}
+
