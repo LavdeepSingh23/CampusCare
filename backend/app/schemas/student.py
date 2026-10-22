@@ -1,5 +1,5 @@
 """
-Pydantic schemas for Student Identity, Profile, Telemetry, and Onboarding (SD-1 & SD-2).
+Pydantic schemas for Student Identity, Profile, Telemetry, Onboarding, and Medical Details (SD-1, SD-2, SD-3).
 """
 
 from typing import List, Optional
@@ -96,6 +96,11 @@ class AllergyInput(BaseModel):
     severity: Optional[str] = Field("MILD", description="MILD, MODERATE, SEVERE, UNKNOWN")
 
 
+class ConditionInput(BaseModel):
+    name: str = Field(..., min_length=1, max_length=100, description="Name of chronic condition")
+    otherDescription: Optional[str] = Field(None, max_length=255, description="Additional notes or specifics")
+
+
 class MedicationInput(BaseModel):
     medicineName: str = Field(..., min_length=1, max_length=150, description="Brand or generic medicine name")
     strength: Optional[str] = Field(None, max_length=50, description="e.g. 500mg, 10mg")
@@ -126,3 +131,90 @@ class StudentProfileUpdateResponse(BaseModel):
     message: str
     profileCompletion: ProfileCompletionStatus
     data: StudentMeResponse
+
+
+# ==========================================
+# SD-3: Student Medical Details Schemas
+# ==========================================
+
+class StudentAllergyDetail(BaseModel):
+    allergyId: int
+    allergen: str
+    reaction: Optional[str] = None
+    severity: str = "MILD"
+    source: str = "SELF_REPORTED"  # SELF_REPORTED | CLINICAL
+    canEdit: bool = True
+    recordedAt: Optional[str] = None
+
+
+class StudentConditionDetail(BaseModel):
+    studentConditionId: int
+    conditionId: int
+    name: str
+    otherDescription: Optional[str] = None
+    source: str = "SELF_REPORTED"  # SELF_REPORTED | CLINICAL
+    canEdit: bool = True
+    recordedAt: Optional[str] = None
+
+
+class StudentMedicationDetail(BaseModel):
+    studentMedicationId: int
+    medicineName: str
+    strength: Optional[str] = None
+    dose: Optional[str] = None
+    reason: Optional[str] = None
+    startedAt: Optional[str] = None
+    source: str = "SELF_REPORTED"  # SELF_REPORTED | CLINICAL
+    canEdit: bool = True
+
+
+class MedicalProfileStatusDetail(BaseModel):
+    allergyStatus: str = "NOT_REPORTED"  # NOT_REPORTED | NONE_REPORTED | HAS_RECORDS
+    conditionStatus: str = "NOT_REPORTED"
+    medicationStatus: str = "NOT_REPORTED"
+    updatedAt: Optional[str] = None
+
+
+class StudentMedicalSummary(BaseModel):
+    totalAllergies: int = 0
+    totalConditions: int = 0
+    totalMedications: int = 0
+    hasSevereAllergyAlert: bool = False
+    editableCount: int = 0
+    clinicalVerifiedCount: int = 0
+
+
+class StudentConsultationSummary(BaseModel):
+    visitId: int
+    doctorName: str
+    specialty: Optional[str] = None
+    diagnosis: str
+    prescriptions: List[str] = []
+    completedAt: Optional[str] = None
+
+
+class StudentMedicalProfileResponse(BaseModel):
+    rollNumber: str
+    bloodGroup: Optional[str] = None
+    medicalStatus: MedicalProfileStatusDetail
+    summary: StudentMedicalSummary
+    allergies: List[StudentAllergyDetail] = []
+    conditions: List[StudentConditionDetail] = []
+    medications: List[StudentMedicationDetail] = []
+    recentConsultations: List[StudentConsultationSummary] = []
+
+
+class StudentMedicalProfileUpdateRequest(BaseModel):
+    bloodGroup: Optional[str] = Field(None, description="Blood group: A+, A-, B+, B-, AB+, AB-, O+, O-")
+    hasAllergies: Optional[bool] = None
+    allergies: Optional[List[AllergyInput]] = None
+    hasChronicConditions: Optional[bool] = None
+    chronicConditions: Optional[List[str]] = None
+    hasCurrentMedications: Optional[bool] = None
+    currentMedications: Optional[List[MedicationInput]] = None
+
+
+class SingleMedicalItemActionResponse(BaseModel):
+    success: bool = True
+    message: str
+    itemId: int

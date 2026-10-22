@@ -12,10 +12,24 @@ from app.schemas.student import (
     StudentProfileHistoryItem,
     StudentProfileUpdateRequest,
     StudentProfileUpdateResponse,
+    StudentMedicalProfileResponse,
+    StudentMedicalProfileUpdateRequest,
+    AllergyInput,
+    ConditionInput,
+    MedicationInput,
+    SingleMedicalItemActionResponse,
 )
 from app.services.student_service import (
     get_student_me_telemetry,
     update_student_profile,
+    get_student_medical_profile,
+    update_student_medical_profile,
+    add_student_allergy,
+    delete_student_allergy,
+    add_student_condition,
+    delete_student_condition,
+    add_student_medication,
+    delete_student_medication,
 )
 
 router = APIRouter(prefix="/student", tags=["Student"])
@@ -68,6 +82,147 @@ def update_current_student_profile(
         message="Student profile updated successfully.",
         profileCompletion=updated_data["profileCompletion"],
         data=updated_data,
+    )
+
+
+# ==========================================
+# SD-3: Student Medical Details Routes
+# ==========================================
+
+@router.get("/medical", response_model=StudentMedicalProfileResponse)
+@router.get("/me/medical", response_model=StudentMedicalProfileResponse)
+def get_current_student_medical_profile_endpoint(
+    current: CurrentUser = Depends(get_current_student),
+):
+    """
+    SD-3: Reads the authenticated student's own medical profile.
+    Distinguishes self-reported data from clinician-verified records,
+    and returns sanitized consultation history (omits internal staff triage notes).
+    """
+    if not current.roll_number:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Current student account does not have a linked roll number.",
+        )
+    return get_student_medical_profile(current.user_id, current.roll_number)
+
+
+@router.put("/medical", response_model=StudentMedicalProfileResponse)
+@router.put("/me/medical", response_model=StudentMedicalProfileResponse)
+def update_current_student_medical_profile_endpoint(
+    payload: StudentMedicalProfileUpdateRequest,
+    current: CurrentUser = Depends(get_current_student),
+):
+    """
+    SD-3: Updates the student's self-reported medical declarations.
+    Protects clinical staff records: only self-reported entries are modified;
+    records verified by clinical staff remain intact.
+    """
+    if not current.roll_number:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Current student account does not have a linked roll number.",
+        )
+    return update_student_medical_profile(
+        user_id=current.user_id,
+        roll_number=current.roll_number,
+        payload=payload.dict(exclude_unset=True),
+    )
+
+
+@router.post("/medical/allergies", response_model=SingleMedicalItemActionResponse)
+def add_student_allergy_endpoint(
+    item: AllergyInput,
+    current: CurrentUser = Depends(get_current_student),
+):
+    """SD-3: Adds a single self-reported allergy for the student."""
+    if not current.roll_number:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing roll number.")
+    allergy_id = add_student_allergy(current.user_id, current.roll_number, item.dict())
+    return SingleMedicalItemActionResponse(
+        success=True,
+        message=f"Allergy '{item.allergen}' recorded successfully.",
+        itemId=allergy_id,
+    )
+
+
+@router.delete("/medical/allergies/{allergy_id}", response_model=SingleMedicalItemActionResponse)
+def delete_student_allergy_endpoint(
+    allergy_id: int,
+    current: CurrentUser = Depends(get_current_student),
+):
+    """SD-3: Soft-ends a self-reported allergy. Rejects attempts to delete clinically verified alerts."""
+    if not current.roll_number:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing roll number.")
+    delete_student_allergy(current.user_id, current.roll_number, allergy_id)
+    return SingleMedicalItemActionResponse(
+        success=True,
+        message="Allergy alert removed successfully.",
+        itemId=allergy_id,
+    )
+
+
+@router.post("/medical/conditions", response_model=SingleMedicalItemActionResponse)
+def add_student_condition_endpoint(
+    item: ConditionInput,
+    current: CurrentUser = Depends(get_current_student),
+):
+    """SD-3: Adds a single self-reported chronic condition."""
+    if not current.roll_number:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing roll number.")
+    sc_id = add_student_condition(current.user_id, current.roll_number, item.dict())
+    return SingleMedicalItemActionResponse(
+        success=True,
+        message=f"Chronic condition '{item.name}' recorded successfully.",
+        itemId=sc_id,
+    )
+
+
+@router.delete("/medical/conditions/{student_condition_id}", response_model=SingleMedicalItemActionResponse)
+def delete_student_condition_endpoint(
+    student_condition_id: int,
+    current: CurrentUser = Depends(get_current_student),
+):
+    """SD-3: Soft-ends a self-reported condition. Rejects attempts to delete clinically verified records."""
+    if not current.roll_number:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing roll number.")
+    delete_student_condition(current.user_id, current.roll_number, student_condition_id)
+    return SingleMedicalItemActionResponse(
+        success=True,
+        message="Chronic condition record removed successfully.",
+        itemId=student_condition_id,
+    )
+
+
+@router.post("/medical/medications", response_model=SingleMedicalItemActionResponse)
+def add_student_medication_endpoint(
+    item: MedicationInput,
+    current: CurrentUser = Depends(get_current_student),
+):
+    """SD-3: Adds a single self-reported ongoing medication."""
+    if not current.roll_number:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing roll number.")
+    sm_id = add_student_medication(current.user_id, current.roll_number, item.dict())
+    return SingleMedicalItemActionResponse(
+        success=True,
+        message=f"Medication '{item.medicineName}' recorded successfully.",
+        itemId=sm_id,
+    )
+
+
+@router.delete("/medical/medications/{student_medication_id}", response_model=SingleMedicalItemActionResponse)
+def delete_student_medication_endpoint(
+    student_medication_id: int,
+    current: CurrentUser = Depends(get_current_student),
+):
+    """SD-3: Soft-ends a self-reported medication. Rejects attempts to delete clinically verified records."""
+    if not current.roll_number:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing roll number.")
+    delete_student_medication(current.user_id, current.roll_number, student_medication_id)
+    return SingleMedicalItemActionResponse(
+        success=True,
+        message="Ongoing medication record removed successfully.",
+        itemId=student_medication_id,
     )
 
 
@@ -144,16 +299,15 @@ def get_student_visit_history(
                 if presc_id:
                     cur.execute(
                         """
-                        SELECT m.name AS med_name, pi.dose, pi.frequency, pi.duration
+                        SELECT pi.medicine_name, pi.strength, pi.duration_value, pi.duration_unit
                         FROM PRESCRIPTION_ITEM pi
-                        JOIN MEDICINE m ON m.medicine_id = pi.medicine_id
                         WHERE pi.prescription_id = %s
                         """,
                         (presc_id,),
                     )
                     med_rows = cur.fetchall()
                     meds = [
-                        f"{m['med_name']} ({m.get('dose') or ''} {m.get('frequency') or ''} for {m.get('duration') or ''})".strip()
+                        f"{m['medicine_name']} {m.get('strength') or ''}".strip()
                         for m in med_rows
                     ]
 

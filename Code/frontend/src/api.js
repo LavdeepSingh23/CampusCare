@@ -713,6 +713,177 @@ export async function updateStudentProfile(payload) {
   }
 }
 
+// ── Student Medical Details & Declarations (SD-3) ──────────────────────
+export async function fetchStudentMedicalProfile() {
+  try {
+    return await request('/api/student/medical')
+  } catch (err) {
+    if (DEMO_MODE || getToken()?.startsWith('demo-') || err.message?.includes('Failed to fetch') || err.status === 404) {
+      const stored = getStoredStudent()
+      const roll = stored?.rollNumber || '102403499'
+      const mockProfile = MOCK_PATIENT_PROFILES[roll] || { bloodGroup: 'B+' }
+      return mockDelay({
+        rollNumber: roll,
+        bloodGroup: mockProfile.bloodGroup || 'B+',
+        medicalStatus: {
+          allergyStatus: 'HAS_RECORDS',
+          conditionStatus: 'NONE_REPORTED',
+          medicationStatus: 'NONE_REPORTED',
+          updatedAt: new Date().toISOString(),
+        },
+        summary: {
+          totalAllergies: 1,
+          totalConditions: 0,
+          totalMedications: 0,
+          hasSevereAllergyAlert: false,
+          editableCount: 1,
+          clinicalVerifiedCount: 0,
+        },
+        allergies: [
+          {
+            allergyId: 1,
+            allergen: 'Penicillin',
+            reaction: 'Mild skin rash',
+            severity: 'MILD',
+            source: 'SELF_REPORTED',
+            canEdit: true,
+            recordedAt: new Date().toISOString(),
+          },
+        ],
+        conditions: [],
+        medications: [],
+        recentConsultations: [
+          {
+            visitId: 101,
+            doctorName: 'Dr. Anil Sharma',
+            specialty: 'General Medicine',
+            diagnosis: 'Viral Pharyngitis',
+            prescriptions: ['Paracetamol 500mg', 'Cetirizine 10mg'],
+            completedAt: new Date(Date.now() - 86400000 * 7).toISOString(),
+          },
+        ],
+      })
+    }
+    throw err
+  }
+}
 
+export async function updateStudentMedicalProfile(payload) {
+  try {
+    return await request('/api/student/medical', {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    })
+  } catch (err) {
+    if (DEMO_MODE || getToken()?.startsWith('demo-') || err.message?.includes('Failed to fetch') || err.status === 404) {
+      return fetchStudentMedicalProfile()
+    }
+    throw err
+  }
+}
 
+export async function addStudentAllergy(item) {
+  try {
+    return await request('/api/student/medical/allergies', {
+      method: 'POST',
+      body: JSON.stringify(item),
+    })
+  } catch (err) {
+    if (DEMO_MODE || getToken()?.startsWith('demo-') || err.message?.includes('Failed to fetch')) {
+      return mockDelay({
+        success: true,
+        message: `Allergy '${item.allergen}' recorded successfully.`,
+        itemId: Date.now(),
+      })
+    }
+    throw err
+  }
+}
+
+export async function deleteStudentAllergy(allergyId) {
+  try {
+    return await request(`/api/student/medical/allergies/${allergyId}`, {
+      method: 'DELETE',
+    })
+  } catch (err) {
+    if (DEMO_MODE || getToken()?.startsWith('demo-') || err.message?.includes('Failed to fetch')) {
+      return mockDelay({
+        success: true,
+        message: 'Allergy alert removed successfully.',
+        itemId: allergyId,
+      })
+    }
+    throw err
+  }
+}
+
+export async function addStudentCondition(item) {
+  try {
+    return await request('/api/student/medical/conditions', {
+      method: 'POST',
+      body: JSON.stringify(item),
+    })
+  } catch (err) {
+    if (DEMO_MODE || getToken()?.startsWith('demo-') || err.message?.includes('Failed to fetch')) {
+      return mockDelay({
+        success: true,
+        message: `Chronic condition '${item.name}' recorded successfully.`,
+        itemId: Date.now(),
+      })
+    }
+    throw err
+  }
+}
+
+export async function deleteStudentCondition(conditionId) {
+  try {
+    return await request(`/api/student/medical/conditions/${conditionId}`, {
+      method: 'DELETE',
+    })
+  } catch (err) {
+    if (DEMO_MODE || getToken()?.startsWith('demo-') || err.message?.includes('Failed to fetch')) {
+      return mockDelay({
+        success: true,
+        message: 'Chronic condition record removed successfully.',
+        itemId: conditionId,
+      })
+    }
+    throw err
+  }
+}
+
+export async function addStudentMedication(item) {
+  try {
+    return await request('/api/student/medical/medications', {
+      method: 'POST',
+      body: JSON.stringify(item),
+    })
+  } catch (err) {
+    if (DEMO_MODE || getToken()?.startsWith('demo-') || err.message?.includes('Failed to fetch')) {
+      return mockDelay({
+        success: true,
+        message: `Medication '${item.medicineName}' recorded successfully.`,
+        itemId: Date.now(),
+      })
+    }
+    throw err
+  }
+}
+
+export async function deleteStudentMedication(medicationId) {
+  try {
+    return await request(`/api/student/medical/medications/${medicationId}`, {
+      method: 'DELETE',
+    })
+  } catch (err) {
+    if (DEMO_MODE || getToken()?.startsWith('demo-') || err.message?.includes('Failed to fetch')) {
+      return mockDelay({
+        success: true,
+        message: 'Ongoing medication record removed successfully.',
+        itemId: medicationId,
+      })
+    }
+    throw err
+  }
+}
 

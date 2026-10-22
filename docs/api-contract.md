@@ -1431,3 +1431,113 @@ stateDiagram-v2
   - `401 Unauthorized`: Missing or expired JWT.
   - `403 Forbidden`: Non-student user attempting self-onboarding or student record is inactive.
 
+---
+
+### 9.5 Student Medical Details & Declarations (`GET` & `PUT /api/student/medical`)
+- **Canonical Routes**:
+  - `GET /api/student/medical` (alias: `GET /api/student/me/medical`)
+  - `PUT /api/student/medical` (alias: `PUT /api/student/me/medical`)
+  - `POST /api/student/medical/allergies` & `DELETE /api/student/medical/allergies/{allergy_id}`
+  - `POST /api/student/medical/conditions` & `DELETE /api/student/medical/conditions/{student_condition_id}`
+  - `POST /api/student/medical/medications` & `DELETE /api/student/medical/medications/{student_medication_id}`
+- **Authorization**: Authenticated Student (`role="STUDENT"` required). Rejects cross-student operations and non-student accounts.
+- **Clinical Governance & Immutability Rules**:
+  - **Self-Reported Declarations (`source="SELF_REPORTED"`, `canEdit=true`)**: Entered by the student; can be updated, replaced, or deleted at any time.
+  - **Clinically Verified Records (`source="CLINICAL"`, `canEdit=false`)**: Entered by medical doctors or nursing staff (`recorded_by_user_id` belongs to staff); protected health records that cannot be modified or deleted by the student. Any attempt returns `403 Forbidden`.
+  - **Bulk Update Safety**: When a student performs a bulk `PUT /api/student/medical`, only self-reported records are updated or soft-ended. Clinician-verified records are preserved intact.
+  - **Data Minimization in Consultation History**: Completed consultations return doctor name, specialty, confirmed diagnosis, and prescribed medicine schedules. Confidential internal clinical notes and triage scratchpads are strictly excluded.
+
+#### Read Response (`GET /api/student/medical`):
+```json
+{
+  "rollNumber": "102203555",
+  "bloodGroup": "O+",
+  "medicalStatus": {
+    "allergyStatus": "HAS_RECORDS",
+    "conditionStatus": "HAS_RECORDS",
+    "medicationStatus": "HAS_RECORDS",
+    "updatedAt": "2026-10-22T12:00:00"
+  },
+  "summary": {
+    "totalAllergies": 2,
+    "totalConditions": 1,
+    "totalMedications": 1,
+    "hasSevereAllergyAlert": true,
+    "editableCount": 3,
+    "clinicalVerifiedCount": 1
+  },
+  "allergies": [
+    {
+      "allergyId": 52,
+      "allergen": "Sulfa Drugs",
+      "reaction": "Skin peeling and swelling",
+      "severity": "SEVERE",
+      "source": "SELF_REPORTED",
+      "canEdit": true,
+      "recordedAt": "2026-10-22T12:05:00"
+    },
+    {
+      "allergyId": 53,
+      "allergen": "Cephalosporins",
+      "reaction": "Anaphylactoid reaction",
+      "severity": "SEVERE",
+      "source": "CLINICAL",
+      "canEdit": false,
+      "recordedAt": "2026-10-20T10:30:00"
+    }
+  ],
+  "conditions": [
+    {
+      "studentConditionId": 10,
+      "conditionId": 4,
+      "name": "Type 1 Diabetes",
+      "otherDescription": null,
+      "source": "SELF_REPORTED",
+      "canEdit": true,
+      "recordedAt": "2026-10-22T12:05:00"
+    }
+  ],
+  "medications": [
+    {
+      "studentMedicationId": 9,
+      "medicineName": "Insulin Glargine",
+      "strength": "100IU/ml",
+      "dose": "10 units QPM",
+      "reason": "Basal glycemic control",
+      "startedAt": "2026-10-22",
+      "source": "SELF_REPORTED",
+      "canEdit": true
+    }
+  ],
+  "recentConsultations": [
+    {
+      "visitId": 142,
+      "doctorName": "Dr. Anil Sharma",
+      "specialty": "General Medicine",
+      "diagnosis": "Acute Bronchitis",
+      "prescriptions": [
+        "Azithromycin 500mg for 3 days"
+      ],
+      "completedAt": "2026-10-20T14:30:00"
+    }
+  ]
+}
+```
+
+#### Granular Management Endpoints:
+1. `POST /api/student/medical/allergies`:
+   - Body: `{"allergen": "Peanuts", "reaction": "Hives", "severity": "MODERATE"}`
+   - Returns: `{"success": true, "message": "Allergy 'Peanuts' recorded successfully.", "itemId": 54}`
+2. `DELETE /api/student/medical/allergies/{allergy_id}`:
+   - Soft-ends allergy if `canEdit=true`. Rejects with `403 Forbidden` if clinician-verified.
+3. `POST /api/student/medical/conditions`:
+   - Body: `{"name": "Migraine", "otherDescription": "Light-sensitive"}`
+   - Returns: `{"success": true, "message": "Chronic condition 'Migraine' recorded successfully.", "itemId": 12}`
+4. `DELETE /api/student/medical/conditions/{student_condition_id}`:
+   - Soft-ends condition if self-reported. Rejects with `403 Forbidden` if clinical.
+5. `POST /api/student/medical/medications`:
+   - Body: `{"medicineName": "Metformin", "strength": "500mg", "dose": "1 tab BD", "reason": "Insulin sensitivity"}`
+   - Returns: `{"success": true, "message": "Medication 'Metformin' recorded successfully.", "itemId": 11}`
+6. `DELETE /api/student/medical/medications/{student_medication_id}`:
+   - Soft-ends medication if self-reported. Rejects with `403 Forbidden` if clinical.
+

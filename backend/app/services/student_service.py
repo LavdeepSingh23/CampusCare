@@ -883,3 +883,701 @@ def update_student_profile(
 
     # Return refreshed telemetry
     return get_student_me_telemetry(user_id, clean_roll)
+
+
+# ==========================================
+# SD-3: Student Medical Details Service Layer
+# ==========================================
+
+def get_student_medical_profile(user_id: int, roll_number: str) -> Dict[str, Any]:
+    """
+    SD-3: Reads the authenticated student's medical profile.
+    Separates self-reported declarations from clinician-verified medical records,
+    and returns sanitized clinical consultation history (data minimization).
+    """
+    clean_roll = roll_number.strip().upper()
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            # 1. Blood group from STUDENT
+            cur.execute(
+                "SELECT blood_group, status FROM STUDENT WHERE roll_number = %s LIMIT 1",
+                (clean_roll,),
+            )
+            st_row = cur.fetchone()
+            if not st_row:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Student record '{clean_roll}' not found.",
+                )
+            if st_row["status"] == "INACTIVE":
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Student record is inactive.",
+                )
+
+            blood_group = st_row.get("blood_group")
+
+            # 2. Medical profile status
+            cur.execute(
+                """
+                SELECT allergy_status, condition_status, medication_status, updated_at
+                FROM MEDICAL_PROFILE_STATUS
+                WHERE roll_number = %s
+                LIMIT 1
+                """,
+                (clean_roll,),
+            )
+            med_stat = cur.fetchone() or {
+                "allergy_status": "NOT_REPORTED",
+                "condition_status": "NOT_REPORTED",
+                "medication_status": "NOT_REPORTED",
+                "updated_at": None,
+            }
+
+            # 3. Active Allergies (distinguish self-reported vs clinical)
+            cur.execute(
+                """
+                SELECT allergy_id, allergen, reaction, severity, recorded_at, recorded_by_user_id
+                FROM ALLERGY
+                WHERE roll_number = %s AND ended_at IS NULL
+                ORDER BY recorded_at DESC
+                """,
+                (clean_roll,),
+            )
+            allergy_rows = cur.fetchall()
+            allergies = []
+            has_severe_allergy = False
+            for r in allergy_rows:
+                sev = (r.get("severity") or "MILD").upper()
+                if sev == "SEVERE":
+                    has_severe_allergy = True
+                is_self = (r["recorded_by_user_id"] == user_id)
+                allergies.append({
+                    "allergyId": r["allergy_id"],
+                    "allergen": r["allergen"],
+                    "reaction": r.get("reaction"),
+                    "severity": sev,
+                    "source": "SELF_REPORTED" if is_self else "CLINICAL",
+                    "canEdit": is_self,
+                    "recordedAt": r["recorded_at"].isoformat() if r.get("recorded_at") else None,
+                })
+
+            # 4. Active Chronic Conditions
+            cur.execute(
+                """
+                SELECT sc.student_condition_id, sc.condition_id, c.name, sc.other_description,
+                       sc.recorded_at, sc.recorded_by_user_id
+                FROM STUDENT_CONDITION sc
+                JOIN `CONDITION` c ON c.condition_id = sc.condition_id
+                WHERE sc.roll_number = %s AND sc.ended_at IS NULL
+                ORDER BY sc.recorded_at DESC
+                """,
+                (clean_roll,),
+            )
+            cond_rows = cur.fetchall()
+            conditions = []
+            for r in cond_rows:
+                is_self = (r["recorded_by_user_id"] == user_id)
+                conditions.append({
+                    "studentConditionId": r["student_condition_id"],
+                    "conditionId": r["condition_id"],
+                    "name": r["name"],
+                    "otherDescription": r.get("other_description"),
+                    "source": "SELF_REPORTED" if is_self else "CLINICAL",
+                    "canEdit": is_self,
+                    "recordedAt": r["recorded_at"].isoformat() if r.get("recorded_at") else None,
+                })
+
+            # 5. Active Medications
+            cur.execute(
+                """
+                SELECT student_medication_id, medicine_name, strength, dose, reason,
+                       started_at, recorded_by_user_id
+                FROM STUDENT_MEDICATION
+                WHERE roll_number = %s AND ended_at IS NULL
+                ORDER BY started_at DESC
+                """,
+                (clean_roll,),
+            )
+            med_rows = cur.fetchall()
+            medications = []
+            for r in med_rows:
+                is_self = (r["recorded_by_user_id"] == user_id)
+                medications.append({
+                    "studentMedicationId": r["student_medication_id"],
+                    "medicineName": r["medicine_name"],
+                    "strength": r.get("strength"),
+                    "dose": r.get("dose"),
+                    "reason": r.get("reason"),
+                    "startedAt": str(r["started_at"]) if r.get("started_at") else None,
+                    "source": "SELF_REPORTED" if is_self else "CLINICAL",
+                    "canEdit": is_self,
+                })
+
+            # 6. Summary metrics
+            editable_count = sum(1 for a in allergies if a["canEdit"]) + \
+                             sum(1 for c in conditions if c["canEdit"]) + \
+                             sum(1 for m in medications if m["canEdit"])
+            clinical_count = (len(allergies) + len(conditions) + len(medications)) - editable_count
+
+            summary = {
+                "totalAllergies": len(allergies),
+                "totalConditions": len(conditions),
+                "totalMedications": len(medications),
+                "hasSevereAllergyAlert": has_severe_allergy,
+                "editableCount": editable_count,
+                "clinicalVerifiedCount": clinical_count,
+            }
+
+            # 7. Recent Consultations (Sanitized - Data Minimization: omits confidential internal staff triage notes)
+            cur.execute(
+                """
+                SELECT v.visit_id, v.completed_at, co.diagnosis,
+                       ua_doc.email AS doc_email, sp.name AS specialty, pr.prescription_id
+                FROM VISIT v
+                JOIN DOCTOR d ON d.doctor_id = v.doctor_id
+                JOIN STAFF s ON s.staff_id = d.staff_id
+                JOIN USER_ACCOUNT ua_doc ON ua_doc.user_id = s.user_id
+                LEFT JOIN SPECIALTY sp ON sp.specialty_id = d.specialty_id
+                LEFT JOIN CONSULTATION co ON co.visit_id = v.visit_id
+                LEFT JOIN PRESCRIPTION pr ON pr.consultation_id = co.consultation_id
+                WHERE v.roll_number = %s AND v.status = 'COMPLETED'
+                ORDER BY v.completed_at DESC
+                LIMIT 10
+                """,
+                (clean_roll,),
+            )
+            consult_rows = cur.fetchall()
+            recent_consultations = []
+            for cr in consult_rows:
+                doc_email = cr.get("doc_email") or ""
+                doc_name = doc_email.split("@")[0].replace(".", " ").title()
+                if not doc_name.startswith("Dr"):
+                    doc_name = f"Dr. {doc_name}"
+
+                presc_id = cr.get("prescription_id")
+                presc_meds = []
+                if presc_id:
+                    cur.execute(
+                        """
+                        SELECT pi.medicine_name, pi.strength, pi.duration_value, pi.duration_unit
+                        FROM PRESCRIPTION_ITEM pi
+                        WHERE pi.prescription_id = %s
+                        """,
+                        (presc_id,),
+                    )
+                    for pm in cur.fetchall():
+                        m_str = f"{pm['medicine_name']} {pm.get('strength') or ''}".strip()
+                        if pm.get("duration_value") and pm.get("duration_unit"):
+                            m_str += f" for {pm['duration_value']} {pm['duration_unit'].lower()}"
+                        presc_meds.append(m_str)
+
+                recent_consultations.append({
+                    "visitId": cr["visit_id"],
+                    "doctorName": doc_name,
+                    "specialty": cr.get("specialty") or "General Physician",
+                    "diagnosis": cr.get("diagnosis") or "General Consultation",
+                    "prescriptions": presc_meds,
+                    "completedAt": cr["completed_at"].isoformat() if cr.get("completed_at") else None,
+                })
+
+            return {
+                "rollNumber": clean_roll,
+                "bloodGroup": blood_group,
+                "medicalStatus": {
+                    "allergyStatus": med_stat["allergy_status"],
+                    "conditionStatus": med_stat["condition_status"],
+                    "medicationStatus": med_stat["medication_status"],
+                    "updatedAt": med_stat["updated_at"].isoformat() if med_stat.get("updated_at") else None,
+                },
+                "summary": summary,
+                "allergies": allergies,
+                "conditions": conditions,
+                "medications": medications,
+                "recentConsultations": recent_consultations,
+            }
+    finally:
+        conn.close()
+
+
+def update_student_medical_profile(
+    user_id: int,
+    roll_number: str,
+    payload: Dict[str, Any],
+) -> Dict[str, Any]:
+    """
+    SD-3: Updates the student's self-reported medical declarations.
+    Guarantees:
+    - Never deletes or modifies clinician-verified alerts (recorded_by_user_id != user_id).
+    - Fully transactional.
+    - Updates MEDICAL_PROFILE_STATUS accordingly.
+    """
+    clean_roll = roll_number.strip().upper()
+
+    blood_group = payload.get("bloodGroup")
+    if blood_group is not None:
+        blood_group = blood_group.strip().upper()
+        if blood_group not in VALID_BLOOD_GROUPS:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid blood group: must be one of {sorted(list(VALID_BLOOD_GROUPS))}.",
+            )
+
+    has_allergies = payload.get("hasAllergies")
+    allergies = payload.get("allergies")
+    if has_allergies is True and allergies:
+        for al in allergies:
+            if not (al.get("allergen") or "").strip():
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Allergen name cannot be empty.",
+                )
+            sev = (al.get("severity") or "MILD").strip().upper()
+            if sev not in VALID_SEVERITY_OPTIONS:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Invalid allergy severity: must be one of {sorted(list(VALID_SEVERITY_OPTIONS))}.",
+                )
+
+    has_conditions = payload.get("hasChronicConditions")
+    chronic_conditions = payload.get("chronicConditions")
+
+    has_medications = payload.get("hasCurrentMedications")
+    current_medications = payload.get("currentMedications")
+    if has_medications is True and current_medications:
+        for med in current_medications:
+            if not (med.get("medicineName") or "").strip():
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Medication medicine name cannot be empty.",
+                )
+
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT status FROM STUDENT WHERE roll_number = %s LIMIT 1 FOR UPDATE", (clean_roll,))
+            st = cur.fetchone()
+            if not st:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Student record not found.")
+            if st["status"] == "INACTIVE":
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Student record is inactive.")
+
+            # Update blood group if provided
+            if blood_group is not None:
+                cur.execute(
+                    "UPDATE STUDENT SET blood_group = %s, updated_at = NOW() WHERE roll_number = %s",
+                    (blood_group, clean_roll),
+                )
+
+            # Fetch existing status
+            cur.execute(
+                "SELECT allergy_status, condition_status, medication_status FROM MEDICAL_PROFILE_STATUS WHERE roll_number = %s FOR UPDATE",
+                (clean_roll,),
+            )
+            med_row = cur.fetchone() or {
+                "allergy_status": "NOT_REPORTED",
+                "condition_status": "NOT_REPORTED",
+                "medication_status": "NOT_REPORTED",
+            }
+            new_allergy_status = med_row["allergy_status"]
+            new_condition_status = med_row["condition_status"]
+            new_medication_status = med_row["medication_status"]
+
+            # Process self-reported allergies
+            if has_allergies is not None:
+                if has_allergies:
+                    new_allergy_status = "HAS_RECORDS"
+                    # End ONLY self-reported allergies
+                    cur.execute(
+                        "UPDATE ALLERGY SET ended_at = NOW() WHERE roll_number = %s AND recorded_by_user_id = %s AND ended_at IS NULL",
+                        (clean_roll, user_id),
+                    )
+                    if allergies is not None:
+                        for al in allergies:
+                            cur.execute(
+                                """
+                                INSERT INTO ALLERGY (roll_number, allergen, reaction, severity, recorded_at, recorded_by_user_id)
+                                VALUES (%s, %s, %s, %s, NOW(), %s)
+                                """,
+                                (clean_roll, al["allergen"].strip(), al.get("reaction"), (al.get("severity") or "MILD").strip().upper(), user_id),
+                            )
+                else:
+                    # Soft-end self-reported
+                    cur.execute(
+                        "UPDATE ALLERGY SET ended_at = NOW() WHERE roll_number = %s AND recorded_by_user_id = %s AND ended_at IS NULL",
+                        (clean_roll, user_id),
+                    )
+                    # Check if any clinical active allergy remains
+                    cur.execute(
+                        "SELECT COUNT(*) AS cnt FROM ALLERGY WHERE roll_number = %s AND ended_at IS NULL",
+                        (clean_roll,),
+                    )
+                    if cur.fetchone()["cnt"] == 0:
+                        new_allergy_status = "NONE_REPORTED"
+
+            # Process self-reported conditions
+            if has_conditions is not None:
+                if has_conditions:
+                    new_condition_status = "HAS_RECORDS"
+                    cur.execute(
+                        "UPDATE STUDENT_CONDITION SET ended_at = NOW() WHERE roll_number = %s AND recorded_by_user_id = %s AND ended_at IS NULL",
+                        (clean_roll, user_id),
+                    )
+                    if chronic_conditions is not None:
+                        for c_name in chronic_conditions:
+                            c_clean = (c_name or "").strip()
+                            if not c_clean:
+                                continue
+                            cur.execute("SELECT condition_id FROM `CONDITION` WHERE name = %s LIMIT 1", (c_clean,))
+                            cond_row = cur.fetchone()
+                            if cond_row:
+                                cond_id = cond_row["condition_id"]
+                            else:
+                                cur.execute(
+                                    "INSERT INTO `CONDITION` (name, description, is_active) VALUES (%s, %s, 1)",
+                                    (c_clean, f"Self-reported condition: {c_clean}"),
+                                )
+                                cond_id = cur.lastrowid
+
+                            cur.execute(
+                                """
+                                INSERT INTO STUDENT_CONDITION (roll_number, condition_id, other_description, recorded_at, recorded_by_user_id)
+                                VALUES (%s, %s, %s, NOW(), %s)
+                                """,
+                                (clean_roll, cond_id, c_clean, user_id),
+                            )
+                else:
+                    cur.execute(
+                        "UPDATE STUDENT_CONDITION SET ended_at = NOW() WHERE roll_number = %s AND recorded_by_user_id = %s AND ended_at IS NULL",
+                        (clean_roll, user_id),
+                    )
+                    cur.execute(
+                        "SELECT COUNT(*) AS cnt FROM STUDENT_CONDITION WHERE roll_number = %s AND ended_at IS NULL",
+                        (clean_roll,),
+                    )
+                    if cur.fetchone()["cnt"] == 0:
+                        new_condition_status = "NONE_REPORTED"
+
+            # Process self-reported medications
+            if has_medications is not None:
+                if has_medications:
+                    new_medication_status = "HAS_RECORDS"
+                    cur.execute(
+                        "UPDATE STUDENT_MEDICATION SET ended_at = NOW() WHERE roll_number = %s AND recorded_by_user_id = %s AND ended_at IS NULL",
+                        (clean_roll, user_id),
+                    )
+                    if current_medications is not None:
+                        for med in current_medications:
+                            cur.execute(
+                                """
+                                INSERT INTO STUDENT_MEDICATION (roll_number, medicine_name, strength, dose, reason, started_at, recorded_by_user_id)
+                                VALUES (%s, %s, %s, %s, %s, CURDATE(), %s)
+                                """,
+                                (clean_roll, med["medicineName"].strip(), med.get("strength"), med.get("dose"), med.get("reason"), user_id),
+                            )
+                else:
+                    cur.execute(
+                        "UPDATE STUDENT_MEDICATION SET ended_at = NOW() WHERE roll_number = %s AND recorded_by_user_id = %s AND ended_at IS NULL",
+                        (clean_roll, user_id),
+                    )
+                    cur.execute(
+                        "SELECT COUNT(*) AS cnt FROM STUDENT_MEDICATION WHERE roll_number = %s AND ended_at IS NULL",
+                        (clean_roll,),
+                    )
+                    if cur.fetchone()["cnt"] == 0:
+                        new_medication_status = "NONE_REPORTED"
+
+            # Upsert MEDICAL_PROFILE_STATUS
+            cur.execute(
+                """
+                INSERT INTO MEDICAL_PROFILE_STATUS (roll_number, allergy_status, condition_status, medication_status, updated_at)
+                VALUES (%s, %s, %s, %s, NOW())
+                ON DUPLICATE KEY UPDATE
+                    allergy_status = VALUES(allergy_status),
+                    condition_status = VALUES(condition_status),
+                    medication_status = VALUES(medication_status),
+                    updated_at = NOW()
+                """,
+                (clean_roll, new_allergy_status, new_condition_status, new_medication_status),
+            )
+
+        conn.commit()
+    except HTTPException:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        raise
+    except Exception as exc:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        logger.error("Failed to update student medical profile for %s: %s", clean_roll, exc)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Database transaction error during student medical profile update: {exc}",
+        )
+    finally:
+        conn.close()
+
+    return get_student_medical_profile(user_id, clean_roll)
+
+
+# -------------------------------------------------------------------------
+# Granular Item Management (with Clinical Protection Enforcement)
+# -------------------------------------------------------------------------
+
+def add_student_allergy(user_id: int, roll_number: str, item: Dict[str, Any]) -> int:
+    """Adds a single self-reported allergy for the student."""
+    clean_roll = roll_number.strip().upper()
+    allergen = (item.get("allergen") or "").strip()
+    if not allergen:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Allergen name is required.")
+    if len(allergen) > 150:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Allergen name cannot exceed 150 characters.")
+
+    reaction = item.get("reaction")
+    if reaction:
+        reaction = reaction.strip()
+        if len(reaction) > 255:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Reaction cannot exceed 255 characters.")
+
+    severity = (item.get("severity") or "MILD").strip().upper()
+    if severity not in VALID_SEVERITY_OPTIONS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid severity: must be one of {sorted(list(VALID_SEVERITY_OPTIONS))}.",
+        )
+
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO ALLERGY (roll_number, allergen, reaction, severity, recorded_at, recorded_by_user_id)
+                VALUES (%s, %s, %s, %s, NOW(), %s)
+                """,
+                (clean_roll, allergen, reaction, severity, user_id),
+            )
+            allergy_id = cur.lastrowid
+
+            cur.execute(
+                """
+                INSERT INTO MEDICAL_PROFILE_STATUS (roll_number, allergy_status, updated_at)
+                VALUES (%s, 'HAS_RECORDS', NOW())
+                ON DUPLICATE KEY UPDATE allergy_status = 'HAS_RECORDS', updated_at = NOW()
+                """,
+                (clean_roll,),
+            )
+        conn.commit()
+        return allergy_id
+    finally:
+        conn.close()
+
+
+def delete_student_allergy(user_id: int, roll_number: str, allergy_id: int) -> bool:
+    """
+    Soft-ends a self-reported allergy.
+    Protects clinical alerts: If recorded_by_user_id != user_id, rejects with 403 Forbidden.
+    """
+    clean_roll = roll_number.strip().upper()
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT allergy_id, roll_number, recorded_by_user_id FROM ALLERGY WHERE allergy_id = %s AND ended_at IS NULL LIMIT 1 FOR UPDATE",
+                (allergy_id,),
+            )
+            row = cur.fetchone()
+            if not row:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Active allergy '{allergy_id}' not found.")
+            if row["roll_number"] != clean_roll:
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access forbidden: cannot modify medical record of another student.")
+            if row["recorded_by_user_id"] != user_id:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="This allergy alert was verified and documented by campus clinical staff and cannot be removed by the student. Please contact the campus health clinic.",
+                )
+
+            cur.execute("UPDATE ALLERGY SET ended_at = NOW() WHERE allergy_id = %s", (allergy_id,))
+
+            cur.execute("SELECT COUNT(*) AS cnt FROM ALLERGY WHERE roll_number = %s AND ended_at IS NULL", (clean_roll,))
+            if cur.fetchone()["cnt"] == 0:
+                cur.execute(
+                    "UPDATE MEDICAL_PROFILE_STATUS SET allergy_status = 'NONE_REPORTED', updated_at = NOW() WHERE roll_number = %s",
+                    (clean_roll,),
+                )
+        conn.commit()
+        return True
+    finally:
+        conn.close()
+
+
+def add_student_condition(user_id: int, roll_number: str, item: Dict[str, Any]) -> int:
+    """Adds a single self-reported chronic condition."""
+    clean_roll = roll_number.strip().upper()
+    name = (item.get("name") or "").strip()
+    if not name:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Condition name is required.")
+    if len(name) > 100:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Condition name cannot exceed 100 characters.")
+
+    other_desc = item.get("otherDescription")
+    if other_desc:
+        other_desc = other_desc.strip()
+        if len(other_desc) > 255:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Description cannot exceed 255 characters.")
+
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT condition_id FROM `CONDITION` WHERE name = %s LIMIT 1", (name,))
+            cond_row = cur.fetchone()
+            if cond_row:
+                cond_id = cond_row["condition_id"]
+            else:
+                cur.execute(
+                    "INSERT INTO `CONDITION` (name, description, is_active) VALUES (%s, %s, 1)",
+                    (name, f"Self-reported condition: {name}"),
+                )
+                cond_id = cur.lastrowid
+
+            cur.execute(
+                """
+                INSERT INTO STUDENT_CONDITION (roll_number, condition_id, other_description, recorded_at, recorded_by_user_id)
+                VALUES (%s, %s, %s, NOW(), %s)
+                """,
+                (clean_roll, cond_id, other_desc or name, user_id),
+            )
+            sc_id = cur.lastrowid
+
+            cur.execute(
+                """
+                INSERT INTO MEDICAL_PROFILE_STATUS (roll_number, condition_status, updated_at)
+                VALUES (%s, 'HAS_RECORDS', NOW())
+                ON DUPLICATE KEY UPDATE condition_status = 'HAS_RECORDS', updated_at = NOW()
+                """,
+                (clean_roll,),
+            )
+        conn.commit()
+        return sc_id
+    finally:
+        conn.close()
+
+
+def delete_student_condition(user_id: int, roll_number: str, student_condition_id: int) -> bool:
+    """
+    Soft-ends a self-reported chronic condition.
+    Protects clinical alerts: If recorded_by_user_id != user_id, rejects with 403 Forbidden.
+    """
+    clean_roll = roll_number.strip().upper()
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT student_condition_id, roll_number, recorded_by_user_id FROM STUDENT_CONDITION WHERE student_condition_id = %s AND ended_at IS NULL LIMIT 1 FOR UPDATE",
+                (student_condition_id,),
+            )
+            row = cur.fetchone()
+            if not row:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Active condition '{student_condition_id}' not found.")
+            if row["roll_number"] != clean_roll:
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access forbidden: cannot modify medical record of another student.")
+            if row["recorded_by_user_id"] != user_id:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="This chronic condition record was verified by campus clinical staff and cannot be removed by the student.",
+                )
+
+            cur.execute("UPDATE STUDENT_CONDITION SET ended_at = NOW() WHERE student_condition_id = %s", (student_condition_id,))
+
+            cur.execute("SELECT COUNT(*) AS cnt FROM STUDENT_CONDITION WHERE roll_number = %s AND ended_at IS NULL", (clean_roll,))
+            if cur.fetchone()["cnt"] == 0:
+                cur.execute(
+                    "UPDATE MEDICAL_PROFILE_STATUS SET condition_status = 'NONE_REPORTED', updated_at = NOW() WHERE roll_number = %s",
+                    (clean_roll,),
+                )
+        conn.commit()
+        return True
+    finally:
+        conn.close()
+
+
+def add_student_medication(user_id: int, roll_number: str, item: Dict[str, Any]) -> int:
+    """Adds a single self-reported ongoing medication."""
+    clean_roll = roll_number.strip().upper()
+    med_name = (item.get("medicineName") or "").strip()
+    if not med_name:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Medicine name is required.")
+    if len(med_name) > 150:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Medicine name cannot exceed 150 characters.")
+
+    strength = item.get("strength")
+    dose = item.get("dose")
+    reason = item.get("reason")
+
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO STUDENT_MEDICATION (roll_number, medicine_name, strength, dose, reason, started_at, recorded_by_user_id)
+                VALUES (%s, %s, %s, %s, %s, CURDATE(), %s)
+                """,
+                (clean_roll, med_name, strength, dose, reason, user_id),
+            )
+            sm_id = cur.lastrowid
+
+            cur.execute(
+                """
+                INSERT INTO MEDICAL_PROFILE_STATUS (roll_number, medication_status, updated_at)
+                VALUES (%s, 'HAS_RECORDS', NOW())
+                ON DUPLICATE KEY UPDATE medication_status = 'HAS_RECORDS', updated_at = NOW()
+                """,
+                (clean_roll,),
+            )
+        conn.commit()
+        return sm_id
+    finally:
+        conn.close()
+
+
+def delete_student_medication(user_id: int, roll_number: str, student_medication_id: int) -> bool:
+    """
+    Soft-ends a self-reported ongoing medication.
+    Protects clinical alerts: If recorded_by_user_id != user_id, rejects with 403 Forbidden.
+    """
+    clean_roll = roll_number.strip().upper()
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT student_medication_id, roll_number, recorded_by_user_id FROM STUDENT_MEDICATION WHERE student_medication_id = %s AND ended_at IS NULL LIMIT 1 FOR UPDATE",
+                (student_medication_id,),
+            )
+            row = cur.fetchone()
+            if not row:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Active medication '{student_medication_id}' not found.")
+            if row["roll_number"] != clean_roll:
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access forbidden: cannot modify medical record of another student.")
+            if row["recorded_by_user_id"] != user_id:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="This medication record was verified by campus clinical staff and cannot be removed by the student.",
+                )
+
+            cur.execute("UPDATE STUDENT_MEDICATION SET ended_at = NOW() WHERE student_medication_id = %s", (student_medication_id,))
+
+            cur.execute("SELECT COUNT(*) AS cnt FROM STUDENT_MEDICATION WHERE roll_number = %s AND ended_at IS NULL", (clean_roll,))
+            if cur.fetchone()["cnt"] == 0:
+                cur.execute(
+                    "UPDATE MEDICAL_PROFILE_STATUS SET medication_status = 'NONE_REPORTED', updated_at = NOW() WHERE roll_number = %s",
+                    (clean_roll,),
+                )
+        conn.commit()
+        return True
+    finally:
+        conn.close()
+
