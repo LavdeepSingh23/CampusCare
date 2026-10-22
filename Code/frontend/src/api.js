@@ -63,6 +63,11 @@ export function getStoredReceptionist() {
   return raw ? JSON.parse(raw) : null
 }
 
+export function isDemoSession() {
+  const token = getToken()
+  return DEMO_MODE || (token && token.startsWith('demo-'))
+}
+
 let onUnauthorized = () => clearSession()
 export function setUnauthorizedHandler(fn) {
   onUnauthorized = fn
@@ -76,22 +81,47 @@ async function request(path, options = {}) {
     ...options.headers,
   }
 
-  const res = await fetch(`${BASE}${path}`, { ...options, headers })
+  let res
+  try {
+    res = await fetch(`${BASE}${path}`, { ...options, headers })
+  } catch (netErr) {
+    const err = new Error(`Network failure: ${netErr.message || 'Unable to communicate with CampusCare server.'}`)
+    err.status = 0
+    err.isNetworkError = true
+    throw err
+  }
 
   if (res.status === 401) {
     onUnauthorized()
-    throw new Error('Session expired. Please log in again.')
+    const err = new Error('Session expired. Please log in again.')
+    err.status = 401
+    throw err
   }
 
   if (!res.ok) {
     let detail = res.statusText
     try {
       const body = await res.json()
-      detail = body.detail ?? JSON.stringify(body)
+      if (typeof body.detail === 'string') {
+        detail = body.detail
+      } else if (Array.isArray(body.detail)) {
+        detail = body.detail
+          .map((d) => {
+            const loc = Array.isArray(d.loc) ? d.loc.filter((x) => x !== 'body').join('.') : ''
+            return loc ? `${loc}: ${d.msg || JSON.stringify(d)}` : (d.msg || JSON.stringify(d))
+          })
+          .join('; ')
+      } else if (body.detail) {
+        detail = JSON.stringify(body.detail)
+      } else {
+        detail = JSON.stringify(body)
+      }
     } catch {
-  
+      // Body not JSON
     }
-    const err = new Error(detail ? (detail.startsWith('API ') ? detail : `API ${res.status}: ${detail}`) : `API ${res.status}: ${res.statusText}`)
+    const detailStr = String(detail || res.statusText || 'Request failed')
+    const errText = detailStr.startsWith('API ') ? detailStr : `API ${res.status}: ${detailStr}`
+    const err = new Error(errText)
     err.status = res.status
     err.detail = detail
     throw err
@@ -214,7 +244,8 @@ export async function loginStudentGoogle(credential, simulatedUser = null) {
       body: JSON.stringify({ credential }),
     })
   } catch (err) {
-    // If backend is offline or in fallback mode, decode JWT payload
+    if (!DEMO_MODE) throw err
+    // If backend is offline in DEMO_MODE, decode JWT payload
     try {
       const parts = credential.split('.')
       if (parts.length >= 2) {
@@ -555,7 +586,7 @@ export async function fetchStudentMe() {
   try {
     return await request('/api/student/me')
   } catch (err) {
-    if (DEMO_MODE || getToken()?.startsWith('demo-') || err.message?.includes('Failed to fetch') || err.status === 404 || err.status === 500) {
+    if (isDemoSession()) {
       const stored = getStoredStudent()
       const roll = stored?.rollNumber || '102403499'
       const mockProfile = MOCK_PATIENT_PROFILES[roll] || {
@@ -596,7 +627,7 @@ export async function fetchStudentMe() {
             contactId: 1,
             name: 'Campus Health Office',
             relationship: 'Campus Authority',
-            phoneNumber: '+91-000-000-0000',
+            phoneNumber: '+91-175-2393108',
           },
         ],
         activeVisit: null,
@@ -610,6 +641,7 @@ export async function fetchStudentProfile() {
   try {
     return await request('/api/student/profile')
   } catch (err) {
+    if (err?.status === 401) throw err
     return fetchStudentMe()
   }
 }
@@ -618,6 +650,7 @@ export async function fetchStudentVisits() {
   try {
     return await request('/api/student/visits')
   } catch (err) {
+    if (err?.status === 401) throw err
     return fetchStudentMyHistory()
   }
 }
@@ -626,7 +659,7 @@ export async function fetchStudentPrescriptions() {
   try {
     return await request('/api/student/prescriptions')
   } catch (err) {
-    if (DEMO_MODE || getToken()?.startsWith('demo-') || err.message?.includes('Failed to fetch') || err.status === 404) {
+    if (isDemoSession()) {
       return []
     }
     throw err
@@ -637,7 +670,7 @@ export async function fetchStudentSummary() {
   try {
     return await request('/api/student/summary')
   } catch (err) {
-    if (DEMO_MODE || getToken()?.startsWith('demo-') || err.message?.includes('Failed to fetch') || err.status === 404) {
+    if (isDemoSession()) {
       return null
     }
     throw err
@@ -648,7 +681,7 @@ export async function fetchStudentProfileByRoll(rollNumber) {
   try {
     return await request(`/api/student/${encodeURIComponent(rollNumber)}`)
   } catch (err) {
-    if (DEMO_MODE || getToken()?.startsWith('demo-') || err.message?.includes('Failed to fetch') || err.status === 404) {
+    if (isDemoSession()) {
       return fetchPatientProfile(rollNumber)
     }
     throw err
@@ -659,7 +692,7 @@ export async function fetchStudentVisitHistoryByRoll(rollNumber) {
   try {
     return await request(`/api/student/${encodeURIComponent(rollNumber)}/history`)
   } catch (err) {
-    if (DEMO_MODE || getToken()?.startsWith('demo-') || err.message?.includes('Failed to fetch') || err.status === 404) {
+    if (isDemoSession()) {
       return fetchPatientHistory(rollNumber)
     }
     throw err
@@ -669,7 +702,7 @@ export async function fetchStudentMyHistory() {
   try {
     return await request('/api/student/me/history')
   } catch (err) {
-    if (DEMO_MODE || getToken()?.startsWith('demo-') || err.message?.includes('Failed to fetch') || err.status === 404) {
+    if (isDemoSession()) {
       const stored = getStoredStudent()
       const roll = stored?.rollNumber || 'CS21B045'
       return fetchPatientHistory(roll)
@@ -682,7 +715,7 @@ export async function fetchStudentEmergencyDirectory() {
   try {
     return await request('/api/student/emergency-contacts')
   } catch (err) {
-    if (DEMO_MODE || getToken()?.startsWith('demo-') || err.message?.includes('Failed to fetch') || err.status === 404) {
+    if (isDemoSession()) {
       return mockDelay({
         personalContacts: [
           {
@@ -753,7 +786,7 @@ export async function updateStudentProfile(payload) {
       body: JSON.stringify(payload),
     })
   } catch (err) {
-    if (DEMO_MODE || getToken()?.startsWith('demo-') || err.message?.includes('Failed to fetch') || err.status === 404 || err.status === 500) {
+    if (isDemoSession()) {
       const stored = getStoredStudent()
       const roll = stored?.rollNumber || '102403499'
       const updatedProfile = {
@@ -835,7 +868,7 @@ export async function fetchStudentMedicalProfile() {
   try {
     return await request('/api/student/medical-profile')
   } catch (err) {
-    if (DEMO_MODE || getToken()?.startsWith('demo-') || err.message?.includes('Failed to fetch') || err.status === 404) {
+    if (isDemoSession()) {
       const stored = getStoredStudent()
       const roll = stored?.rollNumber || '102403499'
       const mockProfile = MOCK_PATIENT_PROFILES[roll] || { bloodGroup: 'B+' }
@@ -892,7 +925,7 @@ export async function updateStudentMedicalProfile(payload) {
       body: JSON.stringify(payload),
     })
   } catch (err) {
-    if (DEMO_MODE || getToken()?.startsWith('demo-') || err.message?.includes('Failed to fetch') || err.status === 404) {
+    if (isDemoSession()) {
       return fetchStudentMedicalProfile()
     }
     throw err
@@ -906,7 +939,7 @@ export async function addStudentAllergy(item) {
       body: JSON.stringify(item),
     })
   } catch (err) {
-    if (DEMO_MODE || getToken()?.startsWith('demo-') || err.message?.includes('Failed to fetch')) {
+    if (isDemoSession()) {
       return mockDelay({
         success: true,
         message: `Allergy '${item.allergen}' recorded successfully.`,
@@ -923,7 +956,7 @@ export async function deleteStudentAllergy(allergyId) {
       method: 'DELETE',
     })
   } catch (err) {
-    if (DEMO_MODE || getToken()?.startsWith('demo-') || err.message?.includes('Failed to fetch')) {
+    if (isDemoSession()) {
       return mockDelay({
         success: true,
         message: 'Allergy alert removed successfully.',
@@ -941,7 +974,7 @@ export async function addStudentCondition(item) {
       body: JSON.stringify(item),
     })
   } catch (err) {
-    if (DEMO_MODE || getToken()?.startsWith('demo-') || err.message?.includes('Failed to fetch')) {
+    if (isDemoSession()) {
       return mockDelay({
         success: true,
         message: `Chronic condition '${item.name}' recorded successfully.`,
@@ -958,7 +991,7 @@ export async function deleteStudentCondition(conditionId) {
       method: 'DELETE',
     })
   } catch (err) {
-    if (DEMO_MODE || getToken()?.startsWith('demo-') || err.message?.includes('Failed to fetch')) {
+    if (isDemoSession()) {
       return mockDelay({
         success: true,
         message: 'Chronic condition record removed successfully.',
@@ -976,7 +1009,7 @@ export async function addStudentMedication(item) {
       body: JSON.stringify(item),
     })
   } catch (err) {
-    if (DEMO_MODE || getToken()?.startsWith('demo-') || err.message?.includes('Failed to fetch')) {
+    if (isDemoSession()) {
       return mockDelay({
         success: true,
         message: `Medication '${item.medicineName}' recorded successfully.`,
@@ -993,7 +1026,7 @@ export async function deleteStudentMedication(medicationId) {
       method: 'DELETE',
     })
   } catch (err) {
-    if (DEMO_MODE || getToken()?.startsWith('demo-') || err.message?.includes('Failed to fetch')) {
+    if (isDemoSession()) {
       return mockDelay({
         success: true,
         message: 'Ongoing medication record removed successfully.',

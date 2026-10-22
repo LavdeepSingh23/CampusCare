@@ -91,6 +91,7 @@ class StudentProfileHistoryItem(BaseModel):
     generalInstructions: Optional[str] = None
     prescriptionId: Optional[int] = None
     checkedInAt: Optional[str] = None
+    consultationCompletedAt: Optional[str] = None
     completedAt: Optional[str] = None
     medicines: List[Union[StudentPrescriptionMedicineDetail, Dict[str, Any], str]] = []
 

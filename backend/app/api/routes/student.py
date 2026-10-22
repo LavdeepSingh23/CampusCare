@@ -245,7 +245,7 @@ def fetch_student_history_records(clean_roll: str) -> List[Dict[str, Any]]:
             cur.execute(
                 """
                 SELECT v.visit_id, v.doctor_id, v.status AS visit_status,
-                       v.checked_in_at, v.completed_at,
+                       v.checked_in_at, v.consultation_completed_at, v.completed_at,
                        co.diagnosis, co.clinical_notes, pr.prescription_id, pr.general_instructions,
                        ua_doc.email AS doc_email, sp.name AS specialty
                 FROM VISIT v
@@ -255,8 +255,8 @@ def fetch_student_history_records(clean_roll: str) -> List[Dict[str, Any]]:
                 LEFT JOIN SPECIALTY sp ON sp.specialty_id = d.specialty_id
                 LEFT JOIN CONSULTATION co ON co.visit_id = v.visit_id
                 LEFT JOIN PRESCRIPTION pr ON pr.consultation_id = co.consultation_id
-                WHERE v.roll_number = %s AND v.status = 'COMPLETED'
-                ORDER BY v.completed_at DESC, v.visit_id DESC
+                WHERE v.roll_number = %s AND (v.status = 'COMPLETED' OR (v.status = 'WAITING_FOR_MEDICINE' AND co.consultation_id IS NOT NULL))
+                ORDER BY COALESCE(v.completed_at, v.consultation_completed_at, v.checked_in_at) DESC, v.visit_id DESC
                 """,
                 (clean_roll,),
             )
@@ -323,7 +323,7 @@ def fetch_student_history_records(clean_roll: str) -> List[Dict[str, Any]]:
                             }
                         )
 
-                dt = r.get("completed_at") or r.get("checked_in_at")
+                dt = r.get("completed_at") or r.get("consultation_completed_at") or r.get("checked_in_at")
                 date_str = dt.strftime("%d %b %Y") if dt else "Recent visit"
 
                 history.append(
@@ -340,6 +340,7 @@ def fetch_student_history_records(clean_roll: str) -> List[Dict[str, Any]]:
                         "generalInstructions": r.get("general_instructions") or "",
                         "prescriptionId": presc_id,
                         "checkedInAt": r["checked_in_at"].isoformat() if r.get("checked_in_at") else None,
+                        "consultationCompletedAt": r["consultation_completed_at"].isoformat() if r.get("consultation_completed_at") else None,
                         "completedAt": r["completed_at"].isoformat() if r.get("completed_at") else None,
                         "medicines": medicines,
                     }

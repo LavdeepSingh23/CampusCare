@@ -234,7 +234,15 @@ function DoseSchedule({ latest, nowSlot }) {
       aside={latest && <span className="text-xs text-slate-400">{latest.date} prescription</span>}
     >
       {!latest || !latest.medicines || latest.medicines.length === 0 ? (
-        <p className="text-sm text-slate-500">No medicines to take right now.</p>
+        <div className="py-6 text-center space-y-2">
+          <div className="w-10 h-10 rounded-2xl bg-teal-50 text-teal-700 flex items-center justify-center mx-auto">
+            <Clock className="w-5 h-5" />
+          </div>
+          <p className="text-sm font-semibold text-slate-800">No medicines scheduled right now</p>
+          <p className="text-xs text-slate-400 max-w-sm mx-auto">
+            When campus dispensary doctors prescribe medications, your daily dose times (Morning, Evening, Night) will appear here.
+          </p>
+        </div>
       ) : (
         <>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -540,34 +548,64 @@ function HomeView({ profile, latest, history, hasAllergies, summary, hour, activ
   const firstName = (profile.name || '').split(' ')[0]
   return (
     <div className="space-y-4">
-      {/* Incomplete Profile Onboarding Banner */}
+      {/* First-Time Student Profile Completion Guidance */}
       {profileCompletion && !profileCompletion.isComplete && (
-        <section className="rounded-3xl bg-amber-50 border border-amber-300 p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
-          <div className="flex items-start gap-3">
-            <AlertCircle className="w-5 h-5 text-amber-700 shrink-0 mt-0.5" />
-            <div>
-              <div className="flex items-center gap-2">
-                <p className="font-bold text-amber-950 text-sm">
-                  Incomplete Health Profile ({profileCompletion.percentage || 0}%)
+        <section className="rounded-3xl bg-amber-50/90 border border-amber-300 p-4 sm:p-5 shadow-xs">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-start gap-3">
+              <span className="w-9 h-9 rounded-2xl bg-amber-100 text-amber-800 flex items-center justify-center shrink-0 mt-0.5 border border-amber-200">
+                <AlertCircle className="w-5 h-5" />
+              </span>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h3 className="font-bold text-amber-950 text-sm">
+                    First-Time Setup: Health Profile Incomplete ({profileCompletion.percentage || 0}%)
+                  </h3>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-200/80 text-amber-900 uppercase tracking-wider">
+                    Action Required
+                  </span>
+                </div>
+                <p className="text-xs text-amber-900/90 mt-1 leading-relaxed max-w-2xl">
+                  Campus health centre doctors require your verified emergency contact and allergy declarations before prescribing or dispensing medications.
                 </p>
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-200/80 text-amber-900 uppercase tracking-wider">
-                  Action Required
-                </span>
+                {profileCompletion.missingFields && profileCompletion.missingFields.length > 0 && (
+                  <div className="mt-2 flex items-center gap-1.5 flex-wrap">
+                    <span className="text-[11px] font-medium text-amber-900">Required:</span>
+                    {profileCompletion.missingFields.map((f, i) => (
+                      <span
+                        key={i}
+                        className="text-[11px] font-semibold text-amber-950 bg-amber-100/80 border border-amber-300 px-2 py-0.5 rounded-md"
+                      >
+                        {f}
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
-              <p className="text-xs text-amber-800 mt-0.5 leading-relaxed">
-                {profileCompletion.missingFields && profileCompletion.missingFields.length > 0
-                  ? `Please complete: ${profileCompletion.missingFields.join(', ')}.`
-                  : 'Register your primary emergency contact and clinical allergy history.'}
-              </p>
+            </div>
+            <div className="flex items-center gap-2 self-start sm:self-center shrink-0 pt-2 sm:pt-0">
+              <button
+                type="button"
+                onClick={onCompleteProfile}
+                className="px-4 py-2.5 rounded-xl bg-amber-800 hover:bg-amber-900 active:bg-amber-950 text-white font-semibold text-xs transition-colors cursor-pointer shadow-xs"
+              >
+                Complete Registration →
+              </button>
+              <button
+                type="button"
+                onClick={() => goTo('health')}
+                className="px-3.5 py-2.5 rounded-xl border border-amber-300 text-amber-950 hover:bg-amber-100/70 text-xs font-semibold transition-colors cursor-pointer"
+              >
+                Medical ID
+              </button>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={onCompleteProfile}
-            className="px-4 py-2.5 rounded-xl bg-amber-800 hover:bg-amber-900 active:bg-amber-950 text-white font-semibold text-xs transition-colors shrink-0 cursor-pointer shadow-xs"
-          >
-            Complete Onboarding →
-          </button>
+          <div className="w-full bg-amber-200/60 rounded-full h-1.5 mt-3 overflow-hidden">
+            <div
+              className="bg-amber-600 h-1.5 rounded-full transition-all duration-300"
+              style={{ width: `${profileCompletion.percentage || 0}%` }}
+            />
+          </div>
         </section>
       )}
 
@@ -636,7 +674,7 @@ function HomeView({ profile, latest, history, hasAllergies, summary, hour, activ
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
         {/* Desktop-only preview — phones have the Prescription tab */}
-        <div className="hidden lg:block">
+        <div className="block">
           <Card
             title="Latest prescription"
             icon={Stethoscope}
@@ -720,14 +758,62 @@ function HomeView({ profile, latest, history, hasAllergies, summary, hour, activ
   )
 }
 
-function PrescriptionView({ latest, history }) {
+function PrescriptionView({ latest, history, prescriptions = [] }) {
+  const activePrescription = latest || (prescriptions.length > 0 ? prescriptions[0] : null)
+  const pastPrescriptions = prescriptions.length > 1 ? prescriptions.slice(1) : []
+
   return (
-    <div>
-      <PageTitle sub="What your doctor prescribed, and your past visits">Prescription</PageTitle>
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
-        <LatestPrescription latest={latest} />
-        <VisitHistory history={history} />
-      </div>
+    <div className="space-y-4">
+      <PageTitle sub="What your doctor prescribed, dosage timings, and past visits">
+        Prescription & Medical Orders
+      </PageTitle>
+
+      {!activePrescription && history.length === 0 ? (
+        <Card className="text-center py-12">
+          <div className="w-14 h-14 rounded-3xl bg-teal-50 text-teal-700 flex items-center justify-center mx-auto mb-3">
+            <FileText className="w-7 h-7" />
+          </div>
+          <h3 className="cc-display text-lg font-bold text-slate-900">No Prescriptions On File</h3>
+          <p className="text-xs text-slate-500 max-w-md mx-auto mt-1 leading-relaxed">
+            Prescriptions issued during campus health centre consultations will be preserved here with complete dosage instructions, duration, and meal relations.
+          </p>
+        </Card>
+      ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+          <div className="space-y-4">
+            <LatestPrescription latest={activePrescription} />
+
+            {pastPrescriptions.length > 0 && (
+              <Card title="Previous Prescriptions" icon={FileText}>
+                <div className="divide-y divide-slate-100">
+                  {pastPrescriptions.map((p, idx) => (
+                    <div key={p.prescriptionId || idx} className="py-3.5 first:pt-0 last:pb-0 space-y-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-sm font-bold text-slate-900">{p.diagnosis || 'Consultation'}</span>
+                        <span className="text-xs text-slate-400 font-mono">{p.date}</span>
+                      </div>
+                      <p className="text-xs text-teal-800 font-medium">
+                        {p.doctorName} {p.specialty && `• ${p.specialty}`}
+                      </p>
+                      {p.medicines && p.medicines.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5 pt-1">
+                          {p.medicines.map((m, mi) => (
+                            <span key={mi} className="text-xs bg-slate-50 border border-slate-200 px-2 py-1 rounded-lg text-slate-700">
+                              {typeof m === 'string' ? m : m.name}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            )}
+          </div>
+
+          <VisitHistory history={history} />
+        </div>
+      )}
     </div>
   )
 }
@@ -2039,7 +2125,7 @@ function HealthView({
   )
 }
 
-function HelpView({ emergencyDirectory, personalContacts }) {
+function HelpView({ emergencyDirectory, personalContacts, onAddContact }) {
   const campusNumbers = emergencyDirectory?.campusServices || CAMPUS_NUMBERS
   const personalList = personalContacts || emergencyDirectory?.personalContacts || []
   const nationalList = emergencyDirectory?.nationalHelplines || EMERGENCY
@@ -2121,8 +2207,18 @@ function HelpView({ emergencyDirectory, personalContacts }) {
               <div className="py-6 text-center space-y-2">
                 <p className="text-xs text-amber-800 font-semibold">No personal emergency contact registered.</p>
                 <p className="text-[11px] text-slate-500 max-w-xs mx-auto">
-                  Please update your profile so health centre doctors can contact your family during emergencies.
+                  Please register your primary contact so attending clinicians can reach your family during urgent medical situations.
                 </p>
+                {onAddContact && (
+                  <button
+                    type="button"
+                    onClick={onAddContact}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-teal-800 hover:bg-teal-900 text-white text-xs font-semibold cursor-pointer shadow-xs"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    Register Contact
+                  </button>
+                )}
               </div>
             )}
           </Card>
@@ -2346,6 +2442,8 @@ function StudentDashboard() {
   const [summary, setSummary] = useState(EMPTY_SUMMARY)
   const [history, setHistory] = useState([])
   const [activeVisit, setActiveVisit] = useState(null)
+  const [prescriptions, setPrescriptions] = useState([])
+  const [sessionExpired, setSessionExpired] = useState(false)
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
 
@@ -2365,11 +2463,12 @@ function StudentDashboard() {
           navigate('/student_dashboard', { replace: true })
         }
 
-        const [meData, historyRes, medProfileRes, emerRes] = await Promise.all([
+        const [meData, historyRes, medProfileRes, emerRes, prescRes] = await Promise.all([
           fetchStudentMe(),
           fetchStudentVisits(),
           fetchStudentMedicalProfile().catch(() => null),
           fetchStudentEmergencyDirectory().catch(() => null),
+          fetchStudentPrescriptions().catch(() => []),
         ])
 
         const s = meData?.student || {}
@@ -2435,6 +2534,7 @@ function StudentDashboard() {
           setMedicalProfile(medProfileRes)
         }
         setHistory(Array.isArray(historyRes) ? historyRes : [])
+        if (Array.isArray(prescRes)) setPrescriptions(prescRes)
         setActiveVisit(meData?.activeVisit || null)
       } else {
         // Medical staff view (Doctor or Receptionist)
@@ -2453,7 +2553,8 @@ function StudentDashboard() {
       }
     } catch (err) {
       if (err.status === 401 || err.message?.includes('Session expired')) {
-        handleLogout()
+        setSessionExpired(true)
+        setLoading(false)
         return
       }
       setLoadError(err.message || 'Failed to load your health record')
@@ -2513,11 +2614,67 @@ function StudentDashboard() {
   const now = new Date()
   const hour = now.getHours()
 
+  if (sessionExpired) {
+    return (
+      <div className="min-h-screen bg-[#F2F6F5] flex flex-col items-center justify-center p-4">
+        <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-xl text-center space-y-4 border border-slate-200/80">
+          <div className="w-14 h-14 rounded-2xl bg-amber-50 text-amber-700 flex items-center justify-center mx-auto border border-amber-200">
+            <Lock className="w-7 h-7" />
+          </div>
+          <div>
+            <h2 className="cc-display text-xl font-bold text-slate-900">Session Expired</h2>
+            <p className="text-sm text-slate-500 mt-1.5 leading-relaxed">
+              For your privacy and the security of your medical records, your authenticated session has timed out. Please sign in again.
+            </p>
+          </div>
+          <button
+            onClick={handleLogout}
+            className="w-full py-3 px-4 rounded-xl bg-teal-800 hover:bg-teal-900 active:bg-teal-950 text-white font-semibold text-sm transition-colors cursor-pointer shadow-xs"
+          >
+            Sign In Again
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  if (loadError && !profile.name && !loading) {
+    return (
+      <div className="min-h-screen bg-[#F2F6F5] flex flex-col items-center justify-center p-4 text-center">
+        <div className="bg-white rounded-3xl p-8 max-w-md w-full border border-slate-200/80 shadow-md space-y-4">
+          <div className="w-12 h-12 rounded-2xl bg-red-50 text-red-600 flex items-center justify-center mx-auto">
+            <AlertTriangle className="w-6 h-6" />
+          </div>
+          <div>
+            <h2 className="cc-display text-xl font-bold text-slate-900">Unable to Load Records</h2>
+            <p className="text-sm text-slate-500 mt-1.5 leading-relaxed">
+              {loadError}
+            </p>
+          </div>
+          <div className="flex gap-3 pt-2">
+            <button
+              onClick={loadAll}
+              className="flex-1 py-2.5 px-4 rounded-xl bg-teal-800 hover:bg-teal-900 text-white font-semibold text-sm transition-colors cursor-pointer shadow-xs"
+            >
+              Try Again
+            </button>
+            <button
+              onClick={handleLogout}
+              className="py-2.5 px-4 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 text-sm font-semibold transition-colors cursor-pointer"
+            >
+              Sign Out
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen bg-[#F2F6F5] flex flex-col items-center justify-center gap-3">
-        <div className="w-8 h-8 border-3 border-teal-700 border-t-transparent rounded-full animate-spin" />
-        <p className="text-slate-500 font-medium text-sm">Loading your verified health records…</p>
+        <div className="w-9 h-9 border-3 border-teal-700 border-t-transparent rounded-full animate-spin" />
+        <p className="text-slate-600 font-medium text-sm">Loading verified student health records…</p>
       </div>
     )
   }
@@ -2596,7 +2753,7 @@ function StudentDashboard() {
               onCompleteProfile={() => navigate('/student/onboarding')}
             />
           )}
-          {tab === 'prescription' && <PrescriptionView latest={latest} history={history} />}
+          {tab === 'prescription' && <PrescriptionView latest={latest} history={history} prescriptions={prescriptions} />}
           {tab === 'health' && (
             <HealthView
               profile={profile}
@@ -2611,6 +2768,7 @@ function StudentDashboard() {
             <HelpView
               emergencyDirectory={emergencyDirectory}
               personalContacts={profile.emergencyContact ? [profile.emergencyContact] : []}
+              onAddContact={() => navigate('/student/profile')}
             />
           )}
           {tab === 'account' && (
