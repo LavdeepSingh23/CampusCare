@@ -2,7 +2,7 @@
 Pydantic schemas for Student Identity, Profile, Telemetry, Onboarding, and Medical Details (SD-1, SD-2, SD-3).
 """
 
-from typing import List, Optional
+from typing import List, Optional, Union, Dict, Any
 from pydantic import BaseModel, Field
 
 
@@ -67,17 +67,85 @@ class StudentMeResponse(BaseModel):
     profileCompletion: Optional[ProfileCompletionStatus] = None
 
 
+class StudentPrescriptionMedicineDetail(BaseModel):
+    prescriptionItemId: Optional[int] = None
+    name: str
+    timing: Optional[str] = None
+    note: Optional[str] = None
+    mealRelation: Optional[str] = None
+    dosageForm: Optional[str] = None
+    duration: Optional[str] = None
+    specialInstructions: Optional[str] = None
+
+
 class StudentProfileHistoryItem(BaseModel):
     visitId: int
     doctorId: int
     doctorName: str
+    specialty: Optional[str] = "General Physician"
     status: str
+    date: Optional[str] = None
     diagnosis: Optional[str] = None
     clinicalNotes: Optional[str] = None
+    notes: Optional[str] = None
+    generalInstructions: Optional[str] = None
     prescriptionId: Optional[int] = None
     checkedInAt: Optional[str] = None
     completedAt: Optional[str] = None
-    medicines: List[str] = []
+    medicines: List[Union[StudentPrescriptionMedicineDetail, Dict[str, Any], str]] = []
+
+
+# ==========================================
+# SD-4: Campus Emergency Directory Schemas
+# ==========================================
+
+class CampusEmergencyContactItem(BaseModel):
+    label: str
+    sub: str
+    number: str
+    icon: Optional[str] = None
+    priority: bool = False
+
+
+class StudentEmergencyDirectoryResponse(BaseModel):
+    personalContacts: List[StudentEmergencyContactItem] = []
+    campusServices: List[CampusEmergencyContactItem] = []
+    nationalHelplines: List[CampusEmergencyContactItem] = []
+
+
+class StudentPrescriptionItemDetail(BaseModel):
+    visitId: int
+    prescriptionId: int
+    date: str
+    doctorName: str
+    specialty: Optional[str] = "General Physician"
+    diagnosis: str
+    generalInstructions: Optional[str] = None
+    medicines: List[StudentPrescriptionMedicineDetail] = []
+    completedAt: Optional[str] = None
+
+
+class StudentStatisticsDetail(BaseModel):
+    totalVisits: int = 0
+    lastVisitDate: Optional[str] = None
+    lastVisitDiagnosis: Optional[str] = None
+
+
+class StudentHealthSummaryDetail(BaseModel):
+    bloodGroup: Optional[str] = None
+    conditions: str = "None recorded"
+    allergies: str = "None recorded"
+    medication: str = "None recorded"
+    hasSevereAllergyAlert: bool = False
+
+
+class StudentHomeSummaryResponse(BaseModel):
+    student: StudentIdentity
+    healthSummary: StudentHealthSummaryDetail
+    statistics: StudentStatisticsDetail
+    activeVisit: Optional[StudentActiveVisit] = None
+    profileCompletion: Optional[ProfileCompletionStatus] = None
+    recentPrescription: Optional[StudentPrescriptionItemDetail] = None
 
 
 # ==========================================

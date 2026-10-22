@@ -370,7 +370,7 @@ def get_student_me_telemetry(user_id: int, roll_number: str) -> Dict[str, Any]:
                 "dateOfBirth": str(student_row["date_of_birth"]) if student_row.get("date_of_birth") else None,
                 "sex": student_row.get("sex"),
                 "phoneNumber": student_row.get("phone_number"),
-                "bloodGroup": student_row.get("blood_group") or "Not recorded",
+                "bloodGroup": student_row.get("blood_group"),
                 "status": student_row.get("status", "ACTIVE"),
                 "program": academic["program"],
                 "branch": academic["branch"],
@@ -637,6 +637,8 @@ def update_student_profile(
     # Declarations extraction
     has_allergies = payload.get("hasAllergies")
     allergies = payload.get("allergies")
+    if has_allergies is None and allergies is not None:
+        has_allergies = len(allergies) > 0
     if has_allergies is True and allergies:
         for al in allergies:
             if not (al.get("allergen") or "").strip():
@@ -653,9 +655,13 @@ def update_student_profile(
 
     has_conditions = payload.get("hasChronicConditions")
     chronic_conditions = payload.get("chronicConditions")
+    if has_conditions is None and chronic_conditions is not None:
+        has_conditions = len(chronic_conditions) > 0
 
     has_medications = payload.get("hasCurrentMedications")
     current_medications = payload.get("currentMedications")
+    if has_medications is None and current_medications is not None:
+        has_medications = len(current_medications) > 0
     if has_medications is True and current_medications:
         for med in current_medications:
             if not (med.get("medicineName") or "").strip():
@@ -1126,6 +1132,8 @@ def update_student_medical_profile(
 
     has_allergies = payload.get("hasAllergies")
     allergies = payload.get("allergies")
+    if has_allergies is None and allergies is not None:
+        has_allergies = len(allergies) > 0
     if has_allergies is True and allergies:
         for al in allergies:
             if not (al.get("allergen") or "").strip():
@@ -1142,9 +1150,13 @@ def update_student_medical_profile(
 
     has_conditions = payload.get("hasChronicConditions")
     chronic_conditions = payload.get("chronicConditions")
+    if has_conditions is None and chronic_conditions is not None:
+        has_conditions = len(chronic_conditions) > 0
 
     has_medications = payload.get("hasCurrentMedications")
     current_medications = payload.get("currentMedications")
+    if has_medications is None and current_medications is not None:
+        has_medications = len(current_medications) > 0
     if has_medications is True and current_medications:
         for med in current_medications:
             if not (med.get("medicineName") or "").strip():

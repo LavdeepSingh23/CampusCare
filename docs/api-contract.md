@@ -1541,3 +1541,58 @@ stateDiagram-v2
 6. `DELETE /api/student/medical/medications/{student_medication_id}`:
    - Soft-ends medication if self-reported. Rejects with `403 Forbidden` if clinical.
 
+
+---
+
+### 9.6 SD-4: Connecting Dashboard Data to the Real Backend
+
+#### 1. Visit History & Prescription Schedule Contracts
+- **Route**: `GET /api/student/me/history` (or `GET /api/student/history`)
+- **Alternative Path-based**: `GET /api/student/{roll_number}/history` (Authorized only for the student themselves, or medical staff)
+- **Authorization**: Student Bearer Token (`role=STUDENT`).
+- **Response Model**: `List[StudentProfileHistoryItem]`
+- **Contract Details**:
+  - `visitId` (`int`): Primary visit ID.
+  - `date` (`str`): Formatted consultation date (e.g., `"12 Aug 2026"`).
+  - `diagnosis` (`str`): Confirmed diagnosis from consultation.
+  - `doctorName` (`str`): Attending doctor's name (e.g., `"Dr. Kapoor"`).
+  - `specialty` (`str`): Doctor's medical specialty.
+  - `status` (`str`): `"COMPLETED"`.
+  - `notes` (`str`): Doctor's instructions, advice, and general prescription notes.
+  - `medicines` (`List[StudentPrescriptionMedicineDetail]`):
+    - `prescriptionItemId` (`int`)
+    - `name` (`str`): Formatted medicine name and strength (e.g., `"Amoxicillin 500mg"`).
+    - `timing` (`str`): Comma-separated dose timing derived from `PRESCRIPTION_DOSE` (`"morning"`, `"afternoon"`, `"evening"`, `"night"`).
+    - `note` (`str`): Meal relation instructions (e.g., `"after food — Take with water"`).
+    - `mealRelation` (`str`): `"BEFORE_MEAL"`, `"AFTER_MEAL"`, `"WITH_MEAL"`, `"ANY_TIME"`.
+    - `duration` (`str`): Formatted course duration (e.g., `"5 days"`).
+
+#### 2. Campus & Personal Emergency Directory Contracts
+- **Route**: `GET /api/student/emergency-contacts` (or `GET /api/student/me/emergency-contacts`)
+- **Authorization**: Student Bearer Token (`role=STUDENT`).
+- **Response Model**: `StudentEmergencyDirectoryResponse`
+- **Contract Details**:
+  - `personalContacts`:
+    - `contactId` (`int`): ID of registered emergency contact.
+    - `name` (`str`): Full name of contact (e.g. parent/guardian).
+    - `relationship` (`str`): Relationship (e.g. `"Father"`, `"Mother"`).
+    - `phoneNumber` (`str`): Valid phone number with country prefix.
+  - `campusServices`:
+    - Campus Health Centre Dispensary (`+91-175-2393108`, 24×7 Ambulance & Medical Desk).
+    - Campus Security Control Room (`+91-175-2393110`, Main Gate 24×7 Security Desk).
+    - Hostel Warden / Student Affairs (`+91-175-2393112`).
+    - Campus Ambulance Driver on Duty (`+91-987-654-3108`).
+  - `nationalHelplines`:
+    - National Ambulance (`108`).
+    - Tele-MANAS Mental Health (`14416`, 24×7 toll-free).
+    - National Emergency / Police / Fire (`112`).
+
+#### 3. Frontend-Backend Contract Alignment Across 6 Dashboard Sections
+| Section | Backend Contract | Frontend Binding & Behavioral Guarantee |
+|---|---|---|
+| **Home** | `GET /api/student/me` + `GET /api/student/me/history` | Greets with verified student name, binds real blood group (`profile.bloodGroup`), visits count (`history.length`), last visit date (`latest.date`), real active OPD queue telemetry, and slot-based dose schedule (`DoseSchedule`). |
+| **Prescription** | `GET /api/student/me/history` | Displays latest prescription with diagnosis, attending doctor, advice, and detailed medicine instructions; handles loading, error, and empty states. |
+| **Medical History** | `GET /api/student/me/history` | Expandable chronological timeline rendering completed visits, diagnosis, attending doctor, clinical advice, and prescribed medications. |
+| **Medical ID** | `GET /api/student/medical` + `PUT /api/student/medical` | View/edit experience with severity warnings, clinician-protection, and instant parent dashboard synchronization. |
+| **Account** | `GET /api/student/me` + `PUT /api/student/profile` | Displays registrar-verified immutable records (roll, email, course, semester) with lock badges, and permitted editable personal demographics + emergency contact. |
+| **Emergency** | `GET /api/student/emergency-contacts` | Replaces placeholder numbers with approved campus contacts (`+91-175-2393108`, etc.) and student's verified personal emergency contact. |

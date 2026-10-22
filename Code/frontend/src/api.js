@@ -606,6 +606,44 @@ export async function fetchStudentMe() {
   }
 }
 
+export async function fetchStudentProfile() {
+  try {
+    return await request('/api/student/profile')
+  } catch (err) {
+    return fetchStudentMe()
+  }
+}
+
+export async function fetchStudentVisits() {
+  try {
+    return await request('/api/student/visits')
+  } catch (err) {
+    return fetchStudentMyHistory()
+  }
+}
+
+export async function fetchStudentPrescriptions() {
+  try {
+    return await request('/api/student/prescriptions')
+  } catch (err) {
+    if (DEMO_MODE || getToken()?.startsWith('demo-') || err.message?.includes('Failed to fetch') || err.status === 404) {
+      return []
+    }
+    throw err
+  }
+}
+
+export async function fetchStudentSummary() {
+  try {
+    return await request('/api/student/summary')
+  } catch (err) {
+    if (DEMO_MODE || getToken()?.startsWith('demo-') || err.message?.includes('Failed to fetch') || err.status === 404) {
+      return null
+    }
+    throw err
+  }
+}
+
 export async function fetchStudentProfileByRoll(rollNumber) {
   try {
     return await request(`/api/student/${encodeURIComponent(rollNumber)}`)
@@ -627,11 +665,90 @@ export async function fetchStudentVisitHistoryByRoll(rollNumber) {
     throw err
   }
 }
+export async function fetchStudentMyHistory() {
+  try {
+    return await request('/api/student/me/history')
+  } catch (err) {
+    if (DEMO_MODE || getToken()?.startsWith('demo-') || err.message?.includes('Failed to fetch') || err.status === 404) {
+      const stored = getStoredStudent()
+      const roll = stored?.rollNumber || 'CS21B045'
+      return fetchPatientHistory(roll)
+    }
+    throw err
+  }
+}
+
+export async function fetchStudentEmergencyDirectory() {
+  try {
+    return await request('/api/student/emergency-contacts')
+  } catch (err) {
+    if (DEMO_MODE || getToken()?.startsWith('demo-') || err.message?.includes('Failed to fetch') || err.status === 404) {
+      return mockDelay({
+        personalContacts: [
+          {
+            contactId: 1,
+            name: 'Rajesh Mehta',
+            relationship: 'Father',
+            phoneNumber: '+91 98765 01234',
+          },
+        ],
+        campusServices: [
+          {
+            label: 'Campus Health Centre (Dispensary)',
+            sub: '24×7 Campus Emergency Medical Desk & Ambulance',
+            number: '+91-175-2393108',
+            priority: true,
+          },
+          {
+            label: 'Campus Security Control Room',
+            sub: 'Main Gate 24×7 Security Desk & Campus Patrol',
+            number: '+91-175-2393110',
+            priority: false,
+          },
+          {
+            label: 'Hostel Warden / Student Affairs',
+            sub: 'Hostel Emergency & Resident Scholar Assistance',
+            number: '+91-175-2393112',
+            priority: false,
+          },
+          {
+            label: 'Campus Ambulance Driver on Duty',
+            sub: 'Emergency Patient Transfer to Rajindra Hospital',
+            number: '+91-987-654-3108',
+            priority: true,
+          },
+        ],
+        nationalHelplines: [
+          {
+            label: 'Ambulance',
+            sub: 'Medical emergencies (National)',
+            number: '108',
+            priority: true,
+          },
+          {
+            label: 'Tele-MANAS',
+            sub: 'Mental health support, 24×7 toll-free',
+            number: '14416',
+            priority: true,
+          },
+          {
+            label: 'National Emergency Helpline',
+            sub: 'Police, Fire, Disaster Services',
+            number: '112',
+            priority: false,
+          },
+        ],
+      })
+    }
+    throw err
+  }
+}
+
 
 // ── Student Profile Registration & Onboarding (SD-2) ───────────────────
 export async function updateStudentProfile(payload) {
   try {
-    return await request('/api/student/me', {
+    return await request('/api/student/profile', {
       method: 'PUT',
       body: JSON.stringify(payload),
     })
@@ -716,7 +833,7 @@ export async function updateStudentProfile(payload) {
 // ── Student Medical Details & Declarations (SD-3) ──────────────────────
 export async function fetchStudentMedicalProfile() {
   try {
-    return await request('/api/student/medical')
+    return await request('/api/student/medical-profile')
   } catch (err) {
     if (DEMO_MODE || getToken()?.startsWith('demo-') || err.message?.includes('Failed to fetch') || err.status === 404) {
       const stored = getStoredStudent()
@@ -770,7 +887,7 @@ export async function fetchStudentMedicalProfile() {
 
 export async function updateStudentMedicalProfile(payload) {
   try {
-    return await request('/api/student/medical', {
+    return await request('/api/student/medical-profile', {
       method: 'PUT',
       body: JSON.stringify(payload),
     })

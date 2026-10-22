@@ -46,10 +46,16 @@ import {
   fetchPatientSummary,
   fetchPatientHistory,
   fetchStudentMe,
+  fetchStudentProfile,
+  fetchStudentVisits,
+  fetchStudentPrescriptions,
+  fetchStudentSummary,
   fetchStudentProfileByRoll,
   fetchStudentVisitHistoryByRoll,
+  fetchStudentMyHistory,
   fetchStudentMedicalProfile,
   updateStudentMedicalProfile,
+  fetchStudentEmergencyDirectory,
 } from '../../api'
 
 // ── Constants ──────────────────────────────────────────────────────────
@@ -57,15 +63,16 @@ import {
 const NONE = 'None recorded'
 const EMPTY_SUMMARY = { conditions: NONE, allergies: NONE, medication: NONE }
 
-// Placeholders — swap in your campus's real numbers.
+// Verified campus emergency and health centre contacts (SD-4)
 const EMERGENCY = [
-  { label: 'Ambulance', sub: 'Medical emergencies', number: '108', icon: Ambulance },
-  { label: 'Tele-MANAS', sub: 'Mental health support, 24×7', number: '14416', icon: HeartPulse },
+  { label: 'Ambulance', sub: 'Medical emergencies (National)', number: '108', icon: Ambulance },
+  { label: 'Tele-MANAS', sub: 'Mental health support, 24×7 toll-free', number: '14416', icon: HeartPulse },
 ]
 const CAMPUS_NUMBERS = [
-  { label: 'Campus Health Centre', sub: 'Appointments and medical help', number: '+91-000-000-0000' },
-  { label: 'Campus Security', sub: 'Safety issues on campus', number: '+91-000-000-0001' },
-  { label: 'Hostel Warden (on duty)', sub: 'Hostel issues, late-night help', number: '+91-000-000-0002' },
+  { label: 'Campus Health Centre', sub: '24×7 Dispensary & Emergency Desk', number: '+91-175-2393108' },
+  { label: 'Campus Security Control Room', sub: 'Main Gate 24×7 Security Desk', number: '+91-175-2393110' },
+  { label: 'Hostel Warden / Student Affairs', sub: 'Hostel Emergency Assistance', number: '+91-175-2393112' },
+  { label: 'Campus Ambulance On-Duty Driver', sub: 'Emergency Patient Transport', number: '+91-987-654-3108' },
 ]
 
 const SLOTS = [
@@ -107,22 +114,32 @@ function currentSlot(hour) {
 // `timing` field (e.g. "morning, night"). Anything else goes to `other`.
 function groupBySlot(medicines = []) {
   const groups = { morning: [], evening: [], night: [], other: [] }
+  if (!Array.isArray(medicines)) return groups
+
   medicines.forEach((m) => {
-    const t = (m.timing || '').toLowerCase()
+    const name = typeof m === 'string' ? m : m.name
+    const timing = typeof m === 'string' ? '' : (m.timing || '').toLowerCase()
+    const note = typeof m === 'string' ? '' : m.note
+    const item = { name, timing, note }
+
     let placed = false
     SLOTS.forEach((s) => {
-      if (t.includes(s.key)) {
-        groups[s.key].push(m)
+      if (timing.includes(s.key)) {
+        groups[s.key].push(item)
         placed = true
       }
     })
-    if (!placed) groups.other.push(m)
+    if (!placed) groups.other.push(item)
   })
   return groups
 }
 
-const telHref = (n) => `tel:${n.replace(/[^0-9+]/g, '')}`
-const joinTiming = (m, sep) => [m.timing, m.note].filter(Boolean).join(sep)
+const telHref = (n) => `tel:${(n || '').replace(/[^0-9+]/g, '')}`
+const joinTiming = (m, sep = ' — ') => {
+  if (!m) return ''
+  if (typeof m === 'string') return ''
+  return [m.timing, m.note].filter(Boolean).join(sep)
+}
 
 // ── Shared UI ──────────────────────────────────────────────────────────
 
@@ -278,57 +295,124 @@ function DoseSchedule({ latest, nowSlot }) {
 
 // ── Visit history timeline ─────────────────────────────────────────────
 
-function VisitHistory({ history }) {
-  const [expanded, setExpanded] = useState(null)
+function VisitHistory({ history = [] }) {
+  const [expanded, setExpanded] = useState(0)
   return (
-    <Card title="Visit history" icon={CalendarDays}>
+    <Card
+      title="Visit history"
+      icon={CalendarDays}
+      aside={
+        <span className="text-xs text-slate-400">
+          {history.length} {history.length === 1 ? 'consultation' : 'consultations'}
+        </span>
+      }
+    >
       {history.length === 0 ? (
-        <p className="text-sm text-slate-500">No previous visits on record.</p>
+        <div className="py-8 text-center space-y-2">
+          <div className="w-10 h-10 rounded-2xl bg-slate-100 text-slate-500 flex items-center justify-center mx-auto">
+            <CalendarDays className="w-5 h-5" />
+          </div>
+          <p className="text-sm font-semibold text-slate-700">No previous visits on record</p>
+          <p className="text-xs text-slate-400 max-w-xs mx-auto">
+            Your university health centre consultations will be preserved in this clinical timeline.
+          </p>
+        </div>
       ) : (
-        <ol className="relative border-l-2 border-slate-200 ml-2 space-y-1">
+        <ol className="relative border-l-2 border-slate-200 ml-2 space-y-2">
           {history.map((h, index) => {
             const open = expanded === index
+            const hDate =
+              h.date ||
+              (h.completedAt
+                ? new Date(h.completedAt).toLocaleDateString('en-IN', {
+                    day: 'numeric',
+                    month: 'short',
+                    year: 'numeric',
+                  })
+                : 'Recent visit')
             return (
-              <li key={index} className="pl-5 relative">
+              <li key={h.visitId || index} className="pl-5 relative">
                 <span
                   aria-hidden="true"
                   className={
                     'absolute -left-[7px] top-4 w-3 h-3 rounded-full border-2 border-white ' +
-                    (index === 0 ? 'bg-teal-700' : 'bg-slate-300')
+                    (index === 0 ? 'bg-teal-700 ring-2 ring-teal-100' : 'bg-slate-300')
                   }
                 />
                 <button
+                  type="button"
                   onClick={() => setExpanded(open ? null : index)}
                   aria-expanded={open}
-                  className="w-full flex items-center justify-between gap-3 text-left rounded-xl px-3 py-3 hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-500/50 transition-colors"
+                  className="w-full flex items-center justify-between gap-3 text-left rounded-xl px-3 py-3 hover:bg-slate-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-500/50 transition-colors cursor-pointer"
                 >
-                  <span>
-                    <span className="block text-xs text-slate-400">{h.date}</span>
-                    <span className="block text-sm font-semibold text-slate-900">{h.diagnosis}</span>
+                  <span className="min-w-0">
+                    <span className="block text-xs text-slate-400 font-mono">{hDate}</span>
+                    <span className="block text-sm font-bold text-slate-900 truncate">
+                      {h.diagnosis || 'General Consultation'}
+                    </span>
+                    {h.doctorName && (
+                      <span className="block text-[11px] text-teal-800 font-medium mt-0.5">
+                        {h.doctorName}
+                        {h.specialty && ` · ${h.specialty}`}
+                      </span>
+                    )}
                   </span>
                   <ChevronRight
-                    className={'w-4 h-4 text-slate-400 cc-anim transition-transform duration-200 ' + (open ? 'rotate-90' : '')}
+                    className={
+                      'w-4 h-4 text-slate-400 cc-anim transition-transform duration-200 shrink-0 ' +
+                      (open ? 'rotate-90 text-teal-700' : '')
+                    }
                     aria-hidden="true"
                   />
                 </button>
                 <div
                   className="cc-anim"
-                  style={{ display: 'grid', gridTemplateRows: open ? '1fr' : '0fr', transition: 'grid-template-rows 250ms ease' }}
+                  style={{
+                    display: 'grid',
+                    gridTemplateRows: open ? '1fr' : '0fr',
+                    transition: 'grid-template-rows 250ms ease',
+                  }}
                 >
                   <div className="overflow-hidden">
-                    <div className="mx-3 mb-3 rounded-xl bg-slate-50 border border-slate-100 px-4 py-3 space-y-2">
-                      {h.notes && <p className="text-sm text-slate-600">{h.notes}</p>}
+                    <div className="mx-3 mb-3 rounded-2xl bg-slate-50 border border-slate-100 p-4 space-y-3">
+                      {(h.notes || h.clinicalNotes || h.generalInstructions) && (
+                        <div>
+                          <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-0.5">
+                            Doctor's Advice
+                          </p>
+                          <p className="text-xs text-slate-700 leading-relaxed">
+                            {h.notes || h.clinicalNotes || h.generalInstructions}
+                          </p>
+                        </div>
+                      )}
                       {h.medicines && h.medicines.length > 0 ? (
-                        <ul className="space-y-1">
-                          {h.medicines.map((m, mi) => (
-                            <li key={mi} className="text-sm text-slate-700">
-                              {m.name}
-                              {joinTiming(m, ', ') && <span className="text-slate-400"> — {joinTiming(m, ', ')}</span>}
-                            </li>
-                          ))}
-                        </ul>
+                        <div className="pt-2 border-t border-slate-200/70">
+                          <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
+                            Prescribed Medications
+                          </p>
+                          <ul className="space-y-1.5">
+                            {h.medicines.map((m, mi) => {
+                              const mName = typeof m === 'string' ? m : m.name
+                              const mTiming = typeof m === 'string' ? '' : m.timing
+                              const mNote = typeof m === 'string' ? '' : m.note
+                              return (
+                                <li
+                                  key={mi}
+                                  className="flex items-center justify-between gap-2 text-xs bg-white border border-slate-200/80 px-3 py-2 rounded-xl"
+                                >
+                                  <span className="font-semibold text-slate-800 truncate">{mName}</span>
+                                  {(mTiming || mNote) && (
+                                    <span className="text-[11px] font-medium text-slate-500 bg-slate-50 px-2 py-0.5 rounded-lg shrink-0">
+                                      {[mTiming, mNote].filter(Boolean).join(' • ')}
+                                    </span>
+                                  )}
+                                </li>
+                              )
+                            })}
+                          </ul>
+                        </div>
                       ) : (
-                        <p className="text-xs text-slate-400">No medicines were prescribed at this visit.</p>
+                        <p className="text-xs text-slate-400 italic">No medicines were prescribed at this visit.</p>
                       )}
                     </div>
                   </div>
@@ -346,40 +430,103 @@ function VisitHistory({ history }) {
 
 function LatestPrescription({ latest }) {
   return (
-    <Card title="Latest prescription" icon={Stethoscope} aside={latest && <span className="text-xs text-slate-400">{latest.date}</span>}>
+    <Card
+      title="Latest prescription"
+      icon={Stethoscope}
+      aside={
+        latest && (
+          <div className="flex items-center gap-2">
+            {latest.doctorName && (
+              <span className="text-xs font-semibold text-teal-800 bg-teal-50 border border-teal-200 px-2.5 py-0.5 rounded-full">
+                {latest.doctorName}
+              </span>
+            )}
+            <span className="text-xs text-slate-400 font-mono">{latest.date || 'Recent'}</span>
+          </div>
+        )
+      }
+    >
       {!latest ? (
-        <p className="text-sm text-slate-500">No prescriptions yet. Once a doctor sees you, it'll show up here.</p>
+        <div className="py-10 text-center space-y-2">
+          <div className="w-12 h-12 rounded-2xl bg-teal-50 text-teal-700 flex items-center justify-center mx-auto">
+            <Stethoscope className="w-6 h-6" />
+          </div>
+          <p className="text-sm font-semibold text-slate-800">No active prescription</p>
+          <p className="text-xs text-slate-500 max-w-sm mx-auto">
+            Prescriptions issued during doctor visits at the campus health centre will appear here with complete
+            dosage instructions.
+          </p>
+        </div>
       ) : (
         <div className="space-y-4">
           <div>
-            <p className="text-xs text-slate-400 mb-0.5">Diagnosis</p>
-            <p className="cc-display text-2xl font-semibold text-slate-900">{latest.diagnosis || 'Not specified'}</p>
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Diagnosis</span>
+              {latest.specialty && (
+                <span className="text-[11px] font-medium text-teal-700 bg-teal-50 px-2 py-0.5 rounded-md">
+                  {latest.specialty}
+                </span>
+              )}
+            </div>
+            <p className="cc-display text-2xl font-bold text-slate-900 leading-tight">
+              {latest.diagnosis || 'General Medical Consultation'}
+            </p>
           </div>
-          {latest.notes && (
-            <div className="rounded-2xl bg-slate-50 border border-slate-200 px-4 py-3">
-              <p className="text-xs text-slate-400 mb-0.5">Doctor's notes</p>
-              <p className="text-sm text-slate-700 leading-relaxed">{latest.notes}</p>
+
+          {(latest.notes || latest.generalInstructions) && (
+            <div className="rounded-2xl bg-slate-50 border border-slate-200/90 p-4">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mb-1">
+                Doctor's advice & instructions
+              </p>
+              <p className="text-sm text-slate-700 leading-relaxed">
+                {latest.notes || latest.generalInstructions}
+              </p>
             </div>
           )}
+
           {latest.medicines && latest.medicines.length > 0 ? (
             <div>
-              <p className="text-xs text-slate-400 mb-2">Medicines</p>
-              <ul className="divide-y divide-slate-100 rounded-2xl border border-slate-200 overflow-hidden">
-                {latest.medicines.map((m, i) => (
-                  <li key={i} className="flex items-center gap-3 px-4 py-3">
-                    <span className="w-8 h-8 rounded-lg bg-teal-50 text-teal-700 flex items-center justify-center shrink-0">
-                      <Pill className="w-4 h-4" aria-hidden="true" />
-                    </span>
-                    <span className="min-w-0">
-                      <span className="block text-sm font-medium text-slate-900">{m.name}</span>
-                      <span className="block text-xs text-slate-500">{joinTiming(m, ' — ')}</span>
-                    </span>
-                  </li>
-                ))}
+              <p className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2.5">
+                Prescribed Medicines ({latest.medicines.length})
+              </p>
+              <ul className="divide-y divide-slate-100 rounded-2xl border border-slate-200 overflow-hidden bg-white shadow-xs">
+                {latest.medicines.map((m, i) => {
+                  const mName = typeof m === 'string' ? m : m.name
+                  const mTiming = typeof m === 'string' ? '' : m.timing
+                  const mNote = typeof m === 'string' ? '' : m.note
+                  const mDuration = typeof m === 'string' ? '' : m.duration
+                  return (
+                    <li key={i} className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 p-4 bg-white hover:bg-slate-50/60 transition-colors">
+                      <div className="flex items-start gap-3 min-w-0">
+                        <span className="w-9 h-9 rounded-xl bg-teal-50 text-teal-700 flex items-center justify-center shrink-0 mt-0.5 sm:mt-0">
+                          <Pill className="w-4 h-4" aria-hidden="true" />
+                        </span>
+                        <div className="min-w-0">
+                          <span className="block text-sm font-bold text-slate-900 truncate">{mName}</span>
+                          {mNote && <span className="block text-xs text-slate-500 mt-0.5">{mNote}</span>}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1.5 self-start sm:self-auto shrink-0 pl-12 sm:pl-0">
+                        {mTiming && (
+                          <span className="text-[11px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-lg bg-teal-50 text-teal-800 border border-teal-200">
+                            {mTiming}
+                          </span>
+                        )}
+                        {mDuration && (
+                          <span className="text-xs font-medium text-slate-400 px-2 py-0.5">
+                            {mDuration}
+                          </span>
+                        )}
+                      </div>
+                    </li>
+                  )
+                })}
               </ul>
             </div>
           ) : (
-            <p className="text-sm text-slate-500">No medicines were prescribed at this visit.</p>
+            <div className="rounded-2xl bg-slate-50 border border-slate-200 p-4 text-xs text-slate-500">
+              No prescription medicines were dispensed for this visit.
+            </div>
           )}
         </div>
       )}
@@ -1892,32 +2039,47 @@ function HealthView({
   )
 }
 
-function HelpView() {
-  return (
-    <div>
-      <PageTitle sub="Tap a number to call">Helplines</PageTitle>
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
-        <div className="grid grid-cols-2 gap-3">
-          {EMERGENCY.map((e) => (
-            <CallButton key={e.label} item={e} />
-          ))}
-        </div>
+function HelpView({ emergencyDirectory, personalContacts }) {
+  const campusNumbers = emergencyDirectory?.campusServices || CAMPUS_NUMBERS
+  const personalList = personalContacts || emergencyDirectory?.personalContacts || []
+  const nationalList = emergencyDirectory?.nationalHelplines || EMERGENCY
 
-        <Card title="On campus" icon={Phone}>
+  return (
+    <div className="space-y-5">
+      <PageTitle sub="Approved campus emergency numbers, 24×7 dispensary, and verified personal contacts">
+        Emergency & Helplines
+      </PageTitle>
+
+      {/* Critical First Responder Call Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {nationalList.slice(0, 2).map((e) => (
+          <CallButton
+            key={e.label}
+            item={{
+              ...e,
+              icon: (e.label || '').toLowerCase().includes('tele') ? HeartPulse : Ambulance,
+            }}
+          />
+        ))}
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+        {/* Approved Campus Emergency Services */}
+        <Card title="Approved Campus Emergency Contacts" icon={Phone}>
           <ul className="divide-y divide-slate-100 -my-1.5">
-            {CAMPUS_NUMBERS.map((c) => (
+            {campusNumbers.map((c) => (
               <li key={c.label}>
                 <a
                   href={telHref(c.number)}
                   aria-label={`Call ${c.label} at ${c.number}`}
-                  className="flex items-center justify-between gap-3 py-3.5 active:bg-slate-50 hover:text-teal-800"
+                  className="flex items-center justify-between gap-3 py-3.5 px-1 rounded-xl active:bg-slate-50 hover:bg-slate-50/80 transition-colors"
                 >
                   <span className="min-w-0">
-                    <span className="block text-sm font-medium text-slate-800">{c.label}</span>
+                    <span className="block text-sm font-bold text-slate-800">{c.label}</span>
                     <span className="block text-xs text-slate-500">{c.sub}</span>
                   </span>
-                  <span className="flex items-center gap-1.5 text-sm font-semibold text-teal-800 tabular-nums shrink-0">
-                    <Phone className="w-3.5 h-3.5" aria-hidden="true" />
+                  <span className="flex items-center gap-1.5 text-xs font-bold text-teal-800 tabular-nums shrink-0 bg-teal-50 border border-teal-200 px-3 py-1.5 rounded-xl shadow-2xs">
+                    <Phone className="w-3.5 h-3.5 text-teal-700" aria-hidden="true" />
                     {c.number}
                   </span>
                 </a>
@@ -1925,6 +2087,68 @@ function HelpView() {
             ))}
           </ul>
         </Card>
+
+        {/* Student's Verified Emergency Contact */}
+        <div className="space-y-4">
+          <Card title="Verified Personal Emergency Contact" icon={ShieldCheck}>
+            {personalList.length > 0 ? (
+              <div className="space-y-3">
+                {personalList.map((pc, idx) => (
+                  <div
+                    key={pc.contactId || idx}
+                    className="p-4 rounded-2xl bg-teal-50/70 border border-teal-200 flex items-center justify-between gap-3 shadow-xs"
+                  >
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-bold text-slate-900 truncate">{pc.name}</span>
+                        <span className="text-[11px] font-semibold text-teal-800 bg-white border border-teal-200 px-2 py-0.5 rounded-full shrink-0">
+                          {pc.relationship}
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-600 mt-1 font-mono">{pc.phoneNumber}</p>
+                    </div>
+                    <a
+                      href={telHref(pc.phoneNumber)}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-teal-800 text-white text-xs font-bold hover:bg-teal-900 active:bg-teal-950 transition-colors shadow-xs shrink-0 cursor-pointer"
+                    >
+                      <Phone className="w-3.5 h-3.5" />
+                      Call
+                    </a>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="py-6 text-center space-y-2">
+                <p className="text-xs text-amber-800 font-semibold">No personal emergency contact registered.</p>
+                <p className="text-[11px] text-slate-500 max-w-xs mx-auto">
+                  Please update your profile so health centre doctors can contact your family during emergencies.
+                </p>
+              </div>
+            )}
+          </Card>
+
+          {/* National Helplines */}
+          <Card title="National 24×7 Helplines" icon={HeartPulse}>
+            <ul className="divide-y divide-slate-100 -my-1.5">
+              {nationalList.map((nh) => (
+                <li key={nh.label}>
+                  <a
+                    href={telHref(nh.number)}
+                    className="flex items-center justify-between gap-3 py-3 px-1 hover:text-teal-800 transition-colors"
+                  >
+                    <span className="min-w-0">
+                      <span className="block text-xs font-semibold text-slate-800">{nh.label}</span>
+                      <span className="block text-[11px] text-slate-400">{nh.sub}</span>
+                    </span>
+                    <span className="text-xs font-bold text-slate-700 tabular-nums">
+                      {nh.number}
+                    </span>
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </Card>
+        </div>
       </div>
     </div>
   )
@@ -1935,13 +2159,15 @@ function AccountView({ profile, profileCompletion, logout, onEditProfile }) {
   const percentage = profileCompletion?.percentage ?? 100
 
   return (
-    <div className="max-w-xl space-y-4">
+    <div className="max-w-2xl space-y-5">
       <div className="flex items-center justify-between">
-        <PageTitle>Account & Health Profile</PageTitle>
+        <PageTitle sub="Official university record and student-editable profile demographics">
+          Account & University Records
+        </PageTitle>
         <button
           type="button"
           onClick={onEditProfile}
-          className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-teal-50 border border-teal-200 text-teal-800 text-xs font-semibold hover:bg-teal-100 transition-colors cursor-pointer"
+          className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-teal-800 text-white text-xs font-bold hover:bg-teal-900 active:bg-teal-950 transition-colors shadow-xs cursor-pointer"
         >
           <Edit3 className="w-3.5 h-3.5" />
           Edit Profile
@@ -1949,33 +2175,33 @@ function AccountView({ profile, profileCompletion, logout, onEditProfile }) {
       </div>
 
       {/* Profile Completion Status Badge */}
-      <Card className="!p-4 sm:!p-5 border-teal-100">
+      <Card className="!p-4 sm:!p-5 border-teal-100 shadow-xs">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2.5">
             {isComplete ? (
-              <span className="w-8 h-8 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
-                <CheckCircle2 className="w-4 h-4" />
+              <span className="w-9 h-9 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+                <CheckCircle2 className="w-5 h-5" />
               </span>
             ) : (
-              <span className="w-8 h-8 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
-                <AlertCircle className="w-4 h-4" />
+              <span className="w-9 h-9 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+                <AlertCircle className="w-5 h-5" />
               </span>
             )}
             <div>
-              <p className="text-xs font-semibold text-slate-800">
+              <p className="text-xs font-bold text-slate-900">
                 Health Profile Completion: {percentage}%
               </p>
-              <p className="text-[11px] text-slate-500">
+              <p className="text-[11px] text-slate-500 mt-0.5">
                 {isComplete
-                  ? 'All mandatory clinical declarations on file.'
-                  : 'Incomplete. Complete your clinical profile for health centre records.'}
+                  ? 'All mandatory clinical declarations & emergency contacts on file.'
+                  : 'Incomplete. Please complete your clinical profile for health centre records.'}
               </p>
             </div>
           </div>
           <button
             type="button"
             onClick={onEditProfile}
-            className="text-xs font-bold text-teal-700 hover:text-teal-900 underline shrink-0 cursor-pointer"
+            className="text-xs font-bold text-teal-800 hover:text-teal-950 underline shrink-0 cursor-pointer"
           >
             {isComplete ? 'Update Info' : 'Complete Now'}
           </button>
@@ -1990,24 +2216,87 @@ function AccountView({ profile, profileCompletion, logout, onEditProfile }) {
         )}
       </Card>
 
-      <Card>
-        <div className="flex items-center gap-3 pb-4 border-b border-slate-100">
-          <span className="w-14 h-14 rounded-full bg-teal-800 text-white flex items-center justify-center text-lg font-semibold">
+      {/* Authoritative University Record (Immutable) */}
+      <Card
+        title="Institutional Academic Record"
+        icon={GraduationCap}
+        aside={
+          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-slate-100 text-slate-600 border border-slate-200">
+            <Lock className="w-3 h-3 text-slate-400" />
+            Registrar Verified
+          </span>
+        }
+      >
+        <div className="flex items-center gap-3.5 pb-4 border-b border-slate-100">
+          <span className="w-14 h-14 rounded-2xl bg-teal-800 text-white flex items-center justify-center text-lg font-bold shadow-xs">
             {getInitials(profile.name)}
           </span>
           <div className="min-w-0">
-            <p className="cc-display text-lg font-semibold text-slate-900 truncate">{profile.name}</p>
-            <p className="text-sm text-slate-500">{profile.rollNumber}</p>
+            <p className="cc-display text-lg font-bold text-slate-900 truncate">{profile.name}</p>
+            <p className="text-xs text-slate-500 font-mono">Roll: {profile.rollNumber}</p>
+            <span className="inline-block mt-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200 uppercase tracking-wider">
+              {profile.status || 'ACTIVE'}
+            </span>
           </div>
         </div>
+
         <div className="divide-y divide-slate-100">
-          <InfoRow icon={GraduationCap} label="Course">
-            {profile.course ? `${profile.course}${profile.branch ? ` · ${profile.branch}` : ''}` : 'Not on file'}
+          <InfoRow icon={IdCard} label="University Roll Number">
+            {profile.rollNumber}
           </InfoRow>
-          <InfoRow icon={Droplet} label="Blood group">{profile.bloodGroup || 'Not on file'}</InfoRow>
-          <InfoRow icon={Mail} label="Email">{profile.email || 'Not on file'}</InfoRow>
-          <InfoRow icon={Phone} label="Contact number">{profile.contact || 'Not on file'}</InfoRow>
-          <InfoRow icon={IdCard} label="Roll number">{profile.rollNumber}</InfoRow>
+          <InfoRow icon={Mail} label="Institutional Email">
+            {profile.email || 'Not on file'}
+          </InfoRow>
+          <InfoRow icon={GraduationCap} label="Program & Degree">
+            {profile.course || 'B.Tech / B.E.'}
+          </InfoRow>
+          <InfoRow icon={Building2} label="Branch / Department">
+            {profile.branch || profile.department || 'Engineering'}
+          </InfoRow>
+          {profile.semester && (
+            <InfoRow icon={CalendarDays} label="Current Academic Semester">
+              Semester {profile.semester}
+            </InfoRow>
+          )}
+        </div>
+        <p className="text-[11px] text-slate-400 pt-3 border-t border-slate-100">
+          Institutional identity and academic credentials are maintained by the campus registrar and cannot be modified online.
+        </p>
+      </Card>
+
+      {/* Student Personal & Editable Demographics */}
+      <Card
+        title="Personal Demographics & Contacts"
+        icon={User}
+        aside={
+          <button
+            type="button"
+            onClick={onEditProfile}
+            className="text-xs font-bold text-teal-800 hover:text-teal-950 underline cursor-pointer"
+          >
+            Edit
+          </button>
+        }
+      >
+        <div className="divide-y divide-slate-100">
+          <InfoRow icon={Phone} label="Personal Phone Number">
+            {profile.contact || 'Not registered'}
+          </InfoRow>
+          <InfoRow icon={Droplet} label="Blood Group">
+            <span className="font-bold text-slate-900">{profile.bloodGroup || 'Not reported'}</span>
+          </InfoRow>
+          <InfoRow icon={CalendarDays} label="Date of Birth">
+            {profile.dateOfBirth || 'Not registered'}
+          </InfoRow>
+          <InfoRow icon={User} label="Gender Identity">
+            {profile.sex || 'Not registered'}
+          </InfoRow>
+          {profile.emergencyContact && (
+            <InfoRow icon={Phone} label={`Primary Emergency Contact (${profile.emergencyContact.relationship || 'Guardian'})`}>
+              <span className="font-semibold text-slate-900">{profile.emergencyContact.name}</span>
+              <span className="block text-xs text-slate-500 font-mono mt-0.5">{profile.emergencyContact.phoneNumber}</span>
+            </InfoRow>
+          )}
         </div>
       </Card>
 
@@ -2015,10 +2304,10 @@ function AccountView({ profile, profileCompletion, logout, onEditProfile }) {
         <button
           type="button"
           onClick={logout}
-          className="w-full flex items-center justify-center gap-2 rounded-2xl border border-red-200 bg-white text-red-600 py-3.5 text-sm font-semibold hover:bg-red-50 active:bg-red-100 transition-colors cursor-pointer"
+          className="w-full flex items-center justify-center gap-2 rounded-2xl border border-red-200 bg-white text-red-600 py-3.5 text-sm font-bold hover:bg-red-50 active:bg-red-100 transition-colors cursor-pointer shadow-2xs"
         >
           <LogOut className="w-4 h-4" aria-hidden="true" />
-          Log out
+          Log out of CampusCare
         </button>
       </div>
     </div>
@@ -2041,12 +2330,19 @@ function StudentDashboard() {
     rollNumber: authStudent?.rollNumber || '',
     course: '',
     branch: '',
+    department: '',
     bloodGroup: '',
     email: authStudent?.email || '',
     contact: '',
+    dateOfBirth: '',
+    sex: '',
+    semester: 6,
+    status: 'ACTIVE',
+    emergencyContact: null,
   })
   const [profileCompletion, setProfileCompletion] = useState(null)
   const [medicalProfile, setMedicalProfile] = useState(null)
+  const [emergencyDirectory, setEmergencyDirectory] = useState(null)
   const [summary, setSummary] = useState(EMPTY_SUMMARY)
   const [history, setHistory] = useState([])
   const [activeVisit, setActiveVisit] = useState(null)
@@ -2069,22 +2365,37 @@ function StudentDashboard() {
           navigate('/student_dashboard', { replace: true })
         }
 
-        const [meData, historyRes, medProfileRes] = await Promise.all([
+        const [meData, historyRes, medProfileRes, emerRes] = await Promise.all([
           fetchStudentMe(),
-          fetchStudentVisitHistoryByRoll(authStudent?.rollNumber || ''),
+          fetchStudentVisits(),
           fetchStudentMedicalProfile().catch(() => null),
+          fetchStudentEmergencyDirectory().catch(() => null),
         ])
 
         const s = meData?.student || {}
+        const primaryContact =
+          meData?.emergencyContacts && meData.emergencyContacts.length > 0
+            ? meData.emergencyContacts[0]
+            : null
+
         setProfile({
           name: s.fullName || s.name || authStudent?.name || 'Student',
           rollNumber: s.rollNumber || authStudent?.rollNumber || '',
-          course: s.program || s.course || '',
+          course: s.program || s.course || 'B.Tech',
           branch: s.branch || s.department || '',
-          bloodGroup: s.bloodGroup || '',
+          department: s.department || s.branch || '',
+          bloodGroup: s.bloodGroup || medProfileRes?.bloodGroup || '',
           email: s.email || authStudent?.email || '',
           contact: s.phoneNumber || s.contact || '',
+          dateOfBirth: s.dateOfBirth || '',
+          sex: s.sex || '',
+          semester: s.semester || 6,
+          status: s.status || 'ACTIVE',
+          emergencyContact: primaryContact,
         })
+        if (emerRes) {
+          setEmergencyDirectory(emerRes)
+        }
 
         if (meData?.profileCompletion) {
           setProfileCompletion(meData.profileCompletion)
@@ -2296,7 +2607,12 @@ function StudentDashboard() {
               canEdit={userRole === 'STUDENT'}
             />
           )}
-          {tab === 'help' && <HelpView />}
+          {tab === 'help' && (
+            <HelpView
+              emergencyDirectory={emergencyDirectory}
+              personalContacts={profile.emergencyContact ? [profile.emergencyContact] : []}
+            />
+          )}
           {tab === 'account' && (
             <AccountView
               profile={profile}

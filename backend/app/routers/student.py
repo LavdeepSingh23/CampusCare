@@ -15,6 +15,8 @@ from app.api.routes.student import (
     delete_student_medication_endpoint,
     get_student_profile,
     get_student_visit_history,
+    get_current_student_visit_history,
+    get_student_emergency_contacts_endpoint,
 )
 
 __all__ = [
@@ -31,4 +33,6 @@ __all__ = [
     "delete_student_medication_endpoint",
     "get_student_profile",
     "get_student_visit_history",
+    "get_current_student_visit_history",
+    "get_student_emergency_contacts_endpoint",
 ]
