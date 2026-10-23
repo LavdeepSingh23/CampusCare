@@ -233,7 +233,10 @@ def check_in(body: CheckInRequest, me: CurrentReceptionist = Depends(get_current
             conn.rollback()
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
         except Exception as exc:
-            conn.rollback()
+            try:
+                conn.rollback()
+            except Exception:
+                pass
             is_deadlock = hasattr(exc, "args") and len(exc.args) > 0 and exc.args[0] == 1213
             if is_deadlock and attempt < max_retries - 1:
                 import time

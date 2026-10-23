@@ -17,14 +17,17 @@ import {
   fetchEmergencyLogs,
   checkSystemHealth,
   checkDatabaseReadiness,
+  resolveRfidCard,
 } from "../../api";
 import DispensingDesk from "./DispensingDesk";
 import EmergencyDesk from "./EmergencyDesk";
 import RFIDCardDesk from "./RFIDCardDesk";
+import NfcCheckInDesk from "./NfcCheckInDesk";
 import { useAuth } from "../../context/AuthContext";
 import { Sidebar, SidebarBody, SidebarLink } from "../ui/sidebar";
 import campusCareLogo from "../../assets/campuscare-logo.png";
 import {
+  Radio,
   Users,
   Stethoscope,
   Pill,
@@ -246,7 +249,7 @@ export default function ReceptionDashboard({ onLogout, initialPage = "reception"
               liveActivity={liveActivity}
             />
           )}
-          {page === "checkin" && <CheckIn flash={flash} setPage={setPage} />}
+          {page === "checkin" && <NfcCheckInDesk flash={flash} setPage={setPage} />}
           {page === "queue" && <LiveQueue setPage={setPage} />}
           {page === "students" && <Students />}
           {page === "rfid" && <RFIDCardDesk flash={flash} />}
@@ -614,7 +617,17 @@ function CheckIn({ flash, setPage }) {
   const [checkinError, setCheckinError] = useState(null);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState(null);
-  const via = "MANUAL";
+  const [via, setVia] = useState("RFID");
+  const [checkinMode, setCheckinMode] = useState("RFID"); // RFID | MANUAL
+  const [cardInput, setCardInput] = useState("");
+  const [nfcAvailable, setNfcAvailable] = useState(false);
+  const [scanningNfc, setScanningNfc] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== "undefined" && "NDEFReader" in window) {
+      setNfcAvailable(true);
+    }
+  }, []);
 
   const pickDefault = (list) => list.find((x) => x.available)?.doctorId ?? null;
 
@@ -641,6 +654,7 @@ function CheckIn({ flash, setPage }) {
     try {
       const s = await lookupStudent(roll);
       setStudent(s);
+      setVia("MANUAL");
       setStep("identified");
     } catch (err) {
       if (err.status === 404 || String(err.message).includes("404")) {
@@ -650,6 +664,78 @@ function CheckIn({ flash, setPage }) {
       }
     } finally {
       setBusy(false);
+    }
+  };
+
+  const handleResolveCard = async (rawUid) => {
+    const clean = String(rawUid || "").trim();
+    if (!clean) return;
+
+    setBusy(true);
+    setNotFound(false);
+    setSearchError(null);
+    setCheckinError(null);
+
+    try {
+      const res = await resolveRfidCard(clean);
+      setCardInput(""); // Keep UID strictly transient
+
+      if (res.matched && res.student) {
+        setStudent({
+          rollNumber: res.student.roll_number || res.student.rollNumber,
+          name: res.student.name || res.student.full_name,
+          bloodGroup: res.student.blood_group || res.student.bloodGroup,
+          blood: res.student.blood_group || res.student.bloodGroup,
+          program: "B.Tech",
+          dept: "",
+          allergies: "None recorded",
+          alreadyInQueue: false,
+        });
+        setVia("RFID");
+        setStep("identified");
+        flash(`Card verified: ${res.student.name} (${res.student.roll_number})`);
+      } else if (res.status === "REVOKED") {
+        setSearchError(
+          res.message || `Card is marked as ${res.card_status || "REVOKED"} and cannot be used for check-in.`
+        );
+      } else if (res.status === "NOT_FOUND") {
+        setSearchError(
+          res.message || "This card UID is not registered. Please provision it at the Smart Card Desk."
+        );
+      } else {
+        setSearchError(res.message || "Could not resolve smart card mapping.");
+      }
+    } catch (err) {
+      setCardInput("");
+      const errMsg = err.detail || err.message || "Card lookup failed";
+      setSearchError(errMsg);
+    } finally {
+      setBusy(false);
+      setScanningNfc(false);
+    }
+  };
+
+  const triggerNfcScan = async () => {
+    if (!("NDEFReader" in window)) {
+      flash("Web NFC is only supported in supported mobile/Android browsers.");
+      return;
+    }
+    try {
+      setScanningNfc(true);
+      const ndef = new window.NDEFReader();
+      await ndef.scan();
+      ndef.addEventListener("reading", (event) => {
+        if (event.serialNumber) {
+          handleResolveCard(event.serialNumber);
+        }
+      });
+      ndef.addEventListener("readingerror", () => {
+        setSearchError("NFC tap read error. Please hold the card steady and tap again.");
+        setScanningNfc(false);
+      });
+    } catch (err) {
+      setScanningNfc(false);
+      setSearchError(`Web NFC activation failed: ${err.message}`);
     }
   };
 
@@ -701,6 +787,8 @@ function CheckIn({ flash, setPage }) {
     setReason("");
     setResult(null);
     setQ("");
+    setCardInput("");
+    setVia("RFID");
     setNotFound(false);
     setSearchError(null);
     setCheckinError(null);
@@ -718,60 +806,162 @@ function CheckIn({ flash, setPage }) {
         sub="Identify student and assign to real-time doctor consultation queue"
       />
 
-      {/* ── STEP 1: SEARCH BY ROLL NUMBER ── */}
+      {/* ── STEP 1: CARD SCAN OR ROLL NUMBER SEARCH ── */}
       {step === "scan" && (
         <div className="bg-white rounded-3xl border border-slate-200/90 p-6 sm:p-8 shadow-xs space-y-6">
-          <div className="text-center py-3">
-            <div className="h-20 w-20 rounded-full bg-teal-50 border-2 border-dashed border-teal-400/80 flex items-center justify-center text-teal-700 shadow-sm mx-auto">
-              <UserCheck className="w-9 h-9" />
-            </div>
-            <h3 className="text-base font-bold text-slate-900 mt-4">Find the Student</h3>
-            <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
-              Enter the student's university roll number to verify their profile and issue a live OPD queue token.
-            </p>
+          {/* Mode Switcher */}
+          <div className="flex p-1 bg-slate-100/80 rounded-2xl">
+            <button
+              type="button"
+              onClick={() => {
+                setCheckinMode("RFID");
+                setSearchError(null);
+                setNotFound(false);
+              }}
+              className={`flex-1 py-2 text-xs font-semibold rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                checkinMode === "RFID"
+                  ? "bg-white text-teal-800 shadow-xs"
+                  : "text-slate-500 hover:text-slate-700"
+              }`}
+            >
+              <Radio className="w-3.5 h-3.5 text-teal-700" />
+              <span>Smart Card Tap (NFC/RFID)</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setCheckinMode("MANUAL");
+                setSearchError(null);
+                setNotFound(false);
+              }}
+              className={`flex-1 py-2 text-xs font-semibold rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                checkinMode === "MANUAL"
+                  ? "bg-white text-teal-800 shadow-xs"
+                  : "text-slate-500 hover:text-slate-700"
+              }`}
+            >
+              <UserCheck className="w-3.5 h-3.5 text-teal-700" />
+              <span>Search by Roll Number</span>
+            </button>
           </div>
 
-          <form onSubmit={search} className="space-y-3">
-            <label className="text-xs font-semibold text-slate-700 block">Search by Roll Number</label>
-            <div className="flex gap-2">
-              <div className="relative flex-1">
-                <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                <input
-                  type="text"
-                  value={q}
-                  onChange={(e) => {
-                    setQ(e.target.value);
-                    setNotFound(false);
-                    setSearchError(null);
-                  }}
-                  placeholder="e.g. CS21B045 or 102403112"
-                  className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 bg-slate-50/60 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-teal-500 focus:bg-white transition-all font-mono"
-                />
+          {/* Mode A: Smart Card Tap */}
+          {checkinMode === "RFID" ? (
+            <div className="space-y-5">
+              <div className="text-center py-2">
+                <div className="h-20 w-20 rounded-full bg-teal-50 border-2 border-dashed border-teal-400/80 flex items-center justify-center text-teal-700 shadow-sm mx-auto relative">
+                  <Radio className={`w-9 h-9 ${scanningNfc || busy ? "animate-pulse" : ""}`} />
+                </div>
+                <h3 className="text-base font-bold text-slate-900 mt-4">Tap Student ID Card</h3>
+                <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
+                  Hold card near the USB RFID scanner or mobile NFC reader to automatically identify the student.
+                </p>
               </div>
-              <button
-                type="submit"
-                disabled={busy || !q.trim()}
-                className="px-5 rounded-xl bg-teal-700 hover:bg-teal-800 disabled:bg-slate-300 text-white text-xs font-semibold cursor-pointer transition-colors shadow-2xs flex items-center gap-1.5"
+
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  handleResolveCard(cardInput);
+                }}
+                className="space-y-3"
               >
-                {busy && <RotateCw className="w-3.5 h-3.5 animate-spin" />}
-                <span>{busy ? "Searching…" : "Search"}</span>
-              </button>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={cardInput}
+                    onChange={(e) => setCardInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        handleResolveCard(cardInput);
+                      }
+                    }}
+                    autoFocus
+                    placeholder="Tap physical card on scanner or enter UID..."
+                    className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-slate-50/60 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-teal-500 focus:bg-white transition-all font-mono uppercase"
+                  />
+                  {busy && <RotateCw className="w-4 h-4 text-teal-600 animate-spin absolute right-3.5 top-3.5" />}
+                </div>
+
+                <div className="flex gap-2">
+                  <button
+                    type="submit"
+                    disabled={busy || !cardInput.trim()}
+                    className="flex-1 py-2.5 rounded-xl bg-teal-700 hover:bg-teal-800 disabled:bg-slate-200 disabled:text-slate-400 text-white text-xs font-semibold cursor-pointer transition-colors flex items-center justify-center gap-1.5"
+                  >
+                    {busy && <RotateCw className="w-3.5 h-3.5 animate-spin" />}
+                    <span>Resolve Scanned Card</span>
+                  </button>
+
+                  {nfcAvailable && (
+                    <button
+                      type="button"
+                      onClick={triggerNfcScan}
+                      disabled={scanningNfc}
+                      className="px-3.5 py-2.5 rounded-xl bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-200 text-xs font-semibold cursor-pointer transition-colors flex items-center gap-1.5"
+                    >
+                      <Radio className={`w-3.5 h-3.5 ${scanningNfc ? "animate-pulse" : ""}`} />
+                      <span>{scanningNfc ? "Scanning..." : "Web NFC"}</span>
+                    </button>
+                  )}
+                </div>
+              </form>
             </div>
-
-            {notFound && (
-              <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-center gap-2">
-                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
-                <span>Record not found. Please verify the roll number is registered in TIET records.</span>
+          ) : (
+            /* Mode B: Search by Roll Number */
+            <div className="space-y-5">
+              <div className="text-center py-2">
+                <div className="h-20 w-20 rounded-full bg-slate-50 border-2 border-dashed border-slate-300 flex items-center justify-center text-slate-700 shadow-sm mx-auto">
+                  <UserCheck className="w-9 h-9" />
+                </div>
+                <h3 className="text-base font-bold text-slate-900 mt-4">Manual Roll Number Search</h3>
+                <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
+                  Enter student roll number to look up their record and issue an OPD token.
+                </p>
               </div>
-            )}
 
-            {searchError && (
-              <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs flex items-center gap-2">
-                <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
-                <span>{searchError}</span>
-              </div>
-            )}
-          </form>
+              <form onSubmit={search} className="space-y-3">
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      value={q}
+                      onChange={(e) => {
+                        setQ(e.target.value);
+                        setNotFound(false);
+                        setSearchError(null);
+                      }}
+                      placeholder="e.g. 102203001 or CS21B045"
+                      className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 bg-slate-50/60 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-teal-500 focus:bg-white transition-all font-mono"
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={busy || !q.trim()}
+                    className="px-5 rounded-xl bg-teal-700 hover:bg-teal-800 disabled:bg-slate-300 text-white text-xs font-semibold cursor-pointer transition-colors flex items-center gap-1.5"
+                  >
+                    {busy && <RotateCw className="w-3.5 h-3.5 animate-spin" />}
+                    <span>{busy ? "Searching…" : "Search"}</span>
+                  </button>
+                </div>
+              </form>
+            </div>
+          )}
+
+          {notFound && (
+            <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+              <span>Record not found. Please verify the roll number is registered in TIET records.</span>
+            </div>
+          )}
+
+          {searchError && (
+            <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+              <span>{searchError}</span>
+            </div>
+          )}
         </div>
       )}
 

@@ -582,6 +582,41 @@ export function revokeRfidCard({ card_uid, roll_number, reason = "DEACTIVATED" }
   })
 }
 
+// ── NFC / RFID APIs (Phase NFC-3) ──────────────────────────────────
+export async function resolveRfidCard(cardIdentifier) {
+  const normUid = String(cardIdentifier || '').trim().replace(/[:\-\s]/g, '').toUpperCase()
+  if (!normUid) {
+    throw new Error('Card identifier cannot be empty')
+  }
+
+  return request('/api/rfid/lookup', {
+    method: 'POST',
+    body: JSON.stringify({ card_identifier: normUid }),
+  })
+}
+
+export function registerRfidCard(rollNumber, cardIdentifier) {
+  const normUid = String(cardIdentifier || '').trim().replace(/[:\-\s]/g, '').toUpperCase()
+  return request('/api/rfid/cards', {
+    method: 'POST',
+    body: JSON.stringify({
+      roll_number: String(rollNumber || '').trim(),
+      card_identifier: normUid,
+    }),
+  })
+}
+
+export function revokeRfidCardById(cardId, reason = 'DEACTIVATED', notes = null) {
+  return request(`/api/rfid/cards/${encodeURIComponent(cardId)}/revoke`, {
+    method: 'POST',
+    body: JSON.stringify({ reason, notes }),
+  })
+}
+
+export function fetchStudentCards(rollNumber) {
+  return request(`/api/rfid/student/${encodeURIComponent(String(rollNumber || '').trim())}`)
+}
+
 export function checkSystemHealth() {
   return request('/api/health')
 }

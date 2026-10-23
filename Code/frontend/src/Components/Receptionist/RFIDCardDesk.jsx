@@ -24,6 +24,10 @@ import {
   enrollRfidCard,
   revokeRfidCard,
   lookupRfidCard,
+  resolveRfidCard,
+  registerRfidCard,
+  revokeRfidCardById,
+  fetchStudentCards,
 } from "../../api";
 
 export default function RFIDCardDesk({ flash }) {
@@ -185,7 +189,7 @@ export default function RFIDCardDesk({ flash }) {
     setSuccessMessage(null);
 
     try {
-      const res = await enrollRfidCard(cleanRoll, cleanUid);
+      const res = await registerRfidCard(cleanRoll, cleanUid);
       const isReplaced = studentCardData?.activeCard && studentCardData.activeCard.cardUid !== cleanUid;
       const msg = isReplaced
         ? `Card ${cleanUid} successfully issued! Previous card ${studentCardData.activeCard.cardUid} was retired.`
@@ -210,10 +214,15 @@ export default function RFIDCardDesk({ flash }) {
     if (!student?.rollNumber) return;
     setRevoking(true);
     try {
-      const res = await revokeRfidCard({
-        roll_number: student.rollNumber,
-        reason: revokeReason,
-      });
+      const cardId = activeCard?.rfidCardId || activeCard?.card_id || activeCard?.cardId;
+      if (cardId) {
+        await revokeRfidCardById(cardId, revokeReason);
+      } else {
+        await revokeRfidCard({
+          roll_number: student.rollNumber,
+          reason: revokeReason,
+        });
+      }
       const msg = `Active card revoked (${revokeReason}).`;
       flash?.(msg);
       setSuccessMessage(msg);
@@ -237,8 +246,18 @@ export default function RFIDCardDesk({ flash }) {
     setQuickLookupResult(null);
 
     try {
-      const res = await lookupRfidCard(norm);
-      setQuickLookupResult(res);
+      const res = await resolveRfidCard(norm);
+      if (res.matched) {
+        setQuickLookupResult({
+          name: res.student.name,
+          rollNumber: res.student.roll_number,
+          bloodGroup: res.student.blood_group,
+          status: res.card.status,
+          cardId: res.card.card_id,
+        });
+      } else {
+        setQuickLookupError(res.message || `Card ${norm} is not actively assigned.`);
+      }
     } catch (err) {
       setQuickLookupError(err.detail || err.message || "Card is not actively mapped to any student.");
     } finally {
