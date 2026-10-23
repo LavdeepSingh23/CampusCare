@@ -60,6 +60,11 @@ class UnauthorizedActionError(QueueLifecycleError):
     pass
 
 
+class CardNotActiveError(QueueLifecycleError):
+    """Raised when an RFID smart card is revoked, inactive, or not authorized for check-in."""
+    pass
+
+
 def _is_mysql(conn) -> bool:
     """Helper to detect MySQL vs SQLite wrapper."""
     return not conn.__class__.__name__.startswith("SQLite")
@@ -101,19 +106,47 @@ def allocate_next_queue_sequence(cursor, doctor_id: int, conn) -> int:
 
 def check_in_student(
     conn,
-    roll_number: str,
-    doctor_id: int,
-    performed_by_user_id: int,
+    roll_number: Optional[str] = None,
+    doctor_id: int = None,
+    performed_by_user_id: int = None,
     complaint: Optional[str] = None,
     via: str = "MANUAL",
+    card_identifier: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Checks a student into a doctor's queue.
     Prevents conflicting active visits by locking the student record.
     Allocates sequence number safely by locking the doctor record.
+    If card_identifier is supplied, validates that the smart card is registered,
+    has status 'ACTIVE', and matches the roll number before authorizing.
     """
-    roll_number = roll_number.strip()
     with conn.cursor() as cur:
+        # Re-verify smart card authorization at confirmation time if card_identifier is present.
+        # Do not trust earlier lookup as permanent authorization decision.
+        if card_identifier and str(card_identifier).strip():
+            raw_uid = str(card_identifier).strip().upper().replace(":", "").replace("-", "").replace(" ", "")
+            lock_card = " FOR UPDATE" if _is_mysql(conn) else ""
+            cur.execute(
+                f"SELECT rfid_card_id AS card_id, roll_number, card_uid, status FROM RFID_CARD WHERE card_uid = %s{lock_card}",
+                (raw_uid,),
+            )
+            card = cur.fetchone()
+            if not card:
+                raise ResourceNotFoundError(f"Smart card '{card_identifier}' is not registered.")
+            if card.get("status") != "ACTIVE":
+                raise CardNotActiveError(
+                    f"Smart card '{card_identifier}' has status '{card.get('status')}' and cannot be used for check-in."
+                )
+            if roll_number and str(roll_number).strip().upper() != str(card["roll_number"]).strip().upper():
+                raise CardNotActiveError(
+                    f"Smart card belongs to student '{card['roll_number']}', but check-in was requested for '{roll_number}'."
+                )
+            roll_number = card["roll_number"]
+            via = "RFID"
+        elif not roll_number or not str(roll_number).strip():
+            raise ResourceNotFoundError("Student roll number or smart card identifier is required for check-in.")
+
+        roll_number = str(roll_number).strip()
         # 1. Lock doctor record first to serialize sequence allocation and queue modifications
         if _is_mysql(conn):
             cur.execute("SELECT doctor_id FROM DOCTOR WHERE doctor_id = %s FOR UPDATE", (doctor_id,))

@@ -382,15 +382,49 @@ export function fetchReceptionDoctors() {
   return request('/api/reception/doctors')
 }
 
-export function receptionCheckIn({ rollNumber, roll_number, doctorId, doctor_id, complaint = '', via = 'MANUAL' }) {
+export function receptionCheckIn({
+  rollNumber,
+  roll_number,
+  doctorId,
+  doctor_id,
+  complaint = '',
+  via = 'MANUAL',
+  card_identifier = null,
+  cardIdentifier = null,
+}) {
+  const cardUid = card_identifier || cardIdentifier || null
   return request('/api/reception/check-ins', {
     method: 'POST',
     body: JSON.stringify({
       roll_number: roll_number || rollNumber,
       doctor_id: doctor_id || doctorId,
       complaint: complaint || 'General Consultation',
-      via
-    })
+      via,
+      ...(cardUid ? { card_identifier: cardUid } : {}),
+    }),
+  })
+}
+
+export function queueCheckIn({
+  rollNumber,
+  roll_number,
+  doctorId,
+  doctor_id,
+  complaint = '',
+  via = 'MANUAL',
+  card_identifier = null,
+  cardIdentifier = null,
+}) {
+  const cardUid = card_identifier || cardIdentifier || null
+  return request('/api/queue/checkin', {
+    method: 'POST',
+    body: JSON.stringify({
+      roll_number: roll_number || rollNumber,
+      doctor_id: doctor_id || doctorId,
+      complaint: complaint || 'General Consultation',
+      via,
+      ...(cardUid ? { card_identifier: cardUid } : {}),
+    }),
   })
 }
 

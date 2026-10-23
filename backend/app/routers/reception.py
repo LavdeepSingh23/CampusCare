@@ -41,15 +41,12 @@ class CheckInRequest(BaseModel):
     doctorId: Optional[int] = None
     complaint: Optional[str] = Field(default=None, max_length=300)
     via: str = "MANUAL"  # "RFID" when card tap is active
+    card_identifier: Optional[str] = Field(default=None, max_length=64)
+    cardIdentifier: Optional[str] = Field(default=None, max_length=64)
 
-    def get_roll_number(self) -> str:
+    def get_roll_number(self) -> Optional[str]:
         val = self.roll_number or self.rollNumber
-        if not val or not val.strip():
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="Student identifier (roll_number / rollNumber) is required",
-            )
-        return val.strip()
+        return val.strip() if val and val.strip() else None
 
     def get_doctor_id(self) -> int:
         val = self.doctor_id if self.doctor_id is not None else self.doctorId
@@ -59,6 +56,10 @@ class CheckInRequest(BaseModel):
                 detail="Selected doctor (doctor_id / doctorId) is required",
             )
         return val
+
+    def get_card_identifier(self) -> Optional[str]:
+        val = self.card_identifier or self.cardIdentifier
+        return val.strip() if val and val.strip() else None
 
 
 def _active_visit(cursor, roll_number: str):
@@ -190,6 +191,12 @@ def check_in(body: CheckInRequest, me: CurrentReceptionist = Depends(get_current
     """
     roll_number = body.get_roll_number()
     doctor_id = body.get_doctor_id()
+    card_id = body.get_card_identifier()
+    if not roll_number and not card_id:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Student identifier (roll_number / rollNumber) or card_identifier is required",
+        )
 
     max_retries = 3
     for attempt in range(max_retries):
@@ -202,6 +209,7 @@ def check_in(body: CheckInRequest, me: CurrentReceptionist = Depends(get_current
                 performed_by_user_id=me.user_id,
                 complaint=body.complaint,
                 via=body.via,
+                card_identifier=card_id,
             )
             conn.commit()
             return {
@@ -229,6 +237,9 @@ def check_in(body: CheckInRequest, me: CurrentReceptionist = Depends(get_current
         except ql.DoctorUnavailableError as exc:
             conn.rollback()
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
+        except ql.CardNotActiveError as exc:
+            conn.rollback()
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
         except ql.InvalidTransitionError as exc:
             conn.rollback()
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))

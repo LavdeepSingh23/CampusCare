@@ -22,10 +22,31 @@ router = APIRouter(prefix="/queue", tags=["queue"])
 # ── Schemas ─────────────────────────────────────────────────────────────
 
 class CheckInRequest(BaseModel):
-    roll_number: str = Field(..., description="Student roll number")
-    doctor_id: int = Field(..., description="Target doctor ID")
+    roll_number: Optional[str] = Field(None, description="Student roll number")
+    rollNumber: Optional[str] = Field(None, description="CamelCase alias for roll_number")
+    doctor_id: Optional[int] = Field(None, description="Target doctor ID")
+    doctorId: Optional[int] = Field(None, description="CamelCase alias for doctor_id")
     complaint: Optional[str] = Field("General Consultation", description="Chief complaint / reason for visit")
     via: str = "MANUAL"
+    card_identifier: Optional[str] = Field(None, description="Smart card UID if checking in via RFID")
+    cardIdentifier: Optional[str] = Field(None, description="CamelCase alias for card_identifier")
+
+    def get_roll_number(self) -> Optional[str]:
+        val = self.roll_number or self.rollNumber
+        return val.strip() if val and val.strip() else None
+
+    def get_doctor_id(self) -> int:
+        val = self.doctor_id if self.doctor_id is not None else self.doctorId
+        if val is None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Selected doctor (doctor_id / doctorId) is required",
+            )
+        return val
+
+    def get_card_identifier(self) -> Optional[str]:
+        val = self.card_identifier or self.cardIdentifier
+        return val.strip() if val and val.strip() else None
 
 
 from app.schemas.dispensing import DispenseRequest, DispensingItemInput
@@ -57,34 +78,73 @@ def check_in_student(
     Rejects doctors and students with 403 Forbidden.
     Identity recorded in audit events comes strictly from the validated receptionist token.
     """
+    roll_number = payload.get_roll_number()
+    doctor_id = payload.get_doctor_id()
+    card_id = payload.get_card_identifier()
+    if not roll_number and not card_id:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Student identifier (roll_number) or card_identifier is required",
+        )
+
     max_retries = 3
     for attempt in range(max_retries):
         connection = get_db_connection()
         try:
             result = ql.check_in_student(
                 conn=connection,
-                roll_number=payload.roll_number,
-                doctor_id=payload.doctor_id,
+                roll_number=roll_number,
+                doctor_id=doctor_id,
                 performed_by_user_id=receptionist.user_id,
                 complaint=payload.complaint,
                 via=payload.via,
+                card_identifier=card_id,
             )
             connection.commit()
-            return result
+            return {
+                **result,
+                "visit_id": result["visitId"],
+                "queue_number": result["queueNo"],
+                "sequence": result["queueNo"],
+                "doctor_id": result["doctorId"],
+                "roll_number": result["rollNumber"],
+                "queue_entry_id": result["queueEntryId"],
+            }
         except ql.ResourceNotFoundError as exc:
-            connection.rollback()
+            try:
+                connection.rollback()
+            except Exception:
+                pass
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
         except ql.ActiveVisitConflictError as exc:
-            connection.rollback()
+            try:
+                connection.rollback()
+            except Exception:
+                pass
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
         except ql.DoctorUnavailableError as exc:
-            connection.rollback()
+            try:
+                connection.rollback()
+            except Exception:
+                pass
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
+        except ql.CardNotActiveError as exc:
+            try:
+                connection.rollback()
+            except Exception:
+                pass
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
         except ql.InvalidTransitionError as exc:
-            connection.rollback()
+            try:
+                connection.rollback()
+            except Exception:
+                pass
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
         except Exception as exc:
-            connection.rollback()
+            try:
+                connection.rollback()
+            except Exception:
+                pass
             # If MySQL deadlock (code 1213), retry transparently
             is_deadlock = hasattr(exc, "args") and len(exc.args) > 0 and exc.args[0] == 1213
             if is_deadlock and attempt < max_retries - 1:

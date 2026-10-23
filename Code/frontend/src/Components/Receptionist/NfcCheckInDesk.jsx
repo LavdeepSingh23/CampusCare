@@ -80,6 +80,9 @@ export default function NfcCheckInDesk({ flash, setPage }) {
   // Error details: { title, message, type: "UNSUPPORTED" | "PERMISSION" | "NOT_FOUND" | "REVOKED" | "DUPLICATE" | "SERVER" }
   const [errorDetails, setErrorDetails] = useState(null);
 
+  // Prevent repeated submissions while check-in request is in progress
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
   // Web NFC Scan Controller reference
   const nfcSessionRef = useRef(null);
   const isMountedRef = useRef(true);
@@ -137,9 +140,9 @@ export default function NfcCheckInDesk({ flash, setPage }) {
     try {
       // Pure POST body resolution without creating a visit
       const res = await resolveRfidCard(clean);
-      setCardUidTransient(""); // wipe transient UID
 
       if (res.matched && res.student) {
+        setCardUidTransient(clean); // keep transient UID strictly in memory until confirmed or cancelled
         setStudent({
           rollNumber: res.student.roll_number || res.student.rollNumber,
           name: res.student.name || res.student.full_name,
@@ -152,6 +155,7 @@ export default function NfcCheckInDesk({ flash, setPage }) {
         setUiState("matched");
         flash?.(`Student matched: ${res.student.name} (${res.student.roll_number})`);
       } else if (res.status === "REVOKED") {
+        setCardUidTransient("");
         setErrorDetails({
           title: "Revoked Smart Card",
           type: "REVOKED",
@@ -161,6 +165,7 @@ export default function NfcCheckInDesk({ flash, setPage }) {
         });
         setUiState("error");
       } else {
+        setCardUidTransient("");
         setErrorDetails({
           title: "Unknown Smart Card",
           type: "NOT_FOUND",
@@ -299,8 +304,9 @@ export default function NfcCheckInDesk({ flash, setPage }) {
 
   // Confirm Check-in & Issue Token (State 4 -> State 5 or State 6)
   const confirmCheckIn = async () => {
-    if (!student || !doctorId) return;
+    if (isSubmitting || !student || !doctorId) return;
 
+    setIsSubmitting(true);
     setUiState("resolving");
     setErrorDetails(null);
 
@@ -310,12 +316,17 @@ export default function NfcCheckInDesk({ flash, setPage }) {
         doctor_id: doctorId,
         complaint: reason.trim() || "General Consultation",
         via: viaMethod,
+        card_identifier: viaMethod === "RFID" && cardUidTransient ? cardUidTransient : undefined,
       });
 
+      // Clear transient card UID immediately after successful check-in
+      setCardUidTransient("");
       setCheckInResult(result);
       setUiState("confirmed");
       flash?.(`Token #${result.queueNo || result.sequence || "01"} issued for ${student.name}`);
     } catch (err) {
+      // Clear transient card UID on failure so it cannot be reused
+      setCardUidTransient("");
       const msg = err.detail || err.message || "Failed to complete check-in";
       const status = err.status;
 
@@ -331,6 +342,12 @@ export default function NfcCheckInDesk({ flash, setPage }) {
           type: "SERVER",
           message: "The selected doctor is currently marked unavailable today. Please select another doctor cabin.",
         });
+      } else if (status === 400 && (msg.toLowerCase().includes("card") || msg.toLowerCase().includes("smart card"))) {
+        setErrorDetails({
+          title: "Smart Card Inactive or Revoked",
+          type: "REVOKED",
+          message: msg || "This card is no longer active or authorized. Please re-verify or link a new card.",
+        });
       } else {
         setErrorDetails({
           title: "Check-in Failed",
@@ -339,6 +356,8 @@ export default function NfcCheckInDesk({ flash, setPage }) {
         });
       }
       setUiState("error");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -734,19 +753,30 @@ export default function NfcCheckInDesk({ flash, setPage }) {
               <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
                 <button
                   type="button"
+                  disabled={isSubmitting}
                   onClick={resetToReady}
-                  className="px-4 py-2.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-bold transition-colors cursor-pointer"
+                  className="px-4 py-2.5 rounded-xl border border-slate-200 hover:bg-slate-50 disabled:opacity-50 text-slate-700 text-xs font-bold transition-colors cursor-pointer flex items-center gap-1.5"
                 >
-                  Change Student
+                  <X className="w-3.5 h-3.5" />
+                  <span>Cancel & Return to Scan</span>
                 </button>
                 <button
                   type="button"
-                  disabled={!doctorId}
+                  disabled={!doctorId || isSubmitting}
                   onClick={confirmCheckIn}
-                  className="px-6 py-2.5 rounded-xl bg-teal-700 hover:bg-teal-800 disabled:bg-slate-300 text-white text-xs font-bold transition-all shadow-xs cursor-pointer flex items-center gap-2"
+                  className="px-6 py-2.5 rounded-xl bg-teal-700 hover:bg-teal-800 disabled:bg-slate-300 disabled:cursor-not-allowed text-white text-xs font-bold transition-all shadow-xs cursor-pointer flex items-center gap-2"
                 >
-                  <span>Confirm Check-in & Issue Token</span>
-                  <ArrowRight className="w-4 h-4" />
+                  {isSubmitting ? (
+                    <>
+                      <RotateCw className="w-4 h-4 animate-spin" />
+                      <span>Confirming & Issuing Token...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>Confirm Check-in & Issue Token</span>
+                      <ArrowRight className="w-4 h-4" />
+                    </>
+                  )}
                 </button>
               </div>
             </motion.div>
