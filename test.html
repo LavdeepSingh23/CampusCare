@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>NFC Diagnostic</title>
+</head>
+
+<body>
+    <h2>NFC Diagnostic</h2>
+
+    <button id="scan">Start NFC Scan</button>
+
+    <pre id="output">Press the button and tap your card.</pre>
+
+<script>
+const output = document.getElementById("output");
+
+function show(text) {
+    output.textContent += "\n" + text;
+    console.log(text);
+}
+
+document.getElementById("scan").addEventListener("click", async () => {
+
+    output.textContent = "";
+
+    if (!("NDEFReader" in window)) {
+        show("❌ Web NFC is not available in this browser.");
+        return;
+    }
+
+    show("Web NFC API detected.");
+
+    try {
+        const ndef = new NDEFReader();
+
+        await ndef.scan();
+
+        show("📡 NFC scan started.");
+        show("📱 Now tap your college card on the back of the phone.");
+
+        ndef.addEventListener("reading", event => {
+
+            show("\n===== NFC CARD DETECTED =====");
+            show("serialNumber:");
+            show(String(event.serialNumber));
+
+            show("\nFull event:");
+            console.log(event);
+
+            if (event.message) {
+                show("\nNDEF message detected.");
+                for (const record of event.message.records) {
+
+                    show("\n--- NDEF RECORD ---");
+                    show("recordType: " + record.recordType);
+                    show("mediaType: " + record.mediaType);
+                    show("id: " + record.id);
+
+                    try {
+                        const decoder = new TextDecoder(record.encoding || "utf-8");
+                        const text = decoder.decode(record.data);
+                        show("data: " + text);
+                    } catch (e) {
+                        show("Could not decode record data.");
+                        console.log("Raw record data:", record.data);
+                    }
+                }
+
+            } else {
+                show("\nNo NDEF message exposed.");
+            }
+
+            show("\n===== END =====");
+        });
+
+        ndef.addEventListener("readingerror", event => {
+            show("⚠️ NFC reading error.");
+            console.log(event);
+        });
+
+    } catch (error) {
+
+        show("❌ ERROR");
+        show(error.name);
+        show(error.message);
+        console.error(error);
+    }
+});
+</script>
+
+</body>
+</html>
+

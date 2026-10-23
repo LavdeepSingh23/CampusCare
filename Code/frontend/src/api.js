@@ -564,10 +564,21 @@ export function lookupRfidCard(cardUid) {
   return request(`/api/reception/rfid/lookup/${encodeURIComponent(cardUid)}`)
 }
 
+export function fetchStudentRfidCard(rollNumber) {
+  return request(`/api/reception/rfid/student/${encodeURIComponent(rollNumber)}`)
+}
+
 export function enrollRfidCard(rollNumber, cardUid) {
   return request('/api/reception/rfid/enroll', {
     method: 'POST',
     body: JSON.stringify({ roll_number: rollNumber, card_uid: cardUid }),
+  })
+}
+
+export function revokeRfidCard({ card_uid, roll_number, reason = "DEACTIVATED" }) {
+  return request('/api/reception/rfid/revoke', {
+    method: 'POST',
+    body: JSON.stringify({ card_uid, roll_number, reason }),
   })
 }
 

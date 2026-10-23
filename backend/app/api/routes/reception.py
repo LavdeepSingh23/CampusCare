@@ -18,6 +18,11 @@ from app.routers.reception import (
     update_doctor_availability,
     lookup_rfid_card,
     enroll_rfid_card,
+    get_student_rfid,
+    revoke_rfid_card,
+    normalize_card_uid,
+    RFIDEnrollRequest,
+    RFIDRevokeRequest,
 )
 
 __all__ = [
@@ -37,4 +42,9 @@ __all__ = [
     "update_doctor_availability",
     "lookup_rfid_card",
     "enroll_rfid_card",
+    "get_student_rfid",
+    "revoke_rfid_card",
+    "normalize_card_uid",
+    "RFIDEnrollRequest",
+    "RFIDRevokeRequest",
 ]

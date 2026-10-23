@@ -20,6 +20,7 @@ import {
 } from "../../api";
 import DispensingDesk from "./DispensingDesk";
 import EmergencyDesk from "./EmergencyDesk";
+import RFIDCardDesk from "./RFIDCardDesk";
 import { useAuth } from "../../context/AuthContext";
 import { Sidebar, SidebarBody, SidebarLink } from "../ui/sidebar";
 import campusCareLogo from "../../assets/campuscare-logo.png";
@@ -67,6 +68,7 @@ const ICONS = {
   activity: <path d="M22 12h-4l-3 9L9 3l-3 9H2" />,
   settings: <><circle cx="12" cy="12" r="3" /><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9 7 7M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1" /></>,
   logout: <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" />,
+  rfid: <><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M7 8h.01M7 12a5 5 0 0 1 5-5M7 16a9 9 0 0 1 9-9" /></>,
   close: <path d="M18 6 6 18M6 6l12 12" />,
 };
 const Icon = ({ name, size = 18 }) => (
@@ -78,6 +80,7 @@ const NAV = [
   { id: "checkin", label: "Student Check-in", icon: "checkin" },
   { id: "queue", label: "Live OPD Queue", icon: "queue" },
   { id: "students", label: "Students", icon: "students" },
+  { id: "rfid", label: "Smart Card Desk", icon: "rfid" },
   { id: "dispensing", label: "Dispensing", icon: "dispensing" },
   { id: "emergency", label: "Emergency & Dispatch", icon: "emergency" },
   { id: "completed", label: "Completed Visits", icon: "completed" },
@@ -246,6 +249,7 @@ export default function ReceptionDashboard({ onLogout, initialPage = "reception"
           {page === "checkin" && <CheckIn flash={flash} setPage={setPage} />}
           {page === "queue" && <LiveQueue setPage={setPage} />}
           {page === "students" && <Students />}
+          {page === "rfid" && <RFIDCardDesk flash={flash} />}
           {page === "dispensing" && (
             <DispensingDesk
               flash={flash}
@@ -2273,47 +2277,9 @@ function Settings({ flash }) {
         </div>
       </div>
 
-      {/* RFID Card Provisioning */}
-      <div className="bg-white rounded-2xl border border-slate-200/90 shadow-xs p-6 space-y-4 text-xs">
-        <h3 className="text-sm font-bold text-slate-900 pb-2 border-b border-slate-100">
-          Quick RFID Card Provisioning
-        </h3>
-        <p className="text-slate-500 text-[11px]">
-          Assign or replace an NFC/RFID smart card UID for quick front desk check-in tap.
-        </p>
-
-        <form onSubmit={handleEnrollCard} className="space-y-3">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="text-[11px] font-bold text-slate-700 block mb-1">Student Roll Number</label>
-              <input
-                type="text"
-                value={rfidRoll}
-                onChange={(e) => setRfidRoll(e.target.value)}
-                placeholder="e.g. 102203001"
-                className="w-full p-2.5 rounded-xl border border-slate-200 text-xs focus:outline-none focus:border-teal-500"
-              />
-            </div>
-            <div>
-              <label className="text-[11px] font-bold text-slate-700 block mb-1">NFC / RFID Card UID</label>
-              <input
-                type="text"
-                value={rfidUid}
-                onChange={(e) => setRfidUid(e.target.value)}
-                placeholder="e.g. A1B2C3D4"
-                className="w-full p-2.5 rounded-xl border border-slate-200 text-xs font-mono focus:outline-none focus:border-teal-500"
-              />
-            </div>
-          </div>
-          <button
-            type="submit"
-            disabled={rfidBusy || !rfidRoll || !rfidUid}
-            className="px-4 py-2 rounded-xl bg-teal-700 hover:bg-teal-800 disabled:bg-slate-300 text-white font-semibold text-xs transition-colors flex items-center gap-1.5 cursor-pointer"
-          >
-            {rfidBusy && <RotateCw className="w-3.5 h-3.5 animate-spin" />}
-            <span>Provision RFID Card</span>
-          </button>
-        </form>
+      {/* RFID Card Provisioning Station */}
+      <div className="pt-2">
+        <RFIDCardDesk flash={flash} />
       </div>
 
       {/* Backend & System Diagnostics Panel */}

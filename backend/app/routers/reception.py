@@ -97,6 +97,11 @@ def lookup_student(roll_number: str, _: CurrentReceptionist = Depends(get_curren
             allergies = ", ".join(a["allergen"] for a in cur.fetchall()) or "None recorded"
 
             active = _active_visit(cur, roll_number)
+            cur.execute(
+                "SELECT card_uid, status, issued_at FROM RFID_CARD WHERE roll_number = %s AND status = 'ACTIVE' LIMIT 1",
+                (roll_number,),
+            )
+            active_card = cur.fetchone()
     finally:
         conn.close()
 
@@ -111,6 +116,16 @@ def lookup_student(roll_number: str, _: CurrentReceptionist = Depends(get_curren
         "program": "B.Tech",
         "dept": "",
         "semester": None,
+        "activeCardUid": active_card["card_uid"] if active_card else None,
+        "activeCard": (
+            {
+                "cardUid": active_card["card_uid"],
+                "status": active_card["status"],
+                "issuedAt": active_card["issued_at"].isoformat() if hasattr(active_card["issued_at"], "isoformat") else str(active_card["issued_at"]),
+            }
+            if active_card
+            else None
+        ),
     }
 
 
@@ -902,7 +917,20 @@ class DoctorAvailabilityUpdateRequest(BaseModel):
 
 class RFIDEnrollRequest(BaseModel):
     roll_number: str = Field(..., min_length=1, max_length=30)
-    card_uid: str = Field(..., min_length=4, max_length=100)
+    card_uid: str = Field(..., min_length=3, max_length=100)
+
+
+class RFIDRevokeRequest(BaseModel):
+    roll_number: Optional[str] = Field(default=None, max_length=30)
+    card_uid: Optional[str] = Field(default=None, max_length=100)
+    reason: Literal["LOST", "DEACTIVATED"] = "DEACTIVATED"
+
+
+def normalize_card_uid(raw_uid: Optional[str]) -> str:
+    """Normalizes RFID / Web NFC UID: removes delimiters, strips whitespace, converts to uppercase."""
+    if not raw_uid:
+        return ""
+    return raw_uid.strip().replace(":", "").replace("-", "").replace(" ", "").upper()
 
 
 @router.get("/settings")
@@ -998,30 +1026,51 @@ def lookup_rfid_card(
     """
     Administrative operation: Looks up student enrolled to an RFID card UID for rapid check-in.
     """
-    card_uid = card_uid.strip()
+    raw_uid = card_uid.strip()
+    norm_uid = normalize_card_uid(raw_uid)
     conn = get_db_connection()
     try:
         with conn.cursor() as cur:
             cur.execute(
                 """
-                SELECT rc.card_uid, rc.status AS card_status,
+                SELECT rc.rfid_card_id, rc.card_uid, rc.status AS card_status,
+                       rc.issued_at, rc.deactivated_at,
                        st.roll_number, st.full_name, st.blood_group,
                        ua.email
                 FROM RFID_CARD rc
                 JOIN STUDENT st ON st.roll_number = rc.roll_number
                 JOIN USER_ACCOUNT ua ON ua.user_id = st.user_id
-                WHERE rc.card_uid = %s AND rc.status = 'ACTIVE'
+                WHERE (rc.card_uid = %s OR rc.card_uid = %s)
                 LIMIT 1
                 """,
-                (card_uid,),
+                (norm_uid, raw_uid),
             )
             card = cur.fetchone()
             if not card:
-                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"No active student mapped to RFID card '{card_uid}'.")
+                cur.execute(
+                    "SELECT card_uid, status FROM RFID_CARD WHERE card_uid = %s OR card_uid = %s LIMIT 1",
+                    (norm_uid, raw_uid),
+                )
+                inactive = cur.fetchone()
+                if inactive:
+                    raise HTTPException(
+                        status_code=status.HTTP_404_NOT_FOUND,
+                        detail=f"Card '{norm_uid}' is marked as {inactive['status']} and is not active.",
+                    )
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"No student mapped to RFID card '{raw_uid}'.",
+                )
+            if card["card_status"] != "ACTIVE":
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Card '{norm_uid}' is marked as {card['card_status']} and is not active.",
+                )
     finally:
         conn.close()
 
     return {
+        "rfidCardId": card["rfid_card_id"],
         "cardUid": card["card_uid"],
         "card_uid": card["card_uid"],
         "rollNumber": card["roll_number"],
@@ -1030,19 +1079,88 @@ def lookup_rfid_card(
         "studentName": card["full_name"],
         "bloodGroup": card.get("blood_group"),
         "email": card["email"],
+        "status": card["card_status"],
+        "issuedAt": card["issued_at"].isoformat() if hasattr(card["issued_at"], "isoformat") else str(card["issued_at"]),
+    }
+
+
+@router.get("/rfid/student/{roll_number}")
+def get_student_rfid(
+    roll_number: str,
+    _: CurrentUser = Depends(get_current_staff),
+):
+    """
+    Returns the student's active card and card assignment history.
+    """
+    roll = roll_number.strip()
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT roll_number, full_name, blood_group FROM STUDENT WHERE roll_number = %s",
+                (roll,),
+            )
+            st = cur.fetchone()
+            if not st:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Student '{roll}' not found.")
+
+            cur.execute(
+                """
+                SELECT rfid_card_id, card_uid, status, issued_at, deactivated_at, issued_by_user_id
+                FROM RFID_CARD
+                WHERE roll_number = %s
+                ORDER BY issued_at DESC
+                """,
+                (roll,),
+            )
+            cards = cur.fetchall()
+            active_card = next((c for c in cards if c["status"] == "ACTIVE"), None)
+    finally:
+        conn.close()
+
+    return {
+        "student": {
+            "rollNumber": st["roll_number"],
+            "name": st["full_name"],
+            "bloodGroup": st.get("blood_group"),
+        },
+        "activeCard": (
+            {
+                "rfidCardId": active_card["rfid_card_id"],
+                "cardUid": active_card["card_uid"],
+                "status": active_card["status"],
+                "issuedAt": active_card["issued_at"].isoformat() if hasattr(active_card["issued_at"], "isoformat") else str(active_card["issued_at"]),
+            }
+            if active_card
+            else None
+        ),
+        "history": [
+            {
+                "rfidCardId": c["rfid_card_id"],
+                "cardUid": c["card_uid"],
+                "status": c["status"],
+                "issuedAt": c["issued_at"].isoformat() if hasattr(c["issued_at"], "isoformat") else str(c["issued_at"]),
+                "deactivatedAt": c["deactivated_at"].isoformat() if c["deactivated_at"] and hasattr(c["deactivated_at"], "isoformat") else (str(c["deactivated_at"]) if c["deactivated_at"] else None),
+            }
+            for c in cards
+        ],
     }
 
 
 @router.post("/rfid/enroll", status_code=status.HTTP_201_CREATED)
 def enroll_rfid_card(
     payload: RFIDEnrollRequest,
-    _: CurrentUser = Depends(get_current_staff),
+    me: CurrentUser = Depends(get_current_staff),
 ):
     """
     Administrative operation: Enrolls or replaces an RFID card for a registered student.
+    Enforces cross-student uniqueness, active replacement rules, and audit logging.
     """
     roll = payload.roll_number.strip()
-    card_uid = payload.card_uid.strip()
+    norm_uid = normalize_card_uid(payload.card_uid)
+    if not norm_uid:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Card UID cannot be empty.")
+
     conn = get_db_connection()
     try:
         with conn.cursor() as cur:
@@ -1051,21 +1169,77 @@ def enroll_rfid_card(
             if not st:
                 raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Student '{roll}' not found.")
 
-            # Deactivate previous active card for student
+            # Check if card_uid is already in RFID_CARD
             cur.execute(
-                "UPDATE RFID_CARD SET status = 'REPLACED', deactivated_at = NOW() WHERE roll_number = %s AND status = 'ACTIVE'",
-                (roll,),
+                "SELECT rfid_card_id, roll_number, status FROM RFID_CARD WHERE card_uid = %s",
+                (norm_uid,),
             )
+            existing_card = cur.fetchone()
 
-            # Insert new card
-            cur.execute(
-                """
-                INSERT INTO RFID_CARD (roll_number, card_uid, status, issued_at)
-                VALUES (%s, %s, 'ACTIVE', NOW())
-                """,
-                (roll, card_uid),
-            )
-            card_id = cur.lastrowid
+            if existing_card:
+                if existing_card["status"] == "ACTIVE":
+                    if existing_card["roll_number"] != roll:
+                        cur.execute("SELECT full_name FROM STUDENT WHERE roll_number = %s", (existing_card["roll_number"],))
+                        other = cur.fetchone()
+                        other_name = other["full_name"] if other else existing_card["roll_number"]
+                        raise HTTPException(
+                            status_code=status.HTTP_409_CONFLICT,
+                            detail=f"Card UID '{norm_uid}' is currently actively assigned to student {existing_card['roll_number']} ({other_name}). Please revoke or replace that card first.",
+                        )
+                    else:
+                        return {
+                            "rfid_card_id": existing_card["rfid_card_id"],
+                            "rfidCardId": existing_card["rfid_card_id"],
+                            "roll_number": roll,
+                            "rollNumber": roll,
+                            "card_uid": norm_uid,
+                            "cardUid": norm_uid,
+                            "student_name": st["full_name"],
+                            "status": "ACTIVE",
+                            "message": "Card is already actively assigned to this student.",
+                        }
+
+                # Reactivating/reassigning an inactive card row
+                # 1. Retire any other active card for this student
+                cur.execute(
+                    """
+                    UPDATE RFID_CARD
+                    SET status = 'REPLACED', deactivated_at = NOW(), revoked_by_user_id = %s
+                    WHERE roll_number = %s AND status = 'ACTIVE' AND rfid_card_id != %s
+                    """,
+                    (me.user_id, roll, existing_card["rfid_card_id"]),
+                )
+                # 2. Update existing card row to ACTIVE
+                cur.execute(
+                    """
+                    UPDATE RFID_CARD
+                    SET roll_number = %s, status = 'ACTIVE', issued_at = NOW(),
+                        deactivated_at = NULL, issued_by_user_id = %s, revoked_by_user_id = NULL
+                    WHERE rfid_card_id = %s
+                    """,
+                    (roll, me.user_id, existing_card["rfid_card_id"]),
+                )
+                card_id = existing_card["rfid_card_id"]
+            else:
+                # 1. Retire previous active card for student
+                cur.execute(
+                    """
+                    UPDATE RFID_CARD
+                    SET status = 'REPLACED', deactivated_at = NOW(), revoked_by_user_id = %s
+                    WHERE roll_number = %s AND status = 'ACTIVE'
+                    """,
+                    (me.user_id, roll),
+                )
+                # 2. Insert new card
+                cur.execute(
+                    """
+                    INSERT INTO RFID_CARD (roll_number, card_uid, status, issued_at, issued_by_user_id)
+                    VALUES (%s, %s, 'ACTIVE', NOW(), %s)
+                    """,
+                    (roll, norm_uid, me.user_id),
+                )
+                card_id = cur.lastrowid
+
         conn.commit()
     finally:
         conn.close()
@@ -1075,10 +1249,70 @@ def enroll_rfid_card(
         "rfidCardId": card_id,
         "roll_number": roll,
         "rollNumber": roll,
-        "card_uid": card_uid,
-        "cardUid": card_uid,
+        "card_uid": norm_uid,
+        "cardUid": norm_uid,
         "student_name": st["full_name"],
         "status": "ACTIVE",
+    }
+
+
+@router.post("/rfid/revoke")
+def revoke_rfid_card(
+    payload: RFIDRevokeRequest,
+    me: CurrentUser = Depends(get_current_staff),
+):
+    """
+    Administrative operation: Revokes/deactivates an RFID card for a student or card UID.
+    Reason can be LOST or DEACTIVATED.
+    """
+    card_uid = normalize_card_uid(payload.card_uid) if payload.card_uid else None
+    roll = payload.roll_number.strip() if payload.roll_number else None
+
+    if not card_uid and not roll:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Either card_uid or roll_number must be specified to revoke an RFID card.",
+        )
+
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            if card_uid:
+                cur.execute(
+                    "SELECT rfid_card_id, roll_number, card_uid, status FROM RFID_CARD WHERE card_uid = %s",
+                    (card_uid,),
+                )
+            else:
+                cur.execute(
+                    "SELECT rfid_card_id, roll_number, card_uid, status FROM RFID_CARD WHERE roll_number = %s AND status = 'ACTIVE'",
+                    (roll,),
+                )
+            card = cur.fetchone()
+            if not card or card["status"] != "ACTIVE":
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="No active RFID card found to revoke for the given identifier.",
+                )
+
+            cur.execute(
+                """
+                UPDATE RFID_CARD
+                SET status = %s, deactivated_at = NOW(), revoked_by_user_id = %s
+                WHERE rfid_card_id = %s
+                """,
+                (payload.reason, me.user_id, card["rfid_card_id"]),
+            )
+        conn.commit()
+    finally:
+        conn.close()
+
+    return {
+        "success": True,
+        "rfidCardId": card["rfid_card_id"],
+        "rollNumber": card["roll_number"],
+        "cardUid": card["card_uid"],
+        "status": payload.reason,
+        "message": f"RFID card '{card['card_uid']}' assigned to student '{card['roll_number']}' has been marked as {payload.reason}.",
     }
 
 

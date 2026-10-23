@@ -113,7 +113,8 @@ export default function Login({ defaultMode }) {
 
   const isSessionExpired = sessionExpired || searchParams.get('expired') === 'true' || location.state?.sessionExpired
 
-  const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || ''
+  const DEFAULT_GOOGLE_CLIENT_ID = '537555774720-50raj44tbc0qdma0u10s776lhua7ov5m.apps.googleusercontent.com'
+  const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || DEFAULT_GOOGLE_CLIENT_ID
   const googleBtnRef = useRef(null)
   const [gisLoaded, setGisLoaded] = useState(false)
 
