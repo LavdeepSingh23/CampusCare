@@ -8,6 +8,19 @@ html {
   text-rendering: optimizeLegibility;
 }
 
+@media (max-width: 640px) {
+  html {
+    font-size: 13.5px; /* Compact mobile scale: reduces oversized elements proportionally across the entire app */
+  }
+}
+
+@media (max-width: 390px) {
+  html {
+    font-size: 12.5px; /* Extra compact scale for narrower smartphones (iPhone SE, compact Androids) */
+  }
+}
+
+
 body {
   overflow-x: hidden;
   font-family: 'Plus Jakarta Sans', 'Nunito', 'Panton', system-ui, -apple-system, sans-serif;

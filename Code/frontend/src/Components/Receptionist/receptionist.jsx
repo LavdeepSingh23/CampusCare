@@ -180,7 +180,10 @@ export default function ReceptionDashboard({ onLogout, initialPage = "reception"
                   link={{ label: n.label, icon: <Icon name={n.icon} size={18} /> }}
                   active={page === n.id}
                   badge={counts[n.id] > 0 ? counts[n.id] : undefined}
-                  onClick={() => setPage(n.id)}
+                  onClick={() => {
+                    setPage(n.id);
+                    setSidebarOpen(false);
+                  }}
                 />
               ))}
             </div>
@@ -190,7 +193,10 @@ export default function ReceptionDashboard({ onLogout, initialPage = "reception"
             <SidebarLink
               link={{ label: "Settings", icon: <Icon name="settings" size={18} /> }}
               active={page === "settings"}
-              onClick={() => setPage("settings")}
+              onClick={() => {
+                setPage("settings");
+                setSidebarOpen(false);
+              }}
             />
             <SidebarLink
               link={{ label: "Logout", icon: <Icon name="logout" size={18} /> }}
@@ -216,21 +222,21 @@ export default function ReceptionDashboard({ onLogout, initialPage = "reception"
       </Sidebar>
  
       {/* ── MAIN CANVAS ── */}
-      <main className="flex-1 flex flex-col rounded-tl-3xl border-t border-l border-slate-200/90 bg-white shadow-xs p-6 md:p-8 min-h-screen overflow-y-auto">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 mb-6 border-b border-slate-100">
+      <main className="flex-1 flex flex-col rounded-none sm:rounded-tl-3xl border-t sm:border-l border-slate-200/90 bg-white shadow-xs p-3.5 sm:p-6 md:p-8 min-h-screen overflow-y-auto">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 mb-5 border-b border-slate-100">
           <div>
-            <h1 className="text-xl font-bold text-slate-900 tracking-tight">
+            <h1 className="text-base sm:text-xl font-bold text-slate-900 tracking-tight">
               {page === "reception" ? "Receptionist Desk" : NAV.find((n) => n.id === page)?.label || "Dashboard"}
             </h1>
-            <p className="text-xs text-slate-500 mt-0.5">TIET Health Centre</p>
+            <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5">TIET Health Centre</p>
           </div>
  
           <div className="flex items-center gap-3">
-            <div className="text-right">
-              <p className="text-sm font-bold text-slate-800">
+            <div className="text-left sm:text-right">
+              <p className="text-xs sm:text-sm font-bold text-slate-800">
                 {now.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
               </p>
-              <p className="text-[11px] text-slate-400 font-medium">
+              <p className="text-[10px] sm:text-[11px] text-slate-400 font-medium">
                 {now.toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "short", year: "numeric" })}
               </p>
             </div>
@@ -371,91 +377,91 @@ function Home({
   const completedCount = liveCompletedVisits.length;
 
   return (
-    <div className="space-y-6">
-      <div className="bg-gradient-to-r from-teal-50/80 via-white to-slate-50/50 border border-teal-100/90 rounded-2xl p-5 sm:p-6 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div className="space-y-4 sm:space-y-6">
+      <div className="bg-gradient-to-r from-teal-50/80 via-white to-slate-50/50 border border-teal-100/90 rounded-2xl p-4 sm:p-6 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-3.5 sm:gap-4">
         <div>
           <div className="flex items-center gap-2 mb-1">
             <span className="relative flex h-2.5 w-2.5">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
               <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
             </span>
-            <span className="text-[11px] font-bold text-teal-800 tracking-wide uppercase">
+            <span className="text-[10px] sm:text-[11px] font-bold text-teal-800 tracking-wide uppercase">
               TIET Health Centre • Front Desk Live
             </span>
           </div>
-          <h2 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">{greet}, Reception Desk</h2>
-          <p className="text-xs text-slate-500 mt-1">
+          <h2 className="text-lg sm:text-2xl font-bold text-slate-900 tracking-tight">{greet}, Reception Desk</h2>
+          <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5 sm:mt-1">
             {now.toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric" })} • OPD Station 1 active
           </p>
         </div>
 
-        <div className="flex items-center gap-2.5 flex-wrap">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-2.5 flex-wrap">
           <button
             onClick={() => setPage("checkin")}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-teal-700 hover:bg-teal-800 text-white font-semibold text-xs shadow-xs hover:shadow-sm transition-all cursor-pointer"
+            className="flex items-center justify-center gap-2 px-3.5 py-2 sm:px-4 sm:py-2.5 rounded-xl bg-teal-700 hover:bg-teal-800 text-white font-semibold text-xs shadow-xs hover:shadow-sm transition-all cursor-pointer"
           >
-            <UserCheck className="w-4 h-4" />
+            <UserCheck className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             <span>+ Student Check-in</span>
           </button>
           <button
             onClick={() => setPage("dispensing")}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white hover:bg-slate-50 text-slate-700 border border-slate-200/90 font-semibold text-xs shadow-2xs transition-all cursor-pointer"
+            className="flex items-center justify-center gap-2 px-3.5 py-2 sm:px-4 sm:py-2.5 rounded-xl bg-white hover:bg-slate-50 text-slate-700 border border-slate-200/90 font-semibold text-xs shadow-2xs transition-all cursor-pointer"
           >
-            <Pill className="w-4 h-4 text-teal-700" />
+            <Pill className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-teal-700" />
             <span>Dispensary Queue ({forMedicineCount})</span>
           </button>
           <button
             onClick={() => setPage("emergency")}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-semibold text-xs shadow-xs hover:shadow-sm transition-all cursor-pointer"
+            className="flex items-center justify-center gap-2 px-3.5 py-2 sm:px-4 sm:py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-semibold text-xs shadow-xs hover:shadow-sm transition-all cursor-pointer"
           >
-            <AlertTriangle className="w-4 h-4" />
+            <AlertTriangle className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             <span>Emergency SOS</span>
           </button>
         </div>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="p-4 sm:p-5 bg-white rounded-2xl border border-slate-200/80 shadow-2xs hover:border-teal-300 transition-all flex flex-col justify-between">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4">
+        <div className="p-3.5 sm:p-5 bg-white rounded-xl sm:rounded-2xl border border-slate-200/80 shadow-2xs hover:border-teal-300 transition-all flex flex-col justify-between">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-500">Waiting in Lounge</span>
-            <div className="p-2 rounded-xl bg-amber-50 text-amber-700 border border-amber-100"><Users className="w-4 h-4" /></div>
+            <span className="text-[11px] sm:text-xs font-semibold text-slate-500">Waiting in Lounge</span>
+            <div className="p-1.5 sm:p-2 rounded-lg sm:rounded-xl bg-amber-50 text-amber-700 border border-amber-100"><Users className="w-3.5 h-3.5 sm:w-4 sm:h-4" /></div>
           </div>
-          <div className="mt-3">
-            <span className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">{realWaiting.length}</span>
-            <span className="text-[11px] text-slate-400 block mt-0.5">~5 min avg wait time</span>
+          <div className="mt-2.5 sm:mt-3">
+            <span className="text-xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">{realWaiting.length}</span>
+            <span className="text-[10px] sm:text-[11px] text-slate-400 block mt-0.5">~5 min avg wait time</span>
           </div>
         </div>
 
-        <div className="p-4 sm:p-5 bg-white rounded-2xl border border-slate-200/80 shadow-2xs hover:border-teal-300 transition-all flex flex-col justify-between">
+        <div className="p-3.5 sm:p-5 bg-white rounded-xl sm:rounded-2xl border border-slate-200/80 shadow-2xs hover:border-teal-300 transition-all flex flex-col justify-between">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-500">In Consultation</span>
-            <div className="p-2 rounded-xl bg-teal-50 text-teal-700 border border-teal-100"><Stethoscope className="w-4 h-4" /></div>
+            <span className="text-[11px] sm:text-xs font-semibold text-slate-500">In Consultation</span>
+            <div className="p-1.5 sm:p-2 rounded-lg sm:rounded-xl bg-teal-50 text-teal-700 border border-teal-100"><Stethoscope className="w-3.5 h-3.5 sm:w-4 sm:h-4" /></div>
           </div>
-          <div className="mt-3">
-            <span className="text-2xl sm:text-3xl font-extrabold text-teal-800 tracking-tight">{realInConsult.length}</span>
-            <span className="text-[11px] text-slate-400 block mt-0.5">Across doctor cabins</span>
+          <div className="mt-2.5 sm:mt-3">
+            <span className="text-xl sm:text-3xl font-extrabold text-teal-800 tracking-tight">{realInConsult.length}</span>
+            <span className="text-[10px] sm:text-[11px] text-slate-400 block mt-0.5">Across doctor cabins</span>
           </div>
         </div>
 
-        <div className="p-4 sm:p-5 bg-white rounded-2xl border border-slate-200/80 shadow-2xs hover:border-teal-300 transition-all flex flex-col justify-between">
+        <div className="p-3.5 sm:p-5 bg-white rounded-xl sm:rounded-2xl border border-slate-200/80 shadow-2xs hover:border-teal-300 transition-all flex flex-col justify-between">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-500">For Medicine</span>
-            <div className="p-2 rounded-xl bg-orange-50 text-orange-700 border border-orange-100"><Pill className="w-4 h-4" /></div>
+            <span className="text-[11px] sm:text-xs font-semibold text-slate-500">For Medicine</span>
+            <div className="p-1.5 sm:p-2 rounded-lg sm:rounded-xl bg-orange-50 text-orange-700 border border-orange-100"><Pill className="w-3.5 h-3.5 sm:w-4 sm:h-4" /></div>
           </div>
-          <div className="mt-3">
-            <span className="text-2xl sm:text-3xl font-extrabold text-orange-600 tracking-tight">{forMedicineCount}</span>
-            <span className="text-[11px] text-slate-400 block mt-0.5">Ready for pharmacy</span>
+          <div className="mt-2.5 sm:mt-3">
+            <span className="text-xl sm:text-3xl font-extrabold text-orange-600 tracking-tight">{forMedicineCount}</span>
+            <span className="text-[10px] sm:text-[11px] text-slate-400 block mt-0.5">Ready for pharmacy</span>
           </div>
         </div>
 
-        <div className="p-4 sm:p-5 bg-white rounded-2xl border border-slate-200/80 shadow-2xs hover:border-teal-300 transition-all flex flex-col justify-between">
+        <div className="p-3.5 sm:p-5 bg-white rounded-xl sm:rounded-2xl border border-slate-200/80 shadow-2xs hover:border-teal-300 transition-all flex flex-col justify-between">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-500">Completed Today</span>
-            <div className="p-2 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-100"><CheckCircle2 className="w-4 h-4" /></div>
+            <span className="text-[11px] sm:text-xs font-semibold text-slate-500">Completed Today</span>
+            <div className="p-1.5 sm:p-2 rounded-lg sm:rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-100"><CheckCircle2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" /></div>
           </div>
-          <div className="mt-3">
-            <span className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">{completedCount}</span>
-            <span className="text-[11px] text-slate-400 block mt-0.5">Discharged & dispensed</span>
+          <div className="mt-2.5 sm:mt-3">
+            <span className="text-xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">{completedCount}</span>
+            <span className="text-[10px] sm:text-[11px] text-slate-400 block mt-0.5">Discharged & dispensed</span>
           </div>
         </div>
       </div>

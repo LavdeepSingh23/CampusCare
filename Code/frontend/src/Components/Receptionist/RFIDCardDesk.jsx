@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   CreditCard,
@@ -17,6 +17,7 @@ import {
   X,
   RefreshCw,
   ExternalLink,
+  ArrowRight,
 } from "lucide-react";
 import {
   lookupStudent,
@@ -29,6 +30,14 @@ import {
   revokeRfidCardById,
   fetchStudentCards,
 } from "../../api";
+import {
+  isWebNfcSupported,
+  getNfcEnvironmentStatus,
+  startNfcScan as startGlobalNfcScan,
+  normalizeUid,
+  playNfcBeep,
+  triggerNfcHaptic,
+} from "../../utils/nfcReader";
 
 export default function RFIDCardDesk({ flash }) {
   const [rollNumber, setRollNumber] = useState("");
@@ -47,6 +56,8 @@ export default function RFIDCardDesk({ flash }) {
   const [nfcSupported, setNfcSupported] = useState(false);
   const [scanningNfc, setScanningNfc] = useState(false);
   const [nfcStatusText, setNfcStatusText] = useState("");
+  const [envStatus, setEnvStatus] = useState(() => getNfcEnvironmentStatus());
+  const nfcSessionRef = useRef(null);
 
   // Revocation modal state
   const [showRevokeModal, setShowRevokeModal] = useState(false);
@@ -59,20 +70,25 @@ export default function RFIDCardDesk({ flash }) {
   const [quickLookupLoading, setQuickLookupLoading] = useState(false);
   const [quickLookupError, setQuickLookupError] = useState(null);
 
-  // Check Web NFC support on mount
+  // Check Web NFC support and pickup pending scanned UID on mount
   useEffect(() => {
-    if (typeof window !== "undefined" && "NDEFReader" in window) {
-      setNfcSupported(true);
-    } else {
-      setNfcSupported(false);
-    }
-  }, []);
+    setNfcSupported(isWebNfcSupported());
+    setEnvStatus(getNfcEnvironmentStatus());
 
-  // Normalize UID helper (consistent with backend)
-  const normalizeUid = (raw) => {
-    if (!raw) return "";
-    return raw.trim().replace(/[:\-\s]/g, "").toUpperCase();
-  };
+    const pendingUid = sessionStorage.getItem("pending_enroll_uid");
+    if (pendingUid) {
+      setCardUid(pendingUid);
+      sessionStorage.removeItem("pending_enroll_uid");
+      flash?.(`Pre-filled scanned card UID: ${pendingUid}`);
+    }
+
+    return () => {
+      if (nfcSessionRef.current) {
+        nfcSessionRef.current.stop();
+        nfcSessionRef.current = null;
+      }
+    };
+  }, [flash]);
 
   // Student lookup handler
   const handleLookupStudent = useCallback(async (targetRoll) => {
@@ -132,31 +148,36 @@ export default function RFIDCardDesk({ flash }) {
 
   // Web NFC Reader Trigger
   const startNfcScan = async () => {
-    if (!("NDEFReader" in window)) {
-      flash?.("Web NFC is not supported in this browser environment.");
+    if (!isWebNfcSupported()) {
+      const env = getNfcEnvironmentStatus();
+      flash?.(env.message || "Web NFC is not supported in this browser environment.");
       return;
     }
 
     try {
       setScanningNfc(true);
-      setNfcStatusText("Hold student ID card against the back of your NFC-enabled device...");
-      const ndef = new window.NDEFReader();
-      await ndef.scan();
+      setNfcStatusText("Hold student ID card against the back of your NFC phone...");
+      playNfcBeep("arm");
 
-      ndef.addEventListener("reading", (event) => {
-        const serial = event.serialNumber;
-        if (serial) {
-          const norm = normalizeUid(serial);
-          setCardUid(norm);
+      const session = await startGlobalNfcScan({
+        onReading: ({ normalizedUid }) => {
+          if (normalizedUid) {
+            setCardUid(normalizedUid);
+            setScanningNfc(false);
+            setNfcStatusText("");
+            playNfcBeep("success");
+            triggerNfcHaptic("success");
+            flash?.(`Card UID Captured: ${normalizedUid}`);
+          }
+        },
+        onError: (err) => {
           setScanningNfc(false);
           setNfcStatusText("");
-          flash?.(`Card scanned: ${norm}`);
-        }
+          flash?.(`NFC reading failed: ${err.message}`);
+        },
       });
 
-      ndef.addEventListener("readingerror", () => {
-        setNfcStatusText("Scan error: Please hold the card steady and tap again.");
-      });
+      nfcSessionRef.current = session;
     } catch (err) {
       setScanningNfc(false);
       setNfcStatusText("");
@@ -165,6 +186,10 @@ export default function RFIDCardDesk({ flash }) {
   };
 
   const cancelNfcScan = () => {
+    if (nfcSessionRef.current) {
+      nfcSessionRef.current.stop();
+      nfcSessionRef.current = null;
+    }
     setScanningNfc(false);
     setNfcStatusText("");
   };
@@ -303,6 +328,34 @@ export default function RFIDCardDesk({ flash }) {
           )}
         </div>
       </div>
+
+      {/* HTTPS Insecure Context Warning for Mobile Wi-Fi */}
+      {!envStatus.isSecureContext && envStatus.httpsUrl && (
+        <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-300 text-amber-950 text-xs space-y-2 shadow-xs mb-4">
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex items-start gap-2.5">
+              <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-bold text-slate-900">Mobile Web NFC Requires HTTPS over Local Wi-Fi</p>
+                <p className="text-amber-800 text-[11px] mt-0.5 leading-relaxed">
+                  Android Chrome disables hardware NFC APIs on unencrypted local IP (<code>http://</code>).
+                  Switch to <code>https://</code> to tap and register cards directly from your phone.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                window.location.href = envStatus.httpsUrl;
+              }}
+              className="px-3.5 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold shrink-0 cursor-pointer shadow-xs transition-colors flex items-center gap-1"
+            >
+              <span>Switch to HTTPS</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* ── LEFT: CARD ENROLLMENT & MATCHING ── */}

@@ -475,6 +475,7 @@ export default function LandingPage() {
   const [copiedCoords, setCopiedCoords] = useState(false)
   const [showEmergencyModal, setShowEmergencyModal] = useState(false)
   const [toastMessage, setToastMessage] = useState(null)
+  const [mobileNavOpen, setMobileNavOpen] = useState(false)
 
   const selectedLandmark = useMemo(
     () => CAMPUS_LANDMARKS.find((l) => l.id === selectedLandmarkId) || CAMPUS_LANDMARKS[0],
@@ -560,11 +561,11 @@ export default function LandingPage() {
       />
 
       {/* ── Fixed Top-Left: TI Logo (Non-Clickable) ── */}
-      <div className="fixed top-5 sm:top-6 left-5 sm:left-8 z-40 select-none flex items-center pointer-events-none">
+      <div className="fixed top-3.5 sm:top-6 left-3.5 sm:left-8 z-40 select-none flex items-center pointer-events-none">
         <img
           src={tiMark}
           alt="TI Logo"
-          className="h-9 sm:h-10 w-auto object-contain drop-shadow-md"
+          className="h-7 sm:h-10 w-auto object-contain drop-shadow-md"
         />
       </div>
 
@@ -575,13 +576,124 @@ export default function LandingPage() {
         whileTap={{ scale: 0.96 }}
         transition={{ type: 'spring', stiffness: 400, damping: 25 }}
         onClick={() => navigate('/user_login')}
-        className="fixed top-5 sm:top-6 right-5 sm:right-8 z-50 px-5 py-2 rounded-full text-xs sm:text-sm font-semibold text-slate-950 bg-white hover:bg-slate-100 shadow-[0_4px_18px_rgba(0,0,0,0.25)] transition-all duration-200 cursor-pointer select-none"
+        className="fixed top-3 sm:top-6 right-3.5 sm:right-8 z-50 px-3.5 py-1.5 sm:px-5 sm:py-2 rounded-full text-xs sm:text-sm font-semibold text-slate-950 bg-white hover:bg-slate-100 shadow-[0_4px_18px_rgba(0,0,0,0.25)] transition-all duration-200 cursor-pointer select-none"
       >
         Sign in
       </motion.button>
 
-      {/* ── Liquid Glass Floating Navbar ── */}
-      <div className="fixed top-6 left-1/2 -translate-x-1/2 z-50">
+      {/* ── Mobile Floating Navigation Pill (Visible on mobile only) ── */}
+      <div className="block sm:hidden fixed top-3 left-1/2 -translate-x-1/2 z-50">
+        <button
+          type="button"
+          onClick={() => setMobileNavOpen(!mobileNavOpen)}
+          className="h-8 px-3 rounded-full border border-white/20 bg-[#0c2e2b]/90 shadow-[0_4px_20px_rgba(0,0,0,0.35)] backdrop-blur-xl text-white flex items-center gap-1.5 text-xs font-semibold cursor-pointer active:scale-95 transition-transform"
+          style={{
+            boxShadow: 'inset 1px 1px 1.5px 0 rgba(255,255,255,0.35), 0 4px 18px rgba(0,0,0,0.35)',
+          }}
+        >
+          <img src={campusCareLogo} alt="Logo" className="h-4 w-4 rounded-sm object-contain" />
+          <span>Menu</span>
+          <ChevronDown className={cn("w-3.5 h-3.5 transition-transform duration-200", mobileNavOpen && "rotate-180")} />
+        </button>
+
+        {/* Mobile Dropdown Menu Sheet */}
+        <AnimatePresence>
+          {mobileNavOpen && (
+            <motion.div
+              initial={{ opacity: 0, y: -8, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -8, scale: 0.95 }}
+              transition={{ type: 'spring', stiffness: 450, damping: 28 }}
+              className="absolute top-10 left-1/2 -translate-x-1/2 w-[calc(100vw-2rem)] max-w-sm rounded-2xl border border-white/20 bg-[#0c2e2b]/95 shadow-[0_12px_40px_rgba(0,0,0,0.5)] backdrop-blur-2xl p-3 text-white space-y-1"
+              style={{
+                boxShadow: 'inset 1.5px 1.5px 2px 0 rgba(255,255,255,0.3), 0 12px 40px rgba(0,0,0,0.5)',
+              }}
+            >
+              <div className="flex items-center justify-between pb-2 mb-1 border-b border-white/10 px-2">
+                <div className="flex items-center gap-2">
+                  <img src={campusCareLogo} alt="CampusCare" className="h-4 w-4 rounded-sm" />
+                  <span className="text-xs font-bold text-white">CampusCare Desk</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setMobileNavOpen(false)}
+                  className="p-1 rounded-lg text-white/70 hover:text-white hover:bg-white/10 cursor-pointer"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setMobileNavOpen(false);
+                  scrollToElement('#campus-map');
+                }}
+                className="w-full text-left px-3 py-2 rounded-xl text-xs font-medium text-white/90 hover:bg-white/10 transition-colors flex items-center justify-between cursor-pointer"
+              >
+                <span>Campus Map & Navigation</span>
+                <ChevronRight className="w-3.5 h-3.5 text-white/50" />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setMobileNavOpen(false);
+                  scrollToElement('#opd-timings');
+                }}
+                className="w-full text-left px-3 py-2 rounded-xl text-xs font-medium text-white/90 hover:bg-white/10 transition-colors flex items-center justify-between cursor-pointer"
+              >
+                <span>OPD Timings & Shift Rosters</span>
+                <ChevronRight className="w-3.5 h-3.5 text-white/50" />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setMobileNavOpen(false);
+                  scrollToElement('#facilities');
+                }}
+                className="w-full text-left px-3 py-2 rounded-xl text-xs font-medium text-white/90 hover:bg-white/10 transition-colors flex items-center justify-between cursor-pointer"
+              >
+                <span>Clinical Facilities & Services</span>
+                <ChevronRight className="w-3.5 h-3.5 text-white/50" />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setMobileNavOpen(false);
+                  scrollToElement('#doctors');
+                }}
+                className="w-full text-left px-3 py-2 rounded-xl text-xs font-medium text-white/90 hover:bg-white/10 transition-colors flex items-center justify-between cursor-pointer"
+              >
+                <span>Medical Officers & Staff</span>
+                <ChevronRight className="w-3.5 h-3.5 text-white/50" />
+              </button>
+
+              <div className="pt-1 border-t border-white/10">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMobileNavOpen(false);
+                    setShowEmergencyModal(true);
+                  }}
+                  className="w-full text-left px-3 py-2 rounded-xl text-xs font-bold text-rose-200 bg-rose-500/20 hover:bg-rose-500/30 transition-colors flex items-center justify-between cursor-pointer"
+                >
+                  <span className="flex items-center gap-2">
+                    <span className="h-2 w-2 rounded-full bg-rose-400 animate-pulse" />
+                    <span>24/7 Emergency SOS Hotline</span>
+                  </span>
+                  <PhoneCall className="w-3.5 h-3.5 text-rose-200" />
+                </button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+
+      {/* ── Liquid Glass Floating Navbar (Desktop screens) ── */}
+      <div className="hidden sm:block fixed top-6 left-1/2 -translate-x-1/2 z-50">
         <motion.nav
           initial={{ y: -80, opacity: 0 }}
           animate={isNavExpanded ? 'expanded' : 'collapsed'}
@@ -732,7 +844,7 @@ export default function LandingPage() {
           initial={{ opacity: 0, y: 14 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.1, ease: [0.16, 1, 0.3, 1] }}
-          className="text-5xl sm:text-7xl lg:text-8xl font-extrabold tracking-tight text-center text-white max-w-4xl leading-[1.05]"
+          className="text-[2rem] sm:text-7xl lg:text-8xl font-extrabold tracking-tight text-center text-white max-w-4xl leading-[1.12]"
         >
           CampusCare
         </motion.h1>
@@ -742,7 +854,7 @@ export default function LandingPage() {
           initial={{ opacity: 0, y: 14 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.2, ease: [0.16, 1, 0.3, 1] }}
-          className="mt-4 text-base sm:text-lg text-teal-100/80 text-center max-w-2xl font-normal leading-relaxed"
+          className="mt-2.5 sm:mt-3 text-xs sm:text-base text-teal-100/80 text-center max-w-2xl font-normal leading-relaxed px-2"
         >
           Your complete campus health companion — appointments, prescriptions, emergency services, and student wellness, all in one place.
         </motion.p>
@@ -752,20 +864,20 @@ export default function LandingPage() {
           initial={{ opacity: 0, y: 14 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.3, ease: [0.16, 1, 0.3, 1] }}
-          className="mt-8 flex flex-col items-center justify-center w-full max-w-lg"
+          className="mt-5 sm:mt-8 flex flex-col items-center justify-center w-full max-w-lg"
         >
           <motion.button
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
             onClick={() => scrollToElement('#campus-map')}
-            className="w-full py-4 px-8 rounded-full border border-white/20 bg-[#0e3b38]/90 hover:bg-[#124d49] text-white shadow-[0_10px_35px_rgba(0,0,0,0.35)] backdrop-blur-xl transition-all duration-300 cursor-pointer flex items-center justify-center gap-3 text-base sm:text-lg font-medium"
+            className="w-full py-2.5 sm:py-4 px-4 sm:px-8 rounded-full border border-white/20 bg-[#0e3b38]/90 hover:bg-[#124d49] text-white shadow-[0_10px_35px_rgba(0,0,0,0.35)] backdrop-blur-xl transition-all duration-300 cursor-pointer flex items-center justify-center gap-2 sm:gap-3 text-xs sm:text-base font-medium"
             style={{
               boxShadow: 'inset 2px 2px 2px 0 rgba(255,255,255,0.3), inset -2px -2px 2px 0 rgba(255,255,255,0.15), 0 10px 35px rgba(0,0,0,0.35)',
             }}
           >
-            <span className="h-2 w-2 rounded-full bg-white/90" />
-            <span>How can CampusCare help you today?</span>
-            <ArrowRight className="w-4 h-4 text-white ml-1" />
+            <span className="h-1.5 w-1.5 sm:h-2 sm:w-2 rounded-full bg-white/90 shrink-0" />
+            <span className="truncate sm:whitespace-normal">How can CampusCare help you today?</span>
+            <ArrowRight className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-white ml-0.5 shrink-0" />
           </motion.button>
 
           {/* Subtle Floating Scroll Hint */}
@@ -793,64 +905,64 @@ export default function LandingPage() {
             borderRadius="20px"
             shadowIntensity="sm"
             glowIntensity="xs"
-            className="p-5 text-white bg-white/[0.04] border border-white/10 hover:border-white/25 transition-all group"
+            className="p-3.5 sm:p-5 text-white bg-white/[0.04] border border-white/10 hover:border-white/25 transition-all group"
           >
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-[10px] font-bold text-white/80 uppercase tracking-wider">Clinical Duty</span>
-              <div className="h-8 w-8 rounded-lg bg-white/10 text-white flex items-center justify-center">
-                <Clock className="w-4 h-4" />
+            <div className="flex items-center justify-between mb-1.5 sm:mb-2">
+              <span className="text-[9px] sm:text-[10px] font-bold text-white/80 uppercase tracking-wider">Clinical Duty</span>
+              <div className="h-7 w-7 sm:h-8 sm:w-8 rounded-lg bg-white/10 text-white flex items-center justify-center">
+                <Clock className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
               </div>
             </div>
-            <div className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">24 / 7</div>
-            <p className="text-xs text-white/70 mt-1 font-medium">Continuous Weekday OPD & Night Shift</p>
+            <div className="text-xl sm:text-3xl font-extrabold text-white tracking-tight">24 / 7</div>
+            <p className="text-[11px] sm:text-xs text-white/70 mt-0.5 sm:mt-1 font-medium leading-snug">Continuous Weekday OPD & Night Shift</p>
           </LiquidGlassCard>
 
           <LiquidGlassCard
             borderRadius="20px"
             shadowIntensity="sm"
             glowIntensity="xs"
-            className="p-5 text-white bg-white/[0.04] border border-white/10 hover:border-white/25 transition-all group"
+            className="p-3.5 sm:p-5 text-white bg-white/[0.04] border border-white/10 hover:border-white/25 transition-all group"
           >
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-[10px] font-bold text-white/80 uppercase tracking-wider">Dispensary</span>
-              <div className="h-8 w-8 rounded-lg bg-white/10 text-white flex items-center justify-center">
-                <Pill className="w-4 h-4" />
+            <div className="flex items-center justify-between mb-1.5 sm:mb-2">
+              <span className="text-[9px] sm:text-[10px] font-bold text-white/80 uppercase tracking-wider">Dispensary</span>
+              <div className="h-7 w-7 sm:h-8 sm:w-8 rounded-lg bg-white/10 text-white flex items-center justify-center">
+                <Pill className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
               </div>
             </div>
-            <div className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">100% Free</div>
-            <p className="text-xs text-white/70 mt-1 font-medium">Essential Formulary Meds for Students</p>
+            <div className="text-xl sm:text-3xl font-extrabold text-white tracking-tight">100% Free</div>
+            <p className="text-[11px] sm:text-xs text-white/70 mt-0.5 sm:mt-1 font-medium leading-snug">Essential Formulary Meds for Students</p>
           </LiquidGlassCard>
 
           <LiquidGlassCard
             borderRadius="20px"
             shadowIntensity="sm"
             glowIntensity="xs"
-            className="p-5 text-white bg-white/[0.04] border border-white/10 hover:border-white/25 transition-all group"
+            className="p-3.5 sm:p-5 text-white bg-white/[0.04] border border-white/10 hover:border-white/25 transition-all group"
           >
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-[10px] font-bold text-white/80 uppercase tracking-wider">Clinical Lead</span>
-              <div className="h-8 w-8 rounded-lg bg-white/10 text-white flex items-center justify-center">
-                <Award className="w-4 h-4" />
+            <div className="flex items-center justify-between mb-1.5 sm:mb-2">
+              <span className="text-[9px] sm:text-[10px] font-bold text-white/80 uppercase tracking-wider">Clinical Lead</span>
+              <div className="h-7 w-7 sm:h-8 sm:w-8 rounded-lg bg-white/10 text-white flex items-center justify-center">
+                <Award className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
               </div>
             </div>
-            <div className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">23+ Years</div>
-            <p className="text-xs text-white/70 mt-1 font-medium">Senior Medical Officer Clinical Practice</p>
+            <div className="text-xl sm:text-3xl font-extrabold text-white tracking-tight">23+ Years</div>
+            <p className="text-[11px] sm:text-xs text-white/70 mt-0.5 sm:mt-1 font-medium leading-snug">Senior Medical Officer Clinical Practice</p>
           </LiquidGlassCard>
 
           <LiquidGlassCard
             borderRadius="20px"
             shadowIntensity="sm"
             glowIntensity="xs"
-            className="p-5 text-white bg-white/[0.04] border border-white/10 hover:border-white/25 transition-all group"
+            className="p-3.5 sm:p-5 text-white bg-white/[0.04] border border-white/10 hover:border-white/25 transition-all group"
           >
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-[10px] font-bold text-rose-300 uppercase tracking-wider">Ambulance</span>
-              <div className="h-8 w-8 rounded-lg bg-rose-500/20 text-rose-300 flex items-center justify-center">
-                <Ambulance className="w-4 h-4" />
+            <div className="flex items-center justify-between mb-1.5 sm:mb-2">
+              <span className="text-[9px] sm:text-[10px] font-bold text-rose-300 uppercase tracking-wider">Ambulance</span>
+              <div className="h-7 w-7 sm:h-8 sm:w-8 rounded-lg bg-rose-500/20 text-rose-300 flex items-center justify-center">
+                <Ambulance className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
               </div>
             </div>
-            <div className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">&lt; 3 mins</div>
-            <p className="text-xs text-white/70 mt-1 font-medium">Average Campus Emergency Dispatch</p>
+            <div className="text-xl sm:text-3xl font-extrabold text-white tracking-tight">&lt; 3 mins</div>
+            <p className="text-[11px] sm:text-xs text-white/70 mt-0.5 sm:mt-1 font-medium leading-snug">Average Campus Emergency Dispatch</p>
           </LiquidGlassCard>
         </div>
       </section>
@@ -862,10 +974,10 @@ export default function LandingPage() {
             <Compass className="w-3.5 h-3.5" />
             <span>Interactive Campus Navigation Desk</span>
           </div>
-          <h2 className="text-3xl sm:text-5xl font-extrabold text-white tracking-tight">
+          <h2 className="text-xl sm:text-3xl lg:text-5xl font-extrabold text-white tracking-tight">
             Navigate to the Health Centre
           </h2>
-          <p className="mt-2 text-sm sm:text-base text-white/75 max-w-xl mx-auto">
+          <p className="mt-2 text-xs sm:text-base text-white/75 max-w-xl mx-auto">
             Situated centrally at coordinates <strong className="text-white">30.356008° N, 76.368689° E</strong>. Explore the live map canvas or tap your hostel dock below.
           </p>
         </div>
@@ -1054,10 +1166,10 @@ export default function LandingPage() {
             <Clock className="w-3.5 h-3.5" />
             <span>Official University Healthcare Schedule</span>
           </div>
-          <h2 className="text-3xl sm:text-5xl font-extrabold text-white tracking-tight">
+          <h2 className="text-xl sm:text-3xl lg:text-5xl font-extrabold text-white tracking-tight">
             OPD Timings & Duty Rosters
           </h2>
-          <p className="mt-2 text-sm sm:text-base text-white/75 max-w-xl mx-auto">
+          <p className="mt-2 text-xs sm:text-base text-white/75 max-w-xl mx-auto">
             Interactive clinical shift schedules. Real-time active shift indicator updates in accordance with university clinic regulations.
           </p>
 
@@ -1158,10 +1270,10 @@ export default function LandingPage() {
             <HeartPulse className="w-3.5 h-3.5" />
             <span>Full Comprehensive Clinical Infrastructure</span>
           </div>
-          <h2 className="text-3xl sm:text-5xl font-extrabold text-white tracking-tight">
+          <h2 className="text-xl sm:text-3xl lg:text-5xl font-extrabold text-white tracking-tight">
             Facilities & Health Services
           </h2>
-          <p className="mt-2 text-sm sm:text-base text-white/75 max-w-xl mx-auto">
+          <p className="mt-2 text-xs sm:text-base text-white/75 max-w-xl mx-auto">
             Hover over any clinic facility to experience dynamic 3D card tilt. Click any card to expand full medical details.
           </p>
         </div>
@@ -1179,7 +1291,7 @@ export default function LandingPage() {
                   borderRadius="24px"
                   shadowIntensity="sm"
                   glowIntensity="sm"
-                  className="group cursor-pointer p-6 bg-white/[0.04] border border-white/15 hover:border-white/30 transition-all flex flex-col justify-between h-full"
+                  className="group cursor-pointer p-4 sm:p-6 bg-white/[0.04] border border-white/15 hover:border-white/30 transition-all flex flex-col justify-between h-full"
                 >
                   <div>
                     <div className="flex items-center justify-between mb-4">
@@ -1223,10 +1335,10 @@ export default function LandingPage() {
             <Users className="w-3.5 h-3.5" />
             <span>Campus Healthcare Leadership & Clinical Staff</span>
           </div>
-          <h2 className="text-3xl sm:text-5xl font-extrabold text-white tracking-tight">
+          <h2 className="text-xl sm:text-3xl lg:text-5xl font-extrabold text-white tracking-tight">
             Medical Officers & Leadership
           </h2>
-          <p className="mt-2 text-sm sm:text-base text-white/75 max-w-xl mx-auto">
+          <p className="mt-2 text-xs sm:text-base text-white/75 max-w-xl mx-auto">
             Experienced medical practitioners and university administrators managing student healthcare.
           </p>
         </div>
@@ -1403,7 +1515,7 @@ export default function LandingPage() {
             <span>24/7 Campus Emergency Medical Hotline</span>
           </div>
 
-          <h2 className="text-3xl sm:text-5xl font-extrabold text-white tracking-tight">
+          <h2 className="text-2xl sm:text-4xl lg:text-5xl font-extrabold text-white tracking-tight">
             Immediate Medical Assistance
           </h2>
 

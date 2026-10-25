@@ -133,6 +133,7 @@ export default function Login({ defaultMode }) {
         })
         if (googleBtnRef.current) {
           googleBtnRef.current.innerHTML = ''
+          const btnWidth = Math.min(340, Math.max(240, (window.innerWidth || 360) - 48))
           window.google.accounts.id.renderButton(googleBtnRef.current, {
             theme: 'outline',
             size: 'large',
@@ -140,7 +141,7 @@ export default function Login({ defaultMode }) {
             text: 'continue_with',
             shape: 'pill',
             logo_alignment: 'left',
-            width: 340,
+            width: btnWidth,
           })
           setGisLoaded(true)
         }
@@ -193,6 +194,12 @@ export default function Login({ defaultMode }) {
   function handleAutoFillReceptionist() {
     setReceptionEmail('reception@thapar.edu')
     setReceptionPassword('reception123')
+    setError('')
+  }
+
+  function handleAutoFillDoctor() {
+    setEmail('dr.kapoor@thapar.edu')
+    setPassword('password123')
     setError('')
   }
 
@@ -274,9 +281,9 @@ export default function Login({ defaultMode }) {
   return (
     <div className="min-h-screen w-full flex flex-col lg:flex-row bg-white">
       {/* ── Left Column: Sign-in Form ── */}
-      <section className="flex-1 flex flex-col justify-between p-6 sm:p-10 lg:p-14 overflow-y-auto">
+      <section className="flex-1 flex flex-col justify-between p-3.5 sm:p-8 lg:p-14 overflow-y-auto">
         {/* Top Header: Brand & Back to Home */}
-        <div className="flex items-center justify-between mb-8">
+        <div className="flex items-center justify-between mb-4 sm:mb-8">
           <div
             onClick={() => navigate('/')}
             className="flex items-center gap-2.5 cursor-pointer group"
@@ -284,9 +291,9 @@ export default function Login({ defaultMode }) {
             <img
               src={tiMark}
               alt="TI Logo"
-              className="h-8 w-auto object-contain transition-transform group-hover:scale-105"
+              className="h-7 sm:h-8 w-auto object-contain transition-transform group-hover:scale-105"
             />
-            <span className="text-lg font-bold tracking-tight text-slate-900">
+            <span className="text-base sm:text-lg font-bold tracking-tight text-slate-900">
               CampusCare
             </span>
           </div>
@@ -294,7 +301,7 @@ export default function Login({ defaultMode }) {
           <button
             type="button"
             onClick={() => navigate('/')}
-            className="text-xs font-medium text-slate-500 hover:text-slate-900 flex items-center gap-1.5 transition-colors cursor-pointer"
+            className="text-[11px] sm:text-xs font-medium text-slate-500 hover:text-slate-900 flex items-center gap-1.5 transition-colors cursor-pointer"
           >
             <ArrowLeft className="w-3.5 h-3.5" />
             <span>Back to home</span>
@@ -302,14 +309,14 @@ export default function Login({ defaultMode }) {
         </div>
 
         {/* Center Form Container */}
-        <div className="w-full max-w-md mx-auto my-auto py-4">
-          <div className="flex flex-col gap-6">
+        <div className="w-full max-w-md mx-auto my-auto py-1 sm:py-4">
+          <div className="flex flex-col gap-4 sm:gap-6">
             {/* Title & Description */}
             <div>
-              <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-slate-900">
+              <h1 className="text-xl sm:text-3xl lg:text-4xl font-bold tracking-tight text-slate-900">
                 Welcome
               </h1>
-              <p className="mt-1 text-sm text-slate-500">
+              <p className="mt-1 text-[11px] sm:text-xs md:text-sm text-slate-500">
                 {mode === 'doctor'
                   ? "Sign in to CampusCare's Doctor & Medical Staff Console"
                   : mode === 'receptionist'
@@ -319,7 +326,7 @@ export default function Login({ defaultMode }) {
             </div>
 
             {/* Mode Toggle (Doctor / Student / Receptionist) */}
-            <div className="inline-flex bg-slate-100 rounded-full p-1 self-start border border-slate-200/80 flex-wrap gap-1 sm:gap-0">
+            <div className="grid grid-cols-3 w-full sm:w-auto sm:inline-flex bg-slate-100/90 rounded-xl sm:rounded-full p-1 border border-slate-200/80 gap-1 sm:gap-0 shadow-2xs">
               <button
                 type="button"
                 onClick={() => {
@@ -328,13 +335,14 @@ export default function Login({ defaultMode }) {
                   setGoogleError('')
                   setUnauthorizedDomain('')
                 }}
-                className={`px-4 sm:px-5 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer ${
+                className={`py-1.5 px-1 sm:px-5 rounded-lg sm:rounded-full text-[11px] sm:text-xs font-semibold transition-all cursor-pointer text-center flex items-center justify-center gap-1 sm:gap-1.5 ${
                   mode === 'doctor'
                     ? 'bg-white text-slate-900 shadow-sm'
                     : 'text-slate-500 hover:text-slate-800'
                 }`}
               >
-                Doctor Portal
+                <Stethoscope className="w-3.5 h-3.5 shrink-0" />
+                <span><span className="sm:hidden">Doctor</span><span className="hidden sm:inline">Doctor Portal</span></span>
               </button>
               <button
                 type="button"
@@ -344,13 +352,14 @@ export default function Login({ defaultMode }) {
                   setGoogleError('')
                   setUnauthorizedDomain('')
                 }}
-                className={`px-4 sm:px-5 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer ${
+                className={`py-1.5 px-1 sm:px-5 rounded-lg sm:rounded-full text-[11px] sm:text-xs font-semibold transition-all cursor-pointer text-center flex items-center justify-center gap-1 sm:gap-1.5 ${
                   mode === 'student'
                     ? 'bg-white text-slate-900 shadow-sm'
                     : 'text-slate-500 hover:text-slate-800'
                 }`}
               >
-                Student Portal
+                <GraduationCap className="w-3.5 h-3.5 shrink-0" />
+                <span><span className="sm:hidden">Student</span><span className="hidden sm:inline">Student Portal</span></span>
               </button>
               <button
                 type="button"
@@ -360,13 +369,14 @@ export default function Login({ defaultMode }) {
                   setGoogleError('')
                   setUnauthorizedDomain('')
                 }}
-                className={`px-4 sm:px-5 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer ${
+                className={`py-1.5 px-1 sm:px-5 rounded-lg sm:rounded-full text-[11px] sm:text-xs font-semibold transition-all cursor-pointer text-center flex items-center justify-center gap-1 sm:gap-1.5 ${
                   mode === 'receptionist'
                     ? 'bg-white text-slate-900 shadow-sm'
                     : 'text-slate-500 hover:text-slate-800'
                 }`}
               >
-                Receptionist Portal
+                <UserCheck className="w-3.5 h-3.5 shrink-0" />
+                <span><span className="sm:hidden">Reception</span><span className="hidden sm:inline">Receptionist Portal</span></span>
               </button>
             </div>
 
@@ -409,15 +419,15 @@ export default function Login({ defaultMode }) {
                 </div>
 
                 {/* Dummy Credential Quick Pill */}
-                <div className="flex items-center justify-between p-3 rounded-2xl bg-slate-50 border border-slate-200 text-xs">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 rounded-2xl bg-slate-50 border border-slate-200 text-xs">
                   <div className="leading-tight">
-                    <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">Dummy Credentials</span>
-                    <span className="font-mono text-slate-700 text-xs font-semibold">reception@thapar.edu • reception123</span>
+                    <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">Demo Credentials</span>
+                    <span className="font-mono text-slate-700 text-[11px] sm:text-xs font-semibold break-all">reception@thapar.edu • reception123</span>
                   </div>
                   <button
                     type="button"
                     onClick={handleAutoFillReceptionist}
-                    className="px-3 py-1.5 text-xs font-semibold rounded-xl bg-teal-50 text-teal-700 hover:bg-teal-100 border border-teal-200/70 transition-colors cursor-pointer shadow-xs"
+                    className="self-start sm:self-auto px-3 py-1.5 text-xs font-semibold rounded-xl bg-teal-50 text-teal-700 hover:bg-teal-100 border border-teal-200/70 transition-colors cursor-pointer shadow-2xs"
                   >
                     Auto-fill
                   </button>
@@ -436,7 +446,7 @@ export default function Login({ defaultMode }) {
                       value={receptionEmail}
                       onChange={(e) => setReceptionEmail(e.target.value)}
                       placeholder="reception@thapar.edu"
-                      className="w-full bg-transparent text-sm p-4 rounded-2xl focus:outline-none text-slate-900 placeholder:text-slate-400"
+                      className="w-full bg-transparent text-xs sm:text-sm p-3 sm:p-4 rounded-xl sm:rounded-2xl focus:outline-none text-slate-900 placeholder:text-slate-400"
                     />
                   </GlassInputWrapper>
                   <p className="text-[11px] text-slate-400 mt-1">
@@ -457,7 +467,7 @@ export default function Login({ defaultMode }) {
                         value={receptionPassword}
                         onChange={(e) => setReceptionPassword(e.target.value)}
                         placeholder="Enter reception security password"
-                        className="w-full bg-transparent text-sm p-4 pr-12 rounded-2xl focus:outline-none text-slate-900 placeholder:text-slate-400"
+                        className="w-full bg-transparent text-xs sm:text-sm p-3 sm:p-4 pr-12 rounded-xl sm:rounded-2xl focus:outline-none text-slate-900 placeholder:text-slate-400"
                       />
                       <button
                         type="button"
@@ -496,7 +506,7 @@ export default function Login({ defaultMode }) {
                 <button
                   type="submit"
                   disabled={loading}
-                  className="w-full rounded-2xl bg-teal-800 py-3.5 font-semibold text-white hover:bg-teal-900 disabled:bg-slate-400 transition-all cursor-pointer shadow-md hover:scale-[1.01] active:scale-[0.99] text-sm mt-2"
+                  className="w-full rounded-xl sm:rounded-2xl bg-teal-800 py-2.5 sm:py-3.5 font-semibold text-white hover:bg-teal-900 disabled:bg-slate-400 transition-all cursor-pointer shadow-md hover:scale-[1.01] active:scale-[0.99] text-xs sm:text-sm mt-2"
                 >
                   {loading ? 'Authenticating…' : 'Sign In as Receptionist'}
                 </button>
@@ -506,6 +516,36 @@ export default function Login({ defaultMode }) {
             {/* ── DOCTOR FORM ── */}
             {mode === 'doctor' && (
               <form className="space-y-4" onSubmit={handleSubmit}>
+                {/* Institutional Badge */}
+                <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-3.5 flex items-start gap-3">
+                  <div className="p-2 rounded-xl bg-slate-900 text-white shrink-0 mt-0.5">
+                    <Stethoscope className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-xs font-semibold text-slate-900">
+                      Doctor & Clinical Staff Console
+                    </h3>
+                    <p className="text-[11px] text-slate-500 leading-relaxed mt-0.5">
+                      TIET Health Centre patient consultations, electronic health records, and prescription dispatch.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Dummy Credential Quick Pill */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 rounded-2xl bg-slate-50 border border-slate-200 text-xs">
+                  <div className="leading-tight">
+                    <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">Demo Credentials</span>
+                    <span className="font-mono text-slate-700 text-[11px] sm:text-xs font-semibold break-all">dr.kapoor@thapar.edu • password123</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleAutoFillDoctor}
+                    className="self-start sm:self-auto px-3 py-1.5 text-xs font-semibold rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-800 transition-colors cursor-pointer shadow-2xs"
+                  >
+                    Auto-fill
+                  </button>
+                </div>
+
                 <div>
                   <label className="text-xs font-semibold text-slate-600 mb-1.5 block">
                     Doctor / Staff Email Address
@@ -519,7 +559,7 @@ export default function Login({ defaultMode }) {
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       placeholder="dr.kapoor@campuscare.edu"
-                      className="w-full bg-transparent text-sm p-4 rounded-2xl focus:outline-none text-slate-900 placeholder:text-slate-400"
+                      className="w-full bg-transparent text-xs sm:text-sm p-3 sm:p-4 rounded-xl sm:rounded-2xl focus:outline-none text-slate-900 placeholder:text-slate-400"
                     />
                   </GlassInputWrapper>
                   <p className="text-[11px] text-slate-400 mt-1">
@@ -540,7 +580,7 @@ export default function Login({ defaultMode }) {
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
                         placeholder="Enter your security password"
-                        className="w-full bg-transparent text-sm p-4 pr-12 rounded-2xl focus:outline-none text-slate-900 placeholder:text-slate-400"
+                        className="w-full bg-transparent text-xs sm:text-sm p-3 sm:p-4 pr-12 rounded-xl sm:rounded-2xl focus:outline-none text-slate-900 placeholder:text-slate-400"
                       />
                       <button
                         type="button"
@@ -579,7 +619,7 @@ export default function Login({ defaultMode }) {
                 <button
                   type="submit"
                   disabled={loading}
-                  className="w-full rounded-2xl bg-slate-900 py-3.5 font-semibold text-white hover:bg-slate-800 disabled:bg-slate-400 transition-all cursor-pointer shadow-md hover:scale-[1.01] active:scale-[0.99] text-sm mt-2"
+                  className="w-full rounded-xl sm:rounded-2xl bg-slate-900 py-2.5 sm:py-3.5 font-semibold text-white hover:bg-slate-800 disabled:bg-slate-400 transition-all cursor-pointer shadow-md hover:scale-[1.01] active:scale-[0.99] text-xs sm:text-sm mt-2"
                 >
                   {loading ? 'Signing in…' : 'Sign In as Doctor'}
                 </button>
@@ -705,22 +745,22 @@ export default function Login({ defaultMode }) {
                       type="button"
                       onClick={handleGoogleSignInClick}
                       disabled={googleLoading}
-                      className="w-full flex items-center justify-between gap-3 border-2 border-slate-200/90 rounded-2xl p-3.5 hover:border-teal-600 hover:bg-teal-50/40 text-slate-800 font-semibold text-xs sm:text-sm transition-all shadow-sm hover:shadow-md cursor-pointer group disabled:opacity-60"
+                      className="w-full flex items-center justify-between gap-2.5 sm:gap-3 border-2 border-slate-200/90 rounded-2xl p-3 sm:p-3.5 hover:border-teal-600 hover:bg-teal-50/40 text-slate-800 font-semibold text-xs sm:text-sm transition-all shadow-sm hover:shadow-md cursor-pointer group disabled:opacity-60"
                     >
-                      <div className="flex items-center gap-3">
-                        <div className="p-1.5 rounded-xl bg-white shadow-xs group-hover:scale-105 transition-transform">
+                      <div className="flex items-center gap-2.5 sm:gap-3">
+                        <div className="p-1.5 rounded-xl bg-white shadow-xs group-hover:scale-105 transition-transform shrink-0">
                           <GoogleIcon />
                         </div>
                         <div className="text-left leading-tight">
-                          <span className="block font-semibold text-slate-900">
+                          <span className="block font-semibold text-slate-900 text-xs sm:text-sm">
                             {googleLoading ? 'Authorizing with Google…' : 'Continue with Thapar Google Workspace'}
                           </span>
-                          <span className="text-[11px] text-slate-500 font-normal">
+                          <span className="text-[10px] sm:text-[11px] text-slate-500 font-normal">
                             TIET Single Sign-On
                           </span>
                         </div>
                       </div>
-                      <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-teal-100 text-teal-800 border border-teal-200">
+                      <span className="hidden sm:inline-block px-2.5 py-1 rounded-full text-[10px] font-bold bg-teal-100 text-teal-800 border border-teal-200 shrink-0">
                         @thapar.edu only
                       </span>
                     </button>
@@ -777,18 +817,18 @@ export default function Login({ defaultMode }) {
 
         {/* ── Thapar Google Workspace Sandbox Modal ── */}
         {showSandboxModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
-            <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full p-6 border border-slate-100 relative">
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-3.5 sm:p-4 bg-slate-900/60 backdrop-blur-sm">
+            <div className="bg-white rounded-2xl sm:rounded-3xl shadow-2xl max-w-md w-full p-4 sm:p-6 border border-slate-100 relative max-h-[92vh] overflow-y-auto">
               <button
                 type="button"
                 onClick={() => setShowSandboxModal(false)}
-                className="absolute top-5 right-5 p-1.5 rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+                className="absolute top-4 sm:top-5 right-4 sm:right-5 p-1.5 rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>
 
               <div className="flex items-center gap-3 mb-4">
-                <div className="p-2.5 rounded-2xl bg-teal-50 border border-teal-100 text-teal-800">
+                <div className="p-2 sm:p-2.5 rounded-2xl bg-teal-50 border border-teal-100 text-teal-800">
                   <GoogleIcon />
                 </div>
                 <div>
@@ -805,6 +845,36 @@ export default function Login({ defaultMode }) {
                 <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
                   Test Student Accounts
                 </p>
+
+                {/* Valid Account 0: Harshveer Singh */}
+                <button
+                  type="button"
+                  onClick={() =>
+                    handleSimulatedSignIn({
+                      name: 'Harshveer Singh',
+                      email: 'hsingh_be24@thapar.edu',
+                      rollNumber: '1024030109',
+                    })
+                  }
+                  className="w-full flex items-center justify-between p-2.5 sm:p-3 rounded-xl sm:rounded-2xl border border-slate-200 hover:border-teal-500 hover:bg-teal-50/40 text-left transition-all group cursor-pointer"
+                >
+                  <div className="flex items-center gap-2.5 sm:gap-3">
+                    <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-teal-800 text-white font-bold flex items-center justify-center text-xs shrink-0">
+                      HS
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold text-slate-800 group-hover:text-teal-900">
+                        Harshveer Singh
+                      </p>
+                      <p className="text-[10px] sm:text-[11px] text-slate-500">
+                        hsingh_be24@thapar.edu
+                      </p>
+                    </div>
+                  </div>
+                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 shrink-0">
+                    1024030109
+                  </span>
+                </button>
 
                 {/* Valid Account 1 */}
                 <button
