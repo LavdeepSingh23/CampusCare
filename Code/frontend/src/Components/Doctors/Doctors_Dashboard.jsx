@@ -71,6 +71,7 @@ import {
   validatePrescriptionItem,
   validatePrescriptionDraft,
 } from '../../utils/prescriptionCalculations'
+import PrescriptionQuestionnaireModal from './PrescriptionQuestionnaireModal'
 
 export default function Doctors_Dashboard() {
   const navigate = useNavigate()
@@ -83,11 +84,8 @@ export default function Doctors_Dashboard() {
   // Mobile / Tablet pane toggle when activeTab === 'queue': 'queue' | 'patient'
   const [mobileQueuePane, setMobileQueuePane] = useState('queue')
 
-  // Prescription Studio Workflow step: 'assessment' | 'medications' | 'review'
-  const [prescriptionStep, setPrescriptionStep] = useState('assessment')
-
-  // Prescription View Mode: 'stepper' (step-by-step) | 'desk' (all-in-one desk)
-  const [rxViewMode, setRxViewMode] = useState('stepper')
+  // Immersive E-Prescription Questionnaire Modal state
+  const [isPrescriptionModalOpen, setIsPrescriptionModalOpen] = useState(false)
 
   // Doctor Profile info
   const [doctorProfile, setDoctorProfile] = useState({
@@ -135,6 +133,13 @@ export default function Doctors_Dashboard() {
   const selectedPatient = useMemo(() => {
     return patients.find((p) => p.id === selectedPatientId) || patients[0] || null
   }, [patients, selectedPatientId])
+
+  // Automatically open questionnaire when prescription tab is focused with a selected student
+  useEffect(() => {
+    if (activeTab === 'prescription' && selectedPatient) {
+      setIsPrescriptionModalOpen(true)
+    }
+  }, [activeTab, selectedPatient])
 
   // Real patient history state
   const [patientHistory, setPatientHistory] = useState([])
@@ -222,7 +227,6 @@ export default function Doctors_Dashboard() {
     setCustomInstruction('after food')
     setCustomManualQty('')
     setServerError(null)
-    setPrescriptionStep('assessment')
   }
 
   // Reset draft whenever selected patient changes
@@ -497,7 +501,7 @@ export default function Doctors_Dashboard() {
       if (err.status === 404 || msg.includes('404')) {
         triggerToast('No waiting students left in queue')
       } else if (err.status === 409 || msg.includes('already has an active consultation')) {
-        triggerToast('⚠️ Consultation in progress. Complete before calling next.')
+        triggerToast(' Consultation in progress. Complete before calling next.')
       } else {
         triggerToast(msg)
       }
@@ -588,13 +592,13 @@ export default function Doctors_Dashboard() {
   const handleAddCustomDrug = (e) => {
     e.preventDefault()
     if (!customMedName.trim()) {
-      triggerToast('⚠️ Please enter a medicine name')
+      triggerToast(' Please enter a medicine name')
       return
     }
 
     const dosageCode = formatDosageCode(customMorning, customAfternoon, customNight)
     if (dosageCode === '0-0-0') {
-      triggerToast('⚠️ Please select at least one dosage timing (Morning, Noon, or Night)')
+      triggerToast(' Please select at least one dosage timing (Morning, Noon, or Night)')
       return
     }
 
@@ -683,18 +687,21 @@ export default function Doctors_Dashboard() {
   }
 
   // Build payload strictly adhering to Phase 6 contract
-  const buildFinalizePayload = () => {
+  const buildFinalizePayload = (overrideData) => {
     const visitId = selectedPatient?.visitId
     const rollNumber = selectedPatient?.rollNo
-    const diagnosis = draftDiagnosis.trim()
+    const diagnosis = (overrideData?.diagnosis || draftDiagnosis || '').trim()
     const reasonForVisit = selectedPatient?.complaint || 'General Consultation'
-    const clinicalNotes = draftClinicalNotes.trim() || `Chief Complaint: ${selectedPatient?.complaint || 'General evaluation'}`
+    const clinicalNotes = (overrideData?.clinicalNotes || draftClinicalNotes || '').trim() || `Chief Complaint: ${selectedPatient?.complaint || 'General evaluation'}`
+    const dietAdvice = overrideData?.dietAdvice || draftDietAdvice
+    const followUp = overrideData?.followUp || draftFollowUp
     const generalInstructions = [
-      draftDietAdvice ? `Diet/Lifestyle: ${draftDietAdvice}` : '',
-      draftFollowUp ? `Follow-up: ${draftFollowUp}` : '',
+      dietAdvice ? `Diet/Lifestyle: ${dietAdvice}` : '',
+      followUp ? `Follow-up: ${followUp}` : '',
     ].filter(Boolean).join('\n') || 'Take medicines as prescribed.'
 
-    const medicines = draftMedicines.map((m) => {
+    const medsList = overrideData?.medicines || draftMedicines
+    const medicines = medsList.map((m) => {
       const durParsed = parseDurationInDays(m.duration)
       const durationDays = durParsed && durParsed.days ? durParsed.days : 5
 
@@ -762,26 +769,23 @@ export default function Doctors_Dashboard() {
   // Open Prescription Review modal
   const handleOpenReview = () => {
     if (!selectedPatient) {
-      triggerToast('⚠️ Please select a patient first')
+      triggerToast('Please select a patient first')
       return
     }
     if (!draftDiagnosis.trim()) {
-      triggerToast('⚠️ Please enter a clinical diagnosis before reviewing')
+      triggerToast('Please enter a clinical diagnosis before reviewing')
       setServerError('Clinical diagnosis is required before finalization.')
-      setPrescriptionStep('assessment')
       return
     }
     if (draftMedicines.length === 0) {
-      triggerToast('⚠️ Please prescribe at least one medicine item')
+      triggerToast('Please prescribe at least one medicine item')
       setServerError('At least one prescribed medicine item is required.')
-      setPrescriptionStep('medications')
       return
     }
     const hasInvalidQty = draftMedicines.some((m) => !m.qty || m.qty <= 0)
     if (hasInvalidQty) {
-      triggerToast('⚠️ Please ensure every prescribed medication has a positive quantity (> 0)')
+      triggerToast('Please ensure every prescribed medication has a positive quantity (> 0)')
       setServerError('Every prescribed medication must have a valid quantity (> 0).')
-      setPrescriptionStep('medications')
       return
     }
     setServerError(null)
@@ -789,35 +793,35 @@ export default function Doctors_Dashboard() {
   }
 
   // Complete Consultation & Dispatch Rx
-  const handleCompleteAndDispatch = async () => {
+  const handleCompleteAndDispatch = async (questionnaireData) => {
     if (isFinalizing) return
     if (!selectedPatient) return
 
-    if (!draftDiagnosis.trim()) {
-      triggerToast('⚠️ Please enter a clinical diagnosis before dispatching')
+    const diagnosis = (questionnaireData?.diagnosis || draftDiagnosis || '').trim()
+    const medicines = (questionnaireData?.medicines || draftMedicines || [])
+
+    if (!diagnosis) {
+      triggerToast('Please enter a clinical diagnosis before dispatching')
       setServerError('Clinical diagnosis is required.')
-      setPrescriptionStep('assessment')
       return
     }
 
-    if (draftMedicines.length === 0) {
-      triggerToast('⚠️ Please prescribe at least one medicine item')
+    if (medicines.length === 0) {
+      triggerToast('Please prescribe at least one medicine item')
       setServerError('At least one prescribed medicine item is required.')
-      setPrescriptionStep('medications')
       return
     }
 
-    const hasInvalidQty = draftMedicines.some((m) => !m.qty || m.qty <= 0)
+    const hasInvalidQty = medicines.some((m) => !m.qty || m.qty <= 0)
     if (hasInvalidQty) {
-      triggerToast('⚠️ Please ensure every prescribed medication has a positive quantity (> 0)')
+      triggerToast('Please ensure every prescribed medication has a positive quantity (> 0)')
       setServerError('Every prescribed medication must have a valid quantity (> 0).')
-      setPrescriptionStep('medications')
       return
     }
 
-    if (draftValidation.hasAllergyConflicts) {
+    if (draftValidation.hasAllergyConflicts && !questionnaireData) {
       const proceed = window.confirm(
-        '⚠️ CRITICAL WARNING: Known allergy conflicts were flagged for this student in the current draft. Do you wish to override and dispatch anyway?'
+        'CRITICAL WARNING: Known allergy conflicts were flagged for this student in the current draft. Do you wish to override and dispatch anyway?'
       )
       if (!proceed) return
     }
@@ -826,7 +830,7 @@ export default function Doctors_Dashboard() {
     setServerError(null)
 
     try {
-      const payload = buildFinalizePayload()
+      const payload = buildFinalizePayload(questionnaireData)
       const res = await completeConsultation(doctorId, payload)
 
       let pdfDoc = null
@@ -835,7 +839,7 @@ export default function Doctors_Dashboard() {
           prescription: res,
           doctor: doctorProfile,
           patient: selectedPatient,
-          medicines: draftMedicines,
+          medicines: medicines,
           autoDownload: true,
         })
       } catch (pdfErr) {
@@ -848,14 +852,15 @@ export default function Doctors_Dashboard() {
         visitId: res?.visit_id || res?.visitId || selectedPatient.visitId,
         patientName: selectedPatient.name,
         rollNo: selectedPatient.rollNo,
-        diagnosis: draftDiagnosis,
-        medicines: [...draftMedicines],
+        diagnosis: diagnosis,
+        medicines: [...medicines],
         completedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         finalizedAt: res?.finalized_at || res?.finalizedAt || new Date().toISOString(),
         pdfDoc,
       }
 
       setFinalizeSuccessData(completedRecord)
+      setIsPrescriptionModalOpen(false)
       setShowReviewModal(false)
 
       setSeenCount((prev) => prev + 1)
@@ -866,9 +871,9 @@ export default function Doctors_Dashboard() {
           name: selectedPatient.name,
           rollNo: selectedPatient.rollNo,
           completedAt: completedRecord.completedAt,
-          diagnosis: draftDiagnosis,
-          prescriptions: draftMedicines.map((m) => m.name).join(', ') || 'General Consultation',
-          medicines: [...draftMedicines],
+          diagnosis: diagnosis,
+          prescriptions: medicines.map((m) => m.name).join(', ') || 'General Consultation',
+          medicines: [...medicines],
           visitId: selectedPatient.visitId,
         },
         ...prev,
@@ -884,7 +889,7 @@ export default function Doctors_Dashboard() {
         err.message ||
         'Server rejected prescription finalization. Check visit status and try again.'
       setServerError(errorMsg)
-      triggerToast(`❌ ${errorMsg}`)
+      triggerToast(errorMsg)
     } finally {
       setIsFinalizing(false)
     }
@@ -1473,11 +1478,15 @@ export default function Doctors_Dashboard() {
                     <div className="pt-3 border-t border-slate-100">
                       <button
                         type="button"
-                        onClick={() => setActiveTab('prescription')}
-                        className="w-full py-3 px-4 rounded-xl bg-teal-700 hover:bg-teal-800 text-white text-xs sm:text-sm font-bold flex items-center justify-center gap-2 cursor-pointer shadow-xs hover:shadow-md transition-all"
+                        onClick={() => {
+                          setIsPrescriptionModalOpen(true)
+                          setActiveTab('prescription')
+                        }}
+                        className="w-full py-3 px-4 rounded-xl bg-teal-800 hover:bg-teal-900 text-white text-xs sm:text-sm font-bold flex items-center justify-center gap-2 cursor-pointer shadow-xs hover:shadow-md transition-all"
                       >
                         <Pill className="w-4 h-4 text-teal-200" />
-                        <span>Write E-Prescription for {selectedPatient.name.split(' ')[0]} →</span>
+                        <span>Write E-Prescription for {selectedPatient.name.split(' ')[0]}</span>
+                        <ArrowRight className="w-4 h-4 text-teal-200" />
                       </button>
                     </div>
                   </>
@@ -1510,741 +1519,61 @@ export default function Doctors_Dashboard() {
         )}
 
         {activeTab === 'prescription' && selectedPatient && (
-          <div className="space-y-4 flex-1 flex flex-col max-w-[1360px] mx-auto w-full">
-            
-            {/* ── TOP PATIENT CONTEXT & VIEW MODE RIBBON ── */}
-            <div className="bg-white rounded-2xl border border-slate-200 p-4 sm:p-5 shadow-xs flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
-              <div className="flex items-center gap-3.5 min-w-0">
-                <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-teal-700 to-teal-800 text-white flex items-center justify-center text-lg font-bold shadow-xs shrink-0">
-                  ℞
+          <div className="space-y-4 flex-1 flex flex-col max-w-[1000px] mx-auto w-full py-8">
+            <div className="bg-white rounded-3xl border border-slate-200 p-8 shadow-sm text-center space-y-5">
+              <div className="w-16 h-16 rounded-3xl bg-teal-50 border border-teal-100 flex items-center justify-center mx-auto text-teal-800 shadow-xs">
+                <Stethoscope className="w-8 h-8" />
+              </div>
+              <div className="space-y-1">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-teal-800">
+                  Active Consultation Session
+                </span>
+                <h2 className="text-xl font-bold text-slate-900">
+                  E-Prescription Studio: {selectedPatient.name}
+                </h2>
+                <p className="text-xs text-slate-500">
+                  Roll No: <strong className="text-slate-700 font-mono">{selectedPatient.rollNo}</strong> • Age: {selectedPatient.age} yrs • Blood Group: <strong className="text-teal-800">{selectedPatient.bloodGroup}</strong>
+                </p>
+              </div>
+
+              {/* Vitals overview */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 max-w-lg mx-auto bg-slate-50 p-3 rounded-2xl border border-slate-200 text-xs">
+                <div>
+                  <span className="text-slate-400 block text-[10px]">Blood Pressure</span>
+                  <span className="font-bold text-slate-800">{selectedPatient.vitals.bp}</span>
                 </div>
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <h2 className="text-base font-bold text-slate-900 truncate">
-                      E-Prescription Studio: <span className="text-teal-800">{selectedPatient.name}</span>
-                    </h2>
-                    <span className="text-xs font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md">
-                      Roll: {selectedPatient.rollNo}
-                    </span>
-                    <span className="text-xs text-slate-500">
-                      Age: {selectedPatient.age} yrs • Blood: {selectedPatient.bloodGroup}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-3 mt-1 text-xs text-slate-500 flex-wrap">
-                    <span>BP: <strong className="text-slate-800">{selectedPatient.vitals.bp}</strong></span>
-                    <span>Pulse: <strong className="text-slate-800">{selectedPatient.vitals.pulse}</strong></span>
-                    <span>SpO2: <strong className="text-slate-800">{selectedPatient.vitals.spo2}</strong></span>
-                    <span>Temp: <strong className="text-slate-800">{selectedPatient.vitals.temp}</strong></span>
-                    {selectedPatient.allergies.some((a) => a !== 'None declared') ? (
-                      <span className="text-rose-700 font-bold bg-rose-50 px-2 py-0.5 rounded border border-rose-200">
-                        ⚠️ Allergy: {selectedPatient.allergies.join(', ')}
-                      </span>
-                    ) : (
-                      <span className="text-emerald-700 font-semibold bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-                        ✓ NKDA
-                      </span>
-                    )}
-                  </div>
+                <div>
+                  <span className="text-slate-400 block text-[10px]">Pulse Rate</span>
+                  <span className="font-bold text-slate-800">{selectedPatient.vitals.pulse}</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 block text-[10px]">SpO2</span>
+                  <span className="font-bold text-slate-800">{selectedPatient.vitals.spo2}</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 block text-[10px]">Temperature</span>
+                  <span className="font-bold text-slate-800">{selectedPatient.vitals.temp}</span>
                 </div>
               </div>
 
-              {/* View Switcher & Action Buttons */}
-              <div className="flex items-center gap-2 flex-wrap w-full lg:w-auto justify-end">
-                <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs">
-                  <button
-                    type="button"
-                    onClick={() => setRxViewMode('stepper')}
-                    className={cn(
-                      'px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5',
-                      rxViewMode === 'stepper' ? 'bg-white text-teal-900 shadow-2xs' : 'text-slate-500'
-                    )}
-                  >
-                    <Layers className="w-3.5 h-3.5 text-teal-600" />
-                    <span>Guided Steps</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setRxViewMode('desk')}
-                    className={cn(
-                      'px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5',
-                      rxViewMode === 'desk' ? 'bg-white text-teal-900 shadow-2xs' : 'text-slate-500'
-                    )}
-                  >
-                    <SlidersHorizontal className="w-3.5 h-3.5 text-teal-600" />
-                    <span>All-in-One Desk</span>
-                  </button>
-                </div>
-
+              <div className="pt-2 flex items-center justify-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setIsPrescriptionModalOpen(true)}
+                  className="px-6 py-3 rounded-xl bg-teal-800 hover:bg-teal-900 text-white text-xs sm:text-sm font-bold flex items-center gap-2 cursor-pointer shadow-md"
+                >
+                  <Sparkles className="w-4 h-4 text-teal-200" />
+                  <span>Launch Questionnaire Studio</span>
+                </button>
                 <button
                   type="button"
                   onClick={() => setActiveTab('queue')}
-                  className="px-3.5 py-1.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-semibold cursor-pointer"
+                  className="px-4 py-3 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-semibold cursor-pointer"
                 >
-                  ← Back to Queue
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (draftMedicines.length > 0 || draftDiagnosis.trim()) {
-                      if (window.confirm('Reset this consultation draft?')) {
-                        resetPrescriptionDraft()
-                      }
-                    } else {
-                      resetPrescriptionDraft()
-                    }
-                  }}
-                  className="px-3 py-1.5 rounded-xl border border-amber-200 hover:bg-amber-50 text-amber-800 text-xs font-semibold flex items-center gap-1 cursor-pointer"
-                >
-                  <RotateCcw className="w-3.5 h-3.5 text-amber-600" />
-                  <span>Clear</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={handleOpenReview}
-                  disabled={isFinalizing}
-                  className="px-4 py-1.5 rounded-xl bg-teal-700 hover:bg-teal-800 disabled:opacity-50 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-xs"
-                >
-                  <Send className="w-3.5 h-3.5" />
-                  <span>Review & Finalize</span>
+                  Return to Live Queue
                 </button>
               </div>
             </div>
-
-            {/* Error banner */}
-            {serverError && (
-              <div className="p-3 rounded-xl bg-red-50 border border-red-200 text-red-800 text-xs flex items-center justify-between gap-3 shadow-2xs">
-                <span><strong>Validation Notice:</strong> {serverError}</span>
-                <button type="button" onClick={() => setServerError(null)} className="text-red-500 font-bold px-2 py-0.5 cursor-pointer">
-                  ✕
-                </button>
-              </div>
-            )}
-
-            {/* Stepper Tabs */}
-            {rxViewMode === 'stepper' && (
-              <div className="bg-white rounded-2xl p-2 border border-slate-200 shadow-2xs flex items-center justify-between gap-2 overflow-x-auto text-xs">
-                {[
-                  {
-                    key: 'assessment',
-                    num: '1',
-                    label: 'Clinical Assessment & Diagnosis',
-                    completed: Boolean(draftDiagnosis.trim()),
-                  },
-                  {
-                    key: 'medications',
-                    num: '2',
-                    label: `Prescribe Medicines (${draftMedicines.length})`,
-                    completed: draftMedicines.length > 0,
-                  },
-                  {
-                    key: 'review',
-                    num: '3',
-                    label: 'Review & Dispatch',
-                    completed: false,
-                  },
-                ].map((s) => {
-                  const isActive = prescriptionStep === s.key
-                  return (
-                    <button
-                      key={s.key}
-                      type="button"
-                      onClick={() => setPrescriptionStep(s.key)}
-                      className={cn(
-                        'flex-1 min-w-[180px] py-2.5 px-3 rounded-xl text-xs sm:text-sm font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer border',
-                        isActive
-                          ? 'bg-teal-50 text-teal-900 border-teal-300 font-bold shadow-2xs'
-                          : s.completed
-                          ? 'bg-white text-emerald-800 border-emerald-200'
-                          : 'bg-white text-slate-500 border-transparent hover:bg-slate-50'
-                      )}
-                    >
-                      <span
-                        className={cn(
-                          'h-5 w-5 rounded-full flex items-center justify-center text-[10px] font-bold',
-                          isActive ? 'bg-teal-700 text-white' : s.completed ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-600'
-                        )}
-                      >
-                        {s.completed ? '✓' : s.num}
-                      </span>
-                      <span>{s.label}</span>
-                    </button>
-                  )
-                })}
-              </div>
-            )}
-
-            {/* ── STEP 1: CLINICAL DIAGNOSIS & ASSESSMENT ── */}
-            {(rxViewMode === 'desk' || prescriptionStep === 'assessment') && (
-              <div className="bg-white rounded-2xl p-5 sm:p-6 border border-slate-200 shadow-xs space-y-4">
-                <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-                  <div className="flex items-center gap-2">
-                    <ClipboardList className="w-4 h-4 text-teal-700" />
-                    <h3 className="text-sm sm:text-base font-bold text-slate-900">
-                      Step 1: Clinical Diagnosis & Assessment
-                    </h3>
-                  </div>
-                  {rxViewMode === 'stepper' && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (!draftDiagnosis.trim()) {
-                          triggerToast('Please type or select a diagnosis first')
-                        } else {
-                          setPrescriptionStep('medications')
-                        }
-                      }}
-                      className="px-4 py-2 rounded-xl bg-teal-700 hover:bg-teal-800 text-white text-xs sm:text-sm font-bold inline-flex items-center gap-1.5 cursor-pointer shadow-2xs"
-                    >
-                      <span>Next: Add Medications</span>
-                      <ArrowRight className="w-3.5 h-3.5" />
-                    </button>
-                  )}
-                </div>
-
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
-                  <div className="lg:col-span-7 space-y-3.5">
-                    <div className="p-3 bg-teal-50/50 rounded-xl border border-teal-100 text-xs sm:text-sm">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-teal-800 block mb-1">
-                        Intake Chief Complaint (Triage)
-                      </span>
-                      <p className="text-slate-800 font-medium">"{selectedPatient.complaint}"</p>
-                    </div>
-
-                    <div>
-                      <label className="text-xs sm:text-sm font-bold text-slate-800 block mb-1.5">
-                        Doctor's Clinical Diagnosis <span className="text-rose-500">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        value={draftDiagnosis}
-                        onChange={(e) => setDraftDiagnosis(e.target.value)}
-                        placeholder="e.g. Viral URI, Acute Gastritis, Allergic Rhinitis..."
-                        className="w-full text-xs sm:text-sm text-slate-800 bg-white border border-slate-300 rounded-xl p-2.5 outline-hidden focus:border-teal-600 font-medium"
-                      />
-
-                      <div className="flex flex-wrap items-center gap-1.5 mt-2">
-                        <span className="text-[10px] text-slate-400 font-semibold">Common Presets:</span>
-                        {[
-                          'Viral URI',
-                          'Allergic Rhinitis',
-                          'Acute Gastritis',
-                          'Tension Headache',
-                          'Pharyngitis',
-                          'Muscle Sprain',
-                        ].map((sug, i) => (
-                          <button
-                            key={i}
-                            type="button"
-                            onClick={() => setDraftDiagnosis(sug)}
-                            className={cn(
-                              'text-[10px] px-2 py-0.5 rounded-full border transition-colors cursor-pointer',
-                              draftDiagnosis === sug
-                                ? 'bg-teal-700 text-white border-teal-700'
-                                : 'bg-slate-100 text-slate-600 border-slate-200 hover:bg-teal-50'
-                            )}
-                          >
-                            + {sug}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="text-xs sm:text-sm font-bold text-slate-800 block mb-1.5">
-                        Objective Clinical Examination Notes
-                      </label>
-                      <textarea
-                        rows={2}
-                        value={draftClinicalNotes}
-                        onChange={(e) => setDraftClinicalNotes(e.target.value)}
-                        placeholder="Chest clear b/l, throat congestion, vitals stable, afebrile..."
-                        className="w-full text-xs sm:text-sm text-slate-800 bg-white border border-slate-300 rounded-xl p-2.5 outline-hidden focus:border-teal-600"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="lg:col-span-5 space-y-3">
-                    <div>
-                      <label className="text-xs sm:text-sm font-bold text-slate-800 block mb-1">
-                        Dietary & Lifestyle Advice
-                      </label>
-                      <input
-                        type="text"
-                        value={draftDietAdvice}
-                        onChange={(e) => setRxDietAdvice(e.target.value)}
-                        placeholder="Hydration, warm saline gargles..."
-                        className="w-full text-xs text-slate-800 bg-white border border-slate-300 rounded-xl p-2 outline-hidden focus:border-teal-600"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="text-xs sm:text-sm font-bold text-slate-800 block mb-1">
-                        Follow-Up / Review Schedule
-                      </label>
-                      <input
-                        type="text"
-                        value={draftFollowUp}
-                        onChange={(e) => setRxFollowUp(e.target.value)}
-                        placeholder="Review in 3 days if symptoms persist..."
-                        className="w-full text-xs text-slate-800 bg-white border border-slate-300 rounded-xl p-2 outline-hidden focus:border-teal-600"
-                      />
-                    </div>
-
-                    <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/80 space-y-1.5 text-xs">
-                      <span className="text-[11px] font-bold text-slate-700 block">
-                        Past Records on File ({previousPrescriptions.length})
-                      </span>
-                      {previousPrescriptions.length === 0 ? (
-                        <p className="text-[11px] text-slate-400">None on record.</p>
-                      ) : (
-                        <div className="space-y-1.5 max-h-24 overflow-y-auto pr-1">
-                          {previousPrescriptions.map((rx, idx) => (
-                            <div key={idx} className="flex items-center justify-between p-1.5 rounded-lg bg-white border border-slate-200 text-xs">
-                              <span className="font-semibold text-slate-800 truncate mr-2">{rx.name}</span>
-                              <button
-                                type="button"
-                                onClick={() => handleCopyPreviousPrescription(rx)}
-                                className="px-2 py-0.5 rounded bg-teal-50 text-teal-800 text-[10px] font-bold border border-teal-200 shrink-0"
-                              >
-                                Copy
-                              </button>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* ── STEP 2: MEDICATION CATALOG & LIVE DRAFT ── */}
-            {(rxViewMode === 'desk' || prescriptionStep === 'medications') && (
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
-                
-                {/* ── LEFT: FORMULARY & CUSTOM ADDER (Span 6) ── */}
-                <div className="lg:col-span-6 bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-xs space-y-3.5">
-                  <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-                    <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl text-xs font-semibold">
-                      <button
-                        type="button"
-                        onClick={() => setMedAdderTab('formulary')}
-                        className={cn(
-                          'px-3 py-1.5 rounded-lg transition-all cursor-pointer flex items-center gap-1.5',
-                          medAdderTab === 'formulary' ? 'bg-white text-teal-900 shadow-2xs font-bold' : 'text-slate-500'
-                        )}
-                      >
-                        <Sparkles className="w-3.5 h-3.5 text-teal-600" />
-                        <span>Formulary Catalog</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setMedAdderTab('custom')}
-                        className={cn(
-                          'px-3 py-1.5 rounded-lg transition-all cursor-pointer flex items-center gap-1.5',
-                          medAdderTab === 'custom' ? 'bg-white text-teal-900 shadow-2xs font-bold' : 'text-slate-500'
-                        )}
-                      >
-                        <Plus className="w-3.5 h-3.5 text-teal-600" />
-                        <span>Custom Drug</span>
-                      </button>
-                    </div>
-
-                    <span className="text-[11px] text-slate-400">Auto-qty active</span>
-                  </div>
-
-                  {/* Mode 1: Formulary Catalog */}
-                  {medAdderTab === 'formulary' && (
-                    <div className="space-y-3">
-                      <div className="relative">
-                        <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
-                        <input
-                          type="text"
-                          value={formularySearch}
-                          onChange={(e) => setFormularySearch(e.target.value)}
-                          placeholder="Search medicine, salt, or indication..."
-                          className="w-full pl-8 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl outline-hidden focus:border-teal-600 focus:bg-white"
-                        />
-                      </div>
-
-                      <div className="flex items-center gap-1 overflow-x-auto pb-0.5">
-                        {FORMULARY_CATEGORIES.map((cat) => (
-                          <button
-                            key={cat}
-                            type="button"
-                            onClick={() => setSelectedFormularyCategory(cat)}
-                            className={cn(
-                              'px-2.5 py-0.5 rounded-lg text-[10px] font-bold whitespace-nowrap cursor-pointer border',
-                              selectedFormularyCategory === cat
-                                ? 'bg-teal-700 text-white border-teal-700'
-                                : 'bg-slate-50 text-slate-600 border-slate-200'
-                            )}
-                          >
-                            {cat}
-                          </button>
-                        ))}
-                      </div>
-
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-[340px] overflow-y-auto pr-1">
-                        {filteredFormulary.map((drug) => {
-                          const conflict = checkDrugAllergyConflict(drug, selectedPatient?.allergies || [])
-                          return (
-                            <div
-                              key={drug.id}
-                              className={cn(
-                                'p-2.5 rounded-xl border bg-white flex items-center justify-between gap-2 text-xs shadow-2xs',
-                                conflict.hasConflict ? 'border-rose-300 bg-rose-50/30' : 'border-slate-200/90'
-                              )}
-                            >
-                              <div className="min-w-0 flex-1">
-                                <span className="font-bold text-slate-900 truncate block text-xs">
-                                  {drug.name}
-                                </span>
-                                <span className="text-[10px] text-slate-400 block truncate">
-                                  {drug.defaultDosage} • {drug.defaultDuration}
-                                </span>
-                              </div>
-                              <button
-                                type="button"
-                                onClick={() => handleAddFormularyDrug(drug)}
-                                className={cn(
-                                  'px-2.5 py-1 rounded-lg text-[11px] font-bold flex items-center gap-1 shrink-0 cursor-pointer',
-                                  conflict.hasConflict
-                                    ? 'bg-rose-100 text-rose-900'
-                                    : 'bg-teal-50 text-teal-900 border border-teal-200'
-                                )}
-                              >
-                                <Plus className="w-3 h-3" />
-                                <span>Add</span>
-                              </button>
-                            </div>
-                          )
-                        })}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Mode 2: Custom Form */}
-                  {medAdderTab === 'custom' && (
-                    <form onSubmit={handleAddCustomDrug} className="space-y-3 text-xs">
-                      <div>
-                        <label className="text-[11px] font-semibold text-slate-600 block mb-1">
-                          Medicine Name & Strength:
-                        </label>
-                        <input
-                          type="text"
-                          value={customMedName}
-                          onChange={(e) => setCustomMedName(e.target.value)}
-                          placeholder="e.g. Cetirizine 10mg..."
-                          className="w-full text-xs text-slate-800 bg-white border border-slate-300 rounded-xl px-2.5 py-2 outline-hidden focus:border-teal-600"
-                        />
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-3">
-                        <div>
-                          <label className="text-[11px] font-semibold text-slate-600 block mb-1">
-                            Frequency Schedule:
-                          </label>
-                          <div className="flex items-center gap-1">
-                            <button
-                              type="button"
-                              onClick={() => setCustomMorning((p) => !p)}
-                              className={cn(
-                                'flex-1 py-1 rounded-lg text-xs font-bold border cursor-pointer',
-                                customMorning ? 'bg-amber-100 text-amber-900 border-amber-300' : 'bg-white text-slate-400 border-slate-200'
-                              )}
-                            >
-                              M
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setCustomAfternoon((p) => !p)}
-                              className={cn(
-                                'flex-1 py-1 rounded-lg text-xs font-bold border cursor-pointer',
-                                customAfternoon ? 'bg-amber-100 text-amber-900 border-amber-300' : 'bg-white text-slate-400 border-slate-200'
-                              )}
-                            >
-                              N
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setCustomNight((p) => !p)}
-                              className={cn(
-                                'flex-1 py-1 rounded-lg text-xs font-bold border cursor-pointer',
-                                customNight ? 'bg-indigo-100 text-indigo-900 border-indigo-300' : 'bg-white text-slate-400 border-slate-200'
-                              )}
-                            >
-                              N
-                            </button>
-                          </div>
-                        </div>
-
-                        <div>
-                          <label className="text-[11px] font-semibold text-slate-600 block mb-1">
-                            Duration:
-                          </label>
-                          <select
-                            value={customDuration}
-                            onChange={(e) => setCustomDuration(e.target.value)}
-                            className="w-full text-xs text-slate-800 bg-white border border-slate-300 rounded-xl px-2 py-1.5 outline-hidden"
-                          >
-                            <option value="3 days">3 days</option>
-                            <option value="5 days">5 days</option>
-                            <option value="7 days">7 days</option>
-                            <option value="10 days">10 days</option>
-                            <option value="15 days">15 days</option>
-                          </select>
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-3">
-                        <div>
-                          <label className="text-[11px] font-semibold text-slate-600 block mb-1">
-                            Diet Instruction:
-                          </label>
-                          <select
-                            value={customInstruction}
-                            onChange={(e) => setCustomInstruction(e.target.value)}
-                            className="w-full text-xs text-slate-800 bg-white border border-slate-300 rounded-xl px-2 py-1.5 outline-hidden"
-                          >
-                            <option value="after food">After meals</option>
-                            <option value="before food">Before meals</option>
-                            <option value="with food">With meals</option>
-                            <option value="SOS as needed">SOS as needed</option>
-                          </select>
-                        </div>
-                        <div>
-                          <label className="text-[11px] font-semibold text-slate-600 block mb-1">
-                            Quantity Override:
-                          </label>
-                          <input
-                            type="number"
-                            min="1"
-                            value={customManualQty}
-                            onChange={(e) => setCustomManualQty(e.target.value)}
-                            placeholder="Auto"
-                            className="w-full text-xs text-slate-800 bg-white border border-slate-300 rounded-xl px-2 py-1.5 outline-hidden text-center font-bold"
-                          />
-                        </div>
-                      </div>
-
-                      <button
-                        type="submit"
-                        className="w-full py-2 bg-teal-700 hover:bg-teal-800 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
-                      >
-                        <Plus className="w-4 h-4" />
-                        <span>Add Medication to Draft</span>
-                      </button>
-                    </form>
-                  )}
-                </div>
-
-                {/* ── RIGHT: LIVE DRAFT PRESCRIPTION SHEET (Span 6) ── */}
-                <div className="lg:col-span-6 bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-xs space-y-3.5">
-                  <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-                    <div className="flex items-center gap-2">
-                      <h3 className="text-sm font-bold text-slate-900">
-                        Draft Rx Items ({draftMedicines.length})
-                      </h3>
-                      {draftMedicines.length > 0 && (
-                        <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
-                          Ready for Review
-                        </span>
-                      )}
-                    </div>
-
-                    {draftMedicines.length > 0 && (
-                      <button
-                        type="button"
-                        onClick={() => setDraftMedicines([])}
-                        className="text-[11px] text-slate-400 hover:text-rose-600 cursor-pointer"
-                      >
-                        Clear All
-                      </button>
-                    )}
-                  </div>
-
-                  {draftMedicines.length === 0 ? (
-                    <div className="py-12 text-center border-2 border-dashed border-slate-200/90 rounded-2xl text-slate-400 text-xs space-y-1.5">
-                      <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center mx-auto text-slate-400">
-                        <Pill className="w-5 h-5" />
-                      </div>
-                      <p className="font-bold text-slate-700 text-sm">Prescription is Blank</p>
-                      <p className="text-[11px] text-slate-400">Add medicines from the catalog on the left.</p>
-                    </div>
-                  ) : (
-                    <div className="space-y-2 max-h-[340px] overflow-y-auto pr-1">
-                      {draftMedicines.map((med, idx) => {
-                        const allergyCheck = checkDrugAllergyConflict(med, selectedPatient?.allergies || [])
-                        return (
-                          <div
-                            key={med.id || idx}
-                            className={cn(
-                              'p-3 rounded-xl border bg-white flex items-center justify-between gap-3 text-xs shadow-2xs',
-                              allergyCheck.hasConflict ? 'border-rose-300 bg-rose-50/30' : 'border-slate-200'
-                            )}
-                          >
-                            <div className="min-w-0 flex-1">
-                              <div className="flex items-center gap-1.5">
-                                <span className="font-bold text-slate-900 text-xs sm:text-sm truncate">{med.name}</span>
-                                <span className="px-1.5 py-0.2 rounded bg-teal-50 text-teal-800 font-bold text-[10px]">
-                                  {med.dosage}
-                                </span>
-                              </div>
-                              <span className="text-[11px] text-slate-500 block truncate mt-0.5">
-                                {med.instruction} • Qty: <strong className="text-slate-800">{med.qty}</strong> {med.unit || 'u'}
-                              </span>
-                            </div>
-
-                            <div className="flex items-center gap-2 shrink-0">
-                              <select
-                                value={med.duration}
-                                onChange={(e) => handleDurationChange(idx, e.target.value)}
-                                className="text-xs bg-slate-50 border border-slate-300 rounded-lg px-2 py-1 outline-hidden"
-                              >
-                                <option value="3 days">3d</option>
-                                <option value="5 days">5d</option>
-                                <option value="7 days">7d</option>
-                                <option value="10 days">10d</option>
-                                <option value="15 days">15d</option>
-                              </select>
-
-                              <button
-                                type="button"
-                                onClick={() => handleRemoveDraftMedicine(idx)}
-                                className="text-slate-400 hover:text-rose-600 p-1 rounded-lg cursor-pointer"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            </div>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  )}
-
-                  <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
-                    <span className="text-slate-500">Total: <strong>{draftMedicines.length}</strong> items scheduled</span>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (draftMedicines.length === 0) {
-                          triggerToast('Please add at least one medicine item')
-                        } else {
-                          if (rxViewMode === 'stepper') {
-                            setPrescriptionStep('review')
-                          } else {
-                            handleOpenReview()
-                          }
-                        }
-                      }}
-                      className="px-4 py-2 rounded-xl bg-teal-700 hover:bg-teal-800 text-white text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer shadow-xs"
-                    >
-                      <span>Review & Sign</span>
-                      <ArrowRight className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* ── STEP 3: PRE-DISPATCH FINAL REVIEW SCREEN ── */}
-            {rxViewMode === 'stepper' && prescriptionStep === 'review' && (
-              <div className="bg-white rounded-2xl p-6 sm:p-7 border border-slate-200 shadow-xs space-y-5 max-w-4xl mx-auto w-full">
-                <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-                  <div className="flex items-center gap-2">
-                    <CheckCircle className="w-5 h-5 text-teal-700" />
-                    <h3 className="text-base font-bold text-slate-900">
-                      Step 3: Prescription Review & Sign-Off
-                    </h3>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setPrescriptionStep('medications')}
-                    className="px-3.5 py-1.5 rounded-xl border border-slate-200 text-slate-700 text-xs font-semibold cursor-pointer"
-                  >
-                    ← Edit Medicines
-                  </button>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 bg-slate-50 border border-slate-200 rounded-xl text-xs sm:text-sm">
-                  <div>
-                    <span className="text-[10px] uppercase font-bold text-slate-400 block mb-0.5">Patient Details</span>
-                    <p className="font-bold text-slate-900">{selectedPatient.name}</p>
-                    <p className="text-slate-600 text-xs">Roll: {selectedPatient.rollNo} • Age: {selectedPatient.age} • Blood: {selectedPatient.bloodGroup}</p>
-                  </div>
-                  <div>
-                    <span className="text-[10px] uppercase font-bold text-slate-400 block mb-0.5">Prescribing Doctor</span>
-                    <p className="font-bold text-teal-900">{doctorProfile.name}</p>
-                    <p className="text-slate-600 text-xs">Room {doctorProfile.room} • Reg: {doctorProfile.regNo}</p>
-                  </div>
-                </div>
-
-                <div className="p-3.5 bg-teal-50/50 rounded-xl border border-teal-200 text-xs sm:text-sm space-y-1">
-                  <span className="text-[10px] uppercase font-bold text-teal-800 block">Clinical Diagnosis</span>
-                  <p className="font-bold text-teal-950 text-sm sm:text-base">{draftDiagnosis || 'Clinical Consultation'}</p>
-                  {draftDietAdvice && <p className="text-slate-600 text-xs mt-1">Diet / Advice: {draftDietAdvice}</p>}
-                </div>
-
-                <div className="space-y-2">
-                  <span className="text-xs sm:text-sm font-bold text-slate-800 block">
-                    Prescribed Medicines ({draftMedicines.length})
-                  </span>
-                  <div className="border border-slate-200 rounded-xl overflow-hidden text-xs sm:text-sm">
-                    <table className="w-full text-left">
-                      <thead className="bg-slate-50 text-slate-600 text-[10px] uppercase font-bold border-b border-slate-200">
-                        <tr>
-                          <th className="py-2.5 px-3">Medicine</th>
-                          <th className="py-2.5 px-3">Schedule</th>
-                          <th className="py-2.5 px-3">Duration</th>
-                          <th className="py-2.5 px-3 text-right">Quantity</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100">
-                        {draftMedicines.map((m, idx) => (
-                          <tr key={idx}>
-                            <td className="py-2.5 px-3 font-bold text-slate-900">{m.name}</td>
-                            <td className="py-2.5 px-3 font-mono text-teal-700 font-bold">{m.dosage}</td>
-                            <td className="py-2.5 px-3 text-slate-600">{m.duration}</td>
-                            <td className="py-2.5 px-3 text-right font-bold text-slate-900">{m.qty}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-
-                <div className="pt-4 border-t border-slate-100 flex items-center justify-between gap-3">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      generatePrescriptionPdf({
-                        prescription: { diagnosis: draftDiagnosis || 'OPD Consultation' },
-                        doctor: doctorProfile,
-                        patient: selectedPatient,
-                        medicines: draftMedicines,
-                        autoDownload: false,
-                        openPrint: true,
-                      })
-                    }}
-                    className="px-4 py-2 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
-                  >
-                    <Printer className="w-3.5 h-3.5 text-slate-500" />
-                    <span>Print Draft</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={handleOpenReview}
-                    disabled={isFinalizing}
-                    className="px-5 py-2.5 rounded-xl bg-teal-700 hover:bg-teal-800 disabled:opacity-50 text-white text-xs sm:text-sm font-bold flex items-center gap-2 cursor-pointer shadow-xs"
-                  >
-                    <Send className="w-4 h-4" />
-                    <span>Confirm & Dispatch to Dispensary</span>
-                  </button>
-                </div>
-              </div>
-            )}
           </div>
         )}
 
@@ -2339,121 +1668,20 @@ export default function Doctors_Dashboard() {
           </div>
         )}
 
-        {/* ── REVIEW MODAL ── */}
-        <AnimatePresence>
-          {showReviewModal && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-              <motion.div
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.95 }}
-                className="w-full max-w-2xl bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[85vh]"
-              >
-                <div className="px-6 py-4 bg-gradient-to-r from-teal-800 to-teal-700 text-white flex items-center justify-between">
-                  <div>
-                    <h3 className="text-sm font-bold">Review & Finalize Prescription</h3>
-                    <p className="text-xs text-teal-100">Verify clinical details before digital dispatch</p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => !isFinalizing && setShowReviewModal(false)}
-                    disabled={isFinalizing}
-                    className="p-1 rounded text-white cursor-pointer"
-                  >
-                    ✕
-                  </button>
-                </div>
-
-                <div className="p-5 space-y-4 overflow-y-auto text-xs sm:text-sm">
-                  {serverError && (
-                    <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded-xl flex items-center gap-2">
-                      <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
-                      <span>{serverError}</span>
-                    </div>
-                  )}
-
-                  <div className="grid grid-cols-2 gap-3 p-3 bg-slate-50 border border-slate-200 rounded-xl">
-                    <div>
-                      <span className="text-[10px] uppercase font-bold text-slate-400 block">Student</span>
-                      <span className="font-bold text-slate-800">{selectedPatient?.name}</span>
-                      <p className="text-slate-500 text-xs">Roll: {selectedPatient?.rollNo} • Blood: {selectedPatient?.bloodGroup}</p>
-                    </div>
-                    <div>
-                      <span className="text-[10px] uppercase font-bold text-slate-400 block">Prescribing Doctor</span>
-                      <span className="font-bold text-teal-800">{doctorProfile.name}</span>
-                      <p className="text-slate-500 text-xs">Room {doctorProfile.room}</p>
-                    </div>
-                  </div>
-
-                  <div className="space-y-1">
-                    <span className="text-[10px] uppercase font-bold text-slate-400 block">Diagnosis</span>
-                    <div className="p-2.5 rounded-lg bg-teal-50/50 border border-teal-200 text-teal-900 font-bold">
-                      {draftDiagnosis}
-                    </div>
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <span className="text-[10px] uppercase font-bold text-slate-400 block">
-                      Medicines ({draftMedicines.length})
-                    </span>
-                    <div className="border border-slate-200 rounded-xl overflow-hidden text-xs">
-                      <table className="w-full text-left">
-                        <thead className="bg-slate-100/80 text-slate-600 text-[10px] uppercase font-bold">
-                          <tr>
-                            <th className="py-2 px-3">Medicine</th>
-                            <th className="py-2 px-3">Dosage</th>
-                            <th className="py-2 px-3">Duration</th>
-                            <th className="py-2 px-3 text-right">Qty</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100">
-                          {draftMedicines.map((m, idx) => (
-                            <tr key={idx}>
-                              <td className="py-2 px-3 font-semibold text-slate-900">{m.name}</td>
-                              <td className="py-2 px-3 font-mono text-teal-700 font-bold">{m.dosage}</td>
-                              <td className="py-2 px-3 text-slate-600">{m.duration}</td>
-                              <td className="py-2 px-3 text-right font-bold text-slate-900">{m.qty}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="px-6 py-3.5 bg-slate-50 border-t border-slate-200 flex items-center justify-between gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setShowReviewModal(false)}
-                    disabled={isFinalizing}
-                    className="px-4 py-2 rounded-xl border border-slate-200 text-slate-700 font-semibold cursor-pointer text-xs"
-                  >
-                    ← Edit
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={handleCompleteAndDispatch}
-                    disabled={isFinalizing}
-                    className="px-5 py-2 rounded-xl bg-teal-700 hover:bg-teal-800 disabled:opacity-50 text-white font-bold flex items-center gap-2 cursor-pointer text-xs shadow-xs"
-                  >
-                    {isFinalizing ? (
-                      <>
-                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                        <span>Dispatching...</span>
-                      </>
-                    ) : (
-                      <>
-                        <Check className="w-3.5 h-3.5" />
-                        <span>Confirm & Dispatch</span>
-                      </>
-                    )}
-                  </button>
-                </div>
-              </motion.div>
-            </div>
-          )}
-        </AnimatePresence>
+        {/* ── IMMERSIVE E-PRESCRIPTION QUESTIONNAIRE MODAL ── */}
+        <PrescriptionQuestionnaireModal
+          isOpen={isPrescriptionModalOpen}
+          onClose={() => {
+            setIsPrescriptionModalOpen(false)
+            if (activeTab === 'prescription') {
+              setActiveTab('queue')
+            }
+          }}
+          patient={selectedPatient}
+          doctor={doctorProfile}
+          onFinalizePrescription={handleCompleteAndDispatch}
+          isFinalizing={isFinalizing}
+        />
 
         {/* ── SUCCESS MODAL ── */}
         <AnimatePresence>
