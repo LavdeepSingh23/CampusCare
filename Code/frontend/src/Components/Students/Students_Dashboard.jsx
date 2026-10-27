@@ -38,6 +38,7 @@ import {
   RotateCcw,
   Sparkles,
   Info,
+  Building2,
 } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import StudentDock from '../ui/dock'
@@ -2251,6 +2252,7 @@ function HelpView({ emergencyDirectory, personalContacts, onAddContact }) {
 }
 
 function AccountView({ profile, profileCompletion, logout, onEditProfile }) {
+  const p = profile || {}
   const isComplete = profileCompletion?.isComplete
   const percentage = profileCompletion?.percentage ?? 100
 
@@ -2325,33 +2327,33 @@ function AccountView({ profile, profileCompletion, logout, onEditProfile }) {
       >
         <div className="flex items-center gap-3.5 pb-4 border-b border-slate-100">
           <span className="w-14 h-14 rounded-2xl bg-teal-800 text-white flex items-center justify-center text-lg font-bold shadow-xs">
-            {getInitials(profile.name)}
+            {getInitials(p.name)}
           </span>
           <div className="min-w-0">
-            <p className="cc-display text-lg font-bold text-slate-900 truncate">{profile.name}</p>
-            <p className="text-xs text-slate-500 font-mono">Roll: {profile.rollNumber}</p>
+            <p className="cc-display text-lg font-bold text-slate-900 truncate">{p.name}</p>
+            <p className="text-xs text-slate-500 font-mono">Roll: {p.rollNumber}</p>
             <span className="inline-block mt-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200 uppercase tracking-wider">
-              {profile.status || 'ACTIVE'}
+              {p.status || 'ACTIVE'}
             </span>
           </div>
         </div>
 
         <div className="divide-y divide-slate-100">
           <InfoRow icon={IdCard} label="University Roll Number">
-            {profile.rollNumber}
+            {p.rollNumber}
           </InfoRow>
           <InfoRow icon={Mail} label="Institutional Email">
-            {profile.email || 'Not on file'}
+            {p.email || 'Not on file'}
           </InfoRow>
           <InfoRow icon={GraduationCap} label="Program & Degree">
-            {profile.course || 'B.Tech / B.E.'}
+            {p.course || 'B.Tech / B.E.'}
           </InfoRow>
           <InfoRow icon={Building2} label="Branch / Department">
-            {profile.branch || profile.department || 'Engineering'}
+            {p.branch || p.department || 'Engineering'}
           </InfoRow>
-          {profile.semester && (
+          {p.semester && (
             <InfoRow icon={CalendarDays} label="Current Academic Semester">
-              Semester {profile.semester}
+              Semester {p.semester}
             </InfoRow>
           )}
         </div>
@@ -2376,21 +2378,21 @@ function AccountView({ profile, profileCompletion, logout, onEditProfile }) {
       >
         <div className="divide-y divide-slate-100">
           <InfoRow icon={Phone} label="Personal Phone Number">
-            {profile.contact || 'Not registered'}
+            {p.contact || 'Not registered'}
           </InfoRow>
           <InfoRow icon={Droplet} label="Blood Group">
-            <span className="font-bold text-slate-900">{profile.bloodGroup || 'Not reported'}</span>
+            <span className="font-bold text-slate-900">{p.bloodGroup || 'Not reported'}</span>
           </InfoRow>
           <InfoRow icon={CalendarDays} label="Date of Birth">
-            {profile.dateOfBirth || 'Not registered'}
+            {p.dateOfBirth || 'Not registered'}
           </InfoRow>
           <InfoRow icon={User} label="Gender Identity">
-            {profile.sex || 'Not registered'}
+            {p.sex || 'Not registered'}
           </InfoRow>
-          {profile.emergencyContact && (
-            <InfoRow icon={Phone} label={`Primary Emergency Contact (${profile.emergencyContact.relationship || 'Guardian'})`}>
-              <span className="font-semibold text-slate-900">{profile.emergencyContact.name}</span>
-              <span className="block text-xs text-slate-500 font-mono mt-0.5">{profile.emergencyContact.phoneNumber}</span>
+          {p.emergencyContact && (
+            <InfoRow icon={Phone} label={`Primary Emergency Contact (${p.emergencyContact.relationship || 'Guardian'})`}>
+              <span className="font-semibold text-slate-900">{p.emergencyContact.name}</span>
+              <span className="block text-xs text-slate-500 font-mono mt-0.5">{p.emergencyContact.phoneNumber}</span>
             </InfoRow>
           )}
         </div>
