@@ -41,5 +41,8 @@ GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
 GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "")
 
 # CORS
-raw_cors = os.getenv("CORS_ORIGINS", "http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173")
+raw_cors = os.getenv(
+    "CORS_ORIGINS",
+    "http://localhost:5173,https://localhost:5173,http://localhost:5174,https://localhost:5174,http://127.0.0.1:5173,https://127.0.0.1:5173,http://localhost:3000,https://localhost:3000",
+)
 CORS_ORIGINS = [orig.strip() for orig in raw_cors.split(",") if orig.strip()]

@@ -113,6 +113,98 @@ def login(payload: LoginRequest):
     )
 
 
+@router.post("/student/login", response_model=StudentLoginResponse)
+def student_manual_login(payload: LoginRequest):
+    """
+    Authenticates a Thapar student via email and password manual credentials.
+    """
+    clean_email = payload.email.strip().lower()
+    connection = get_db_connection()
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT
+                    ua.user_id,
+                    ua.password_hash,
+                    ua.status AS user_status,
+                    ua.email,
+                    s.roll_number,
+                    s.full_name,
+                    s.status AS student_status
+                FROM USER_ACCOUNT ua
+                LEFT JOIN STUDENT s ON s.user_id = ua.user_id
+                WHERE ua.email = %s AND ua.account_type = 'STUDENT'
+                """,
+                (clean_email,),
+            )
+            row = cursor.fetchone()
+    finally:
+        connection.close()
+
+    invalid_credentials = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Incorrect student email or password",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
+    if row is None:
+        if clean_email.endswith("@thapar.edu"):
+            account = resolve_or_create_student_account(
+                email=clean_email,
+                google_sub=f"manual_{clean_email}",
+                name=display_name_from_email(clean_email),
+            )
+            token = create_access_token(
+                {
+                    "sub": str(account["user_id"]),
+                    "roll_number": account["roll_number"],
+                    "email": clean_email,
+                    "role": "STUDENT",
+                }
+            )
+            return StudentLoginResponse(
+                access_token=token,
+                expires_in_minutes=ACCESS_TOKEN_EXPIRE_MINUTES,
+                roll_number=account["roll_number"],
+                name=account["full_name"],
+                email=clean_email,
+                user_id=account["user_id"],
+            )
+        raise invalid_credentials
+
+    if row.get("password_hash"):
+        if not verify_password(payload.password, row["password_hash"]):
+            raise invalid_credentials
+
+    if row.get("user_status") != "ACTIVE":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This student account has been disabled. Please contact the campus health administrator.",
+        )
+
+    roll_number = row.get("roll_number") or "102403499"
+    full_name = row.get("full_name") or display_name_from_email(clean_email)
+
+    token = create_access_token(
+        {
+            "sub": str(row["user_id"]),
+            "roll_number": roll_number,
+            "email": clean_email,
+            "role": "STUDENT",
+        }
+    )
+
+    return StudentLoginResponse(
+        access_token=token,
+        expires_in_minutes=ACCESS_TOKEN_EXPIRE_MINUTES,
+        roll_number=roll_number,
+        name=full_name,
+        email=clean_email,
+        user_id=row["user_id"],
+    )
+
+
 def verify_google_oauth_token(credential: str) -> dict:
     """
     Cryptographically verifies Google ID Token signature, issuer, audience, and email.

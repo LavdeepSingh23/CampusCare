@@ -5,7 +5,6 @@ import {
   Eye,
   EyeOff,
   Stethoscope,
-  Building2,
   ArrowLeft,
   CheckCircle2,
   AlertCircle,
@@ -15,11 +14,9 @@ import {
   UserCheck,
   Clock,
   ShieldAlert,
-  AlertTriangle,
   RotateCcw,
 } from 'lucide-react'
 import tiMark from '../../assets/ti-mark.png'
-import campusCareLogo from '../../assets/campuscare-logo.png'
 
 // --- HELPER COMPONENTS (ICONS) ---
 
@@ -76,6 +73,7 @@ export default function Login({ defaultMode }) {
   const {
     login,
     loginReceptionist,
+    loginStudent,
     loginStudentGoogle,
     error,
     setError,
@@ -99,10 +97,16 @@ export default function Login({ defaultMode }) {
   const [keepSignedIn, setKeepSignedIn] = useState(false)
 
   // Receptionist Portal State
-  const [receptionEmail, setReceptionEmail] = useState('reception@thapar.edu')
-  const [receptionPassword, setReceptionPassword] = useState('reception123')
+  const [receptionEmail, setReceptionEmail] = useState('')
+  const [receptionPassword, setReceptionPassword] = useState('')
   const [showReceptionPassword, setShowReceptionPassword] = useState(false)
   const [receptionKeepSignedIn, setReceptionKeepSignedIn] = useState(false)
+
+  // Student Portal State (Manual entries)
+  const [studentEmail, setStudentEmail] = useState('')
+  const [studentPassword, setStudentPassword] = useState('')
+  const [showStudentPassword, setShowStudentPassword] = useState(false)
+  const [studentKeepSignedIn, setStudentKeepSignedIn] = useState(false)
 
   // Google Student Authorization State
   const [googleError, setGoogleError] = useState('')
@@ -191,16 +195,16 @@ export default function Login({ defaultMode }) {
     }
   }
 
-  function handleAutoFillReceptionist() {
-    setReceptionEmail('reception@thapar.edu')
-    setReceptionPassword('reception123')
+  async function handleStudentSubmit(e) {
+    e.preventDefault()
     setError('')
-  }
-
-  function handleAutoFillDoctor() {
-    setEmail('dr.kapoor@thapar.edu')
-    setPassword('password123')
-    setError('')
+    setGoogleError('')
+    setUnauthorizedDomain('')
+    const success = await loginStudent(studentEmail, studentPassword)
+    if (success) {
+      setSessionExpired(false)
+      navigate('/student_dashboard')
+    }
   }
 
   async function handleGoogleCredentialResponse(response) {
@@ -267,17 +271,6 @@ export default function Login({ defaultMode }) {
     }
   }
 
-  function handleStudentSubmit(e) {
-    e.preventDefault()
-    const trimmed = rollNumber.trim().toUpperCase()
-    if (!trimmed) {
-      setRollError('Enter your roll number to continue.')
-      return
-    }
-    setRollError('')
-    navigate(`/student_dashboard/${trimmed}`)
-  }
-
   return (
     <div className="min-h-screen w-full flex flex-col lg:flex-row bg-white">
       {/* ── Left Column: Sign-in Form ── */}
@@ -316,12 +309,12 @@ export default function Login({ defaultMode }) {
               <h1 className="text-xl sm:text-3xl lg:text-4xl font-bold tracking-tight text-slate-900">
                 Welcome
               </h1>
-              <p className="mt-1 text-[11px] sm:text-xs md:text-sm text-slate-500">
+              <p className="mt-1 text-xs sm:text-sm text-slate-500">
                 {mode === 'doctor'
-                  ? "Sign in to CampusCare's Doctor & Medical Staff Console"
+                  ? 'Sign in to the Doctor Portal'
                   : mode === 'receptionist'
-                  ? "Sign in to CampusCare's Front Desk & Reception Console"
-                  : 'Look up your live prescriptions and medical history'}
+                  ? 'Sign in to the Receptionist Portal'
+                  : 'Sign in to the Student Portal'}
               </p>
             </div>
 
@@ -387,14 +380,14 @@ export default function Login({ defaultMode }) {
                 <div>
                   <p className="font-bold text-amber-950">Session Expired</p>
                   <p className="mt-0.5 text-amber-800 leading-relaxed">
-                    Your previous session has expired. For your medical privacy, please authenticate again with your institutional credentials.
+                    Your previous session has expired. Please authenticate again to continue.
                   </p>
                 </div>
               </div>
             )}
 
             {/* Error Message */}
-            {(mode === 'doctor' || mode === 'receptionist') && error && (
+            {error && (
               <div className="bg-red-50 border border-red-200 rounded-2xl px-4 py-3 text-xs text-red-700 font-medium">
                 {error}
               </div>
@@ -403,39 +396,9 @@ export default function Login({ defaultMode }) {
             {/* ── RECEPTIONIST FORM ── */}
             {mode === 'receptionist' && (
               <form className="space-y-4" onSubmit={handleReceptionistSubmit}>
-                {/* Institutional Badge */}
-                <div className="rounded-2xl border border-teal-500/25 bg-teal-50/70 p-3.5 flex items-start gap-3">
-                  <div className="p-2 rounded-xl bg-teal-800 text-white shrink-0 mt-0.5">
-                    <UserCheck className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <h3 className="text-xs font-semibold text-teal-950">
-                      Front Desk & Dispensary Terminal
-                    </h3>
-                    <p className="text-[11px] text-teal-800/80 leading-relaxed mt-0.5">
-                      TIET Health Centre patient intake, live OPD queue management, and RFID dispensing.
-                    </p>
-                  </div>
-                </div>
-
-                {/* Dummy Credential Quick Pill */}
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 rounded-2xl bg-slate-50 border border-slate-200 text-xs">
-                  <div className="leading-tight">
-                    <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">Demo Credentials</span>
-                    <span className="font-mono text-slate-700 text-[11px] sm:text-xs font-semibold break-all">reception@thapar.edu • reception123</span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={handleAutoFillReceptionist}
-                    className="self-start sm:self-auto px-3 py-1.5 text-xs font-semibold rounded-xl bg-teal-50 text-teal-700 hover:bg-teal-100 border border-teal-200/70 transition-colors cursor-pointer shadow-2xs"
-                  >
-                    Auto-fill
-                  </button>
-                </div>
-
                 <div>
                   <label className="text-xs font-semibold text-slate-600 mb-1.5 block">
-                    Receptionist / Front Desk Email
+                    Email address
                   </label>
                   <GlassInputWrapper>
                     <input
@@ -449,9 +412,6 @@ export default function Login({ defaultMode }) {
                       className="w-full bg-transparent text-xs sm:text-sm p-3 sm:p-4 rounded-xl sm:rounded-2xl focus:outline-none text-slate-900 placeholder:text-slate-400"
                     />
                   </GlassInputWrapper>
-                  <p className="text-[11px] text-slate-400 mt-1">
-                    Front desk console for student intake and dispensary management.
-                  </p>
                 </div>
 
                 <div>
@@ -466,7 +426,7 @@ export default function Login({ defaultMode }) {
                         required
                         value={receptionPassword}
                         onChange={(e) => setReceptionPassword(e.target.value)}
-                        placeholder="Enter reception security password"
+                        placeholder="Enter your password"
                         className="w-full bg-transparent text-xs sm:text-sm p-3 sm:p-4 pr-12 rounded-xl sm:rounded-2xl focus:outline-none text-slate-900 placeholder:text-slate-400"
                       />
                       <button
@@ -508,7 +468,7 @@ export default function Login({ defaultMode }) {
                   disabled={loading}
                   className="w-full rounded-xl sm:rounded-2xl bg-teal-800 py-2.5 sm:py-3.5 font-semibold text-white hover:bg-teal-900 disabled:bg-slate-400 transition-all cursor-pointer shadow-md hover:scale-[1.01] active:scale-[0.99] text-xs sm:text-sm mt-2"
                 >
-                  {loading ? 'Authenticating…' : 'Sign In as Receptionist'}
+                  {loading ? 'Signing in…' : 'Sign In as Receptionist'}
                 </button>
               </form>
             )}
@@ -516,39 +476,9 @@ export default function Login({ defaultMode }) {
             {/* ── DOCTOR FORM ── */}
             {mode === 'doctor' && (
               <form className="space-y-4" onSubmit={handleSubmit}>
-                {/* Institutional Badge */}
-                <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-3.5 flex items-start gap-3">
-                  <div className="p-2 rounded-xl bg-slate-900 text-white shrink-0 mt-0.5">
-                    <Stethoscope className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <h3 className="text-xs font-semibold text-slate-900">
-                      Doctor & Clinical Staff Console
-                    </h3>
-                    <p className="text-[11px] text-slate-500 leading-relaxed mt-0.5">
-                      TIET Health Centre patient consultations, electronic health records, and prescription dispatch.
-                    </p>
-                  </div>
-                </div>
-
-                {/* Dummy Credential Quick Pill */}
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 rounded-2xl bg-slate-50 border border-slate-200 text-xs">
-                  <div className="leading-tight">
-                    <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">Demo Credentials</span>
-                    <span className="font-mono text-slate-700 text-[11px] sm:text-xs font-semibold break-all">dr.kapoor@thapar.edu • password123</span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={handleAutoFillDoctor}
-                    className="self-start sm:self-auto px-3 py-1.5 text-xs font-semibold rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-800 transition-colors cursor-pointer shadow-2xs"
-                  >
-                    Auto-fill
-                  </button>
-                </div>
-
                 <div>
                   <label className="text-xs font-semibold text-slate-600 mb-1.5 block">
-                    Doctor / Staff Email Address
+                    Email address
                   </label>
                   <GlassInputWrapper>
                     <input
@@ -558,13 +488,10 @@ export default function Login({ defaultMode }) {
                       autoFocus
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
-                      placeholder="dr.kapoor@campuscare.edu"
+                      placeholder="doctor@thapar.edu"
                       className="w-full bg-transparent text-xs sm:text-sm p-3 sm:p-4 rounded-xl sm:rounded-2xl focus:outline-none text-slate-900 placeholder:text-slate-400"
                     />
                   </GlassInputWrapper>
-                  <p className="text-[11px] text-slate-400 mt-1">
-                    Medical console access for authorized doctors and clinical staff.
-                  </p>
                 </div>
 
                 <div>
@@ -579,7 +506,7 @@ export default function Login({ defaultMode }) {
                         required
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
-                        placeholder="Enter your security password"
+                        placeholder="Enter your password"
                         className="w-full bg-transparent text-xs sm:text-sm p-3 sm:p-4 pr-12 rounded-xl sm:rounded-2xl focus:outline-none text-slate-900 placeholder:text-slate-400"
                       />
                       <button
@@ -626,24 +553,9 @@ export default function Login({ defaultMode }) {
               </form>
             )}
 
-            {/* ── STUDENT FORM (GOOGLE WORKSPACE AUTHORIZATION) ── */}
+            {/* ── STUDENT FORM (MANUAL ENTRIES & GOOGLE AUTH) ── */}
             {mode === 'student' && (
-              <div className="space-y-4">
-                {/* Institutional Badge */}
-                <div className="rounded-2xl border border-teal-500/25 bg-teal-50/70 p-3.5 flex items-start gap-3">
-                  <div className="p-2 rounded-xl bg-teal-800 text-white shrink-0 mt-0.5">
-                    <GraduationCap className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <h3 className="text-xs font-semibold text-teal-950">
-                      TIET Student Single Sign-On
-                    </h3>
-                    <p className="text-[11px] text-teal-800/80 leading-relaxed mt-0.5">
-                      Log in with your official Thapar University Google account to view prescriptions, medical history, and OPD queue telemetry.
-                    </p>
-                  </div>
-                </div>
-
+              <form className="space-y-4" onSubmit={handleStudentSubmit}>
                 {/* 1. LOADING STATE */}
                 {googleLoading && (
                   <div className="rounded-2xl border border-teal-300 bg-teal-50/90 p-4 flex items-center gap-3 animate-pulse shadow-xs">
@@ -692,17 +604,6 @@ export default function Login({ defaultMode }) {
                       >
                         Try @thapar.edu Account
                       </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setUnauthorizedDomain('')
-                          setGoogleError('')
-                          setShowSandboxModal(true)
-                        }}
-                        className="px-3 py-1.5 rounded-xl bg-white border border-rose-300 text-rose-800 hover:bg-rose-100 font-semibold text-xs transition-colors cursor-pointer"
-                      >
-                        Dev Sandbox
-                      </button>
                     </div>
                   </div>
                 )}
@@ -731,88 +632,110 @@ export default function Login({ defaultMode }) {
                   </div>
                 )}
 
-                {/* Official Google Workspace Sign-In Area */}
-                <div className="w-full flex flex-col items-center gap-3 pt-1">
-                  {/* Official Google GIS Button Container */}
+                <div>
+                  <label className="text-xs font-semibold text-slate-600 mb-1.5 block">
+                    Email address
+                  </label>
+                  <GlassInputWrapper>
+                    <input
+                      name="studentEmail"
+                      type="email"
+                      required
+                      autoFocus
+                      value={studentEmail}
+                      onChange={(e) => setStudentEmail(e.target.value)}
+                      placeholder="student@thapar.edu"
+                      className="w-full bg-transparent text-xs sm:text-sm p-3 sm:p-4 rounded-xl sm:rounded-2xl focus:outline-none text-slate-900 placeholder:text-slate-400"
+                    />
+                  </GlassInputWrapper>
+                </div>
+
+                <div>
+                  <label className="text-xs font-semibold text-slate-600 mb-1.5 block">
+                    Password
+                  </label>
+                  <GlassInputWrapper>
+                    <div className="relative">
+                      <input
+                        name="studentPassword"
+                        type={showStudentPassword ? 'text' : 'password'}
+                        required
+                        value={studentPassword}
+                        onChange={(e) => setStudentPassword(e.target.value)}
+                        placeholder="Enter your password"
+                        className="w-full bg-transparent text-xs sm:text-sm p-3 sm:p-4 pr-12 rounded-xl sm:rounded-2xl focus:outline-none text-slate-900 placeholder:text-slate-400"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowStudentPassword(!showStudentPassword)}
+                        className="absolute inset-y-0 right-3.5 flex items-center text-slate-400 hover:text-slate-700 transition-colors"
+                      >
+                        {showStudentPassword ? (
+                          <EyeOff className="w-4 h-4" />
+                        ) : (
+                          <Eye className="w-4 h-4" />
+                        )}
+                      </button>
+                    </div>
+                  </GlassInputWrapper>
+                </div>
+
+                <div className="flex items-center justify-between text-xs pt-1">
+                  <label className="flex items-center gap-2 text-slate-600 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={studentKeepSignedIn}
+                      onChange={(e) => setStudentKeepSignedIn(e.target.checked)}
+                      className="rounded accent-teal-700"
+                    />
+                    <span>Keep me signed in</span>
+                  </label>
+                  <button
+                    type="button"
+                    title="Contact administrator"
+                    className="hover:underline text-teal-700 font-medium transition-colors cursor-not-allowed opacity-80"
+                  >
+                    Reset password
+                  </button>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full rounded-xl sm:rounded-2xl bg-teal-800 py-2.5 sm:py-3.5 font-semibold text-white hover:bg-teal-900 disabled:bg-slate-400 transition-all cursor-pointer shadow-md hover:scale-[1.01] active:scale-[0.99] text-xs sm:text-sm mt-2"
+                >
+                  {loading ? 'Signing in…' : 'Sign In as Student'}
+                </button>
+
+                {/* Divider */}
+                <div className="relative flex py-1 items-center">
+                  <div className="flex-grow border-t border-slate-200"></div>
+                  <span className="flex-shrink mx-3 text-slate-400 text-xs">or continue with</span>
+                  <div className="flex-grow border-t border-slate-200"></div>
+                </div>
+
+                {/* Google Workspace Sign-In Area */}
+                <div className="w-full flex flex-col items-center gap-2">
                   <div
                     ref={googleBtnRef}
                     className="w-full flex justify-center items-center min-h-[44px]"
                   />
 
-                  {/* Fallback button if Google script is loading or blocked by adblock */}
                   {!gisLoaded && (
                     <button
                       type="button"
                       onClick={handleGoogleSignInClick}
                       disabled={googleLoading}
-                      className="w-full flex items-center justify-between gap-2.5 sm:gap-3 border-2 border-slate-200/90 rounded-2xl p-3 sm:p-3.5 hover:border-teal-600 hover:bg-teal-50/40 text-slate-800 font-semibold text-xs sm:text-sm transition-all shadow-sm hover:shadow-md cursor-pointer group disabled:opacity-60"
+                      className="w-full flex items-center justify-center gap-3 border border-slate-200 rounded-full py-2.5 px-4 hover:border-slate-300 hover:bg-slate-50 text-slate-800 font-medium text-xs sm:text-sm transition-all shadow-2xs cursor-pointer disabled:opacity-60"
                     >
-                      <div className="flex items-center gap-2.5 sm:gap-3">
-                        <div className="p-1.5 rounded-xl bg-white shadow-xs group-hover:scale-105 transition-transform shrink-0">
-                          <GoogleIcon />
-                        </div>
-                        <div className="text-left leading-tight">
-                          <span className="block font-semibold text-slate-900 text-xs sm:text-sm">
-                            {googleLoading ? 'Authorizing with Google…' : 'Continue with Thapar Google Workspace'}
-                          </span>
-                          <span className="text-[10px] sm:text-[11px] text-slate-500 font-normal">
-                            TIET Single Sign-On
-                          </span>
-                        </div>
-                      </div>
-                      <span className="hidden sm:inline-block px-2.5 py-1 rounded-full text-[10px] font-bold bg-teal-100 text-teal-800 border border-teal-200 shrink-0">
-                        @thapar.edu only
-                      </span>
+                      <GoogleIcon />
+                      <span>{googleLoading ? 'Connecting…' : 'Continue with Google'}</span>
                     </button>
                   )}
-
-                  <div className="flex items-center justify-between w-full px-1 pt-0.5">
-                    <span className="text-[10px] font-semibold text-teal-700 bg-teal-50 px-2 py-0.5 rounded-full border border-teal-200/80">
-                      @thapar.edu only
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setShowSandboxModal(true)}
-                      className="text-[11px] text-slate-500 hover:text-teal-700 font-medium transition-colors underline cursor-pointer"
-                    >
-                      Dev Sandbox Chooser
-                    </button>
-                  </div>
                 </div>
-
-                {/* Account Security Information Card */}
-                <div className="rounded-2xl border border-slate-200/80 bg-slate-50/70 p-4 space-y-2 mt-2">
-                  <div className="flex items-center gap-2 text-xs font-semibold text-slate-700">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-teal-700" />
-                    <span>Identity-Linked Medical Records</span>
-                  </div>
-                  <p className="text-[11px] text-slate-500 leading-relaxed">
-                    Under CampusCare security protocols, your health files are cryptographically linked to your Thapar SSO identity. Direct unauthenticated URL access is prohibited to guarantee personal privacy.
-                  </p>
-                </div>
-              </div>
+              </form>
             )}
-
-            {/* Bottom info */}
-            <p className="text-center text-xs text-slate-500 mt-1">
-              New to CampusCare?{' '}
-              <button
-                type="button"
-                className="text-teal-700 font-semibold hover:underline cursor-not-allowed opacity-80"
-              >
-                Create Account
-              </button>
-            </p>
           </div>
-        </div>
-
-        {/* Footer legal note */}
-        <div className="text-center text-[11px] text-slate-400 mt-6">
-          {mode === 'doctor'
-            ? 'Doctor access is restricted to verified medical faculty.'
-            : mode === 'receptionist'
-            ? 'Front desk access is restricted to authorized dispensary and reception staff.'
-            : 'Your medical telemetry is encrypted under TIET student health privacy guidelines.'}
         </div>
 
         {/* ── Thapar Google Workspace Sandbox Modal ── */}
@@ -1027,14 +950,6 @@ export default function Login({ defaultMode }) {
               background: 'radial-gradient(circle at 75% 35%, rgba(20, 184, 166, 0.25), transparent 60%)',
             }}
           />
-
-          {/* Top: Institutional Pill Tag */}
-          <div className="relative z-10">
-            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/10 border border-white/20 backdrop-blur-md text-xs font-medium text-teal-100 shadow-sm">
-              <Building2 className="w-3.5 h-3.5 text-teal-300" />
-              <span>TIET Health Center • Digital Medical Wing</span>
-            </div>
-          </div>
 
           {/* Middle: Headline & Value Proposition */}
           <div className="relative z-10 max-w-lg my-auto py-8">

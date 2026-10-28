@@ -46,9 +46,12 @@ export function getNfcEnvironmentStatus() {
     window.location.hostname === "localhost" ||
     window.location.hostname === "127.0.0.1" ||
     window.location.hostname === "::1";
+  const isAndroid =
+    typeof navigator !== "undefined" &&
+    /Android/i.test(navigator.userAgent || "");
   const protocol = window.location.protocol;
   const httpsUrl =
-    protocol !== "https:"
+    isAndroid && protocol !== "https:"
       ? `https://${window.location.host}${window.location.pathname}${window.location.search}`
       : null;
 
@@ -64,7 +67,7 @@ export function getNfcEnvironmentStatus() {
     };
   }
 
-  if (!isSecure && protocol !== "https:" && !isLocalhost) {
+  if (isAndroid && !isSecure && protocol !== "https:" && !isLocalhost) {
     return {
       supported: false,
       isSecureContext: false,
@@ -83,8 +86,9 @@ export function getNfcEnvironmentStatus() {
     hasNdefReader: false,
     isLocalhost,
     protocol,
-    message:
-      "Web NFC (NDEFReader) is not supported in this browser. Please use Google Chrome on an Android device with NFC enabled.",
+    message: isAndroid
+      ? "NFC is not supported or disabled on this device."
+      : "Desktop browser: Connect USB RFID reader to tap cards or enter UID manually.",
     httpsUrl: null,
   };
 }

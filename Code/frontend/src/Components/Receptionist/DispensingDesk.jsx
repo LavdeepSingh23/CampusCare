@@ -298,10 +298,6 @@ export default function DispensingDesk({ flash, onDispensed }) {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-200/80">
         <div>
           <div className="flex items-center gap-2 mb-1.5">
-            <span className="inline-flex items-center gap-1.5 rounded-full px-3 py-0.5 text-[10px] uppercase tracking-[0.2em] font-semibold bg-teal-50 text-teal-800 border border-teal-200/70">
-              <span className="w-1.5 h-1.5 rounded-full bg-teal-600 animate-pulse" />
-              Phase 7 Dispensing Workflow
-            </span>
             <span className="text-xs text-slate-400 font-mono">
               {lastSyncedAt ? `Synced ${lastSyncedAt.toLocaleTimeString("en-IN")}` : "Connecting…"}
             </span>
@@ -313,8 +309,7 @@ export default function DispensingDesk({ flash, onDispensed }) {
             </span>
           </h2>
           <p className="text-xs text-slate-500 mt-1 max-w-xl">
-            Live dispensary desk. Review finalized doctor prescriptions, verify item quantities, and record
-            medication fulfillment with immutable database audit events.
+            Review doctor prescriptions and record dispensed medications.
           </p>
         </div>
 

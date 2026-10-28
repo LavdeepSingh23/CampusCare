@@ -313,20 +313,6 @@ export default function RFIDCardDesk({ flash }) {
           </div>
         </div>
 
-        {/* Web NFC Environment Badge */}
-        <div className="flex items-center gap-2">
-          {nfcSupported ? (
-            <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-medium">
-              <Smartphone className="w-3.5 h-3.5 text-emerald-600" />
-              <span>Web NFC Scanner Available</span>
-            </div>
-          ) : (
-            <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 border border-slate-200 text-slate-600 text-xs font-medium" title="Web NFC requires Android Chrome. On desktop, connect a standard USB RFID reader.">
-              <CreditCard className="w-3.5 h-3.5 text-slate-500" />
-              <span>USB Reader / Manual Input Mode</span>
-            </div>
-          )}
-        </div>
       </div>
 
       {/* HTTPS Insecure Context Warning for Mobile Wi-Fi */}
@@ -417,7 +403,7 @@ export default function RFIDCardDesk({ flash }) {
                     value={rollNumber}
                     onChange={(e) => setRollNumber(e.target.value)}
                     onBlur={() => handleLookupStudent()}
-                    placeholder="Enter student roll number (e.g. 102203001)"
+                    placeholder="Enter student roll number"
                     className="w-full pl-9 pr-9 py-2.5 rounded-xl border border-slate-200 text-xs font-mono text-slate-900 focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500"
                   />
                   <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3 pointer-events-none" />
@@ -517,7 +503,7 @@ export default function RFIDCardDesk({ flash }) {
                       type="text"
                       value={cardUid}
                       onChange={(e) => setCardUid(normalizeUid(e.target.value))}
-                      placeholder="e.g. 04A2B3C4 or tap card"
+                      placeholder="Enter card UID or tap card"
                       className="w-full p-2.5 rounded-xl border border-slate-200 text-xs font-mono uppercase text-slate-900 focus:outline-none focus:border-teal-500 focus:ring-1 focus:ring-teal-500"
                     />
                   </div>
@@ -546,9 +532,6 @@ export default function RFIDCardDesk({ flash }) {
                     <span>{nfcStatusText || "Waiting for card tap..."}</span>
                   </div>
                 )}
-                <p className="text-[10px] text-slate-400 mt-1">
-                  Card UID is automatically normalized (uppercase, spaces and colons removed).
-                </p>
               </div>
 
               {/* Action Submit */}
@@ -598,7 +581,7 @@ export default function RFIDCardDesk({ flash }) {
                   type="text"
                   value={quickSearchUid}
                   onChange={(e) => setQuickSearchUid(normalizeUid(e.target.value))}
-                  placeholder="Card UID (e.g. 04A2B3C4)"
+                  placeholder="Enter card UID..."
                   className="w-full p-2 rounded-xl border border-slate-200 text-xs font-mono uppercase focus:outline-none focus:border-teal-500"
                 />
                 <button

@@ -718,7 +718,7 @@ export default function PrescriptionQuestionnaireModal({
                           setCustomDiagnosis(e.target.value)
                           if (e.target.value.trim()) setSelectedDiagnosis('')
                         }}
-                        placeholder="e.g. Acute Gastroenteritis, Sinusitis, Bronchitis..."
+                        placeholder="Enter diagnosis..."
                       />
                     </div>
 
@@ -793,7 +793,7 @@ export default function PrescriptionQuestionnaireModal({
                         rows={2}
                         value={customClinicalNotes}
                         onChange={(e) => setCustomClinicalNotes(e.target.value)}
-                        placeholder="e.g. Chest clear, throat congestion moderate, advise warm fluids and rest..."
+                        placeholder="Enter clinical examination notes..."
                         className="w-full text-xs sm:text-sm text-slate-900 bg-white border border-slate-300 rounded-xl p-3 outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-600/20"
                       />
                     </div>
@@ -967,7 +967,7 @@ export default function PrescriptionQuestionnaireModal({
                             type="text"
                             value={customDrugName}
                             onChange={(e) => setCustomDrugName(e.target.value)}
-                            placeholder="e.g. Paracetamol 500mg, Amoxicillin 500mg"
+                            placeholder="Enter medicine name..."
                             className="w-full px-3 py-1.5 text-xs bg-white border border-slate-300 rounded-lg outline-none focus:border-teal-600"
                           />
                         </div>
@@ -1166,7 +1166,7 @@ export default function PrescriptionQuestionnaireModal({
                       <QuestionnaireInput
                         value={customAdvice}
                         onChange={(e) => setCustomAdvice(e.target.value)}
-                        placeholder="e.g. Avoid dairy for 2 days, maintain strict oral electrolyte hydration..."
+                        placeholder="Enter advice..."
                       />
                     </div>
 

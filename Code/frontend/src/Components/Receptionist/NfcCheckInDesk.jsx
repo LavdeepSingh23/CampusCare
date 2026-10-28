@@ -238,11 +238,9 @@ export default function NfcCheckInDesk({ flash, setPage }) {
       const env = getNfcEnvironmentStatus();
       if (!auto) {
         setErrorDetails({
-          title: env.isSecureContext ? "Web NFC Hardware Unavailable" : "HTTPS Required for Mobile NFC",
+          title: "NFC Reader Unavailable",
           type: "UNSUPPORTED",
-          message:
-            env.message ||
-            "Web NFC is supported on Android devices running Chrome over HTTPS. On Windows/Desktop reception terminals, tap the card on your USB RFID reader or use Manual Roll Number.",
+          message: env.message || "NFC is not supported on this browser or device.",
         });
         setUiState("error");
       }
@@ -436,13 +434,9 @@ export default function NfcCheckInDesk({ flash, setPage }) {
           {/* ── HEADER ── */}
           <div className="flex items-center justify-between pb-4 border-b border-slate-100">
             <div>
-              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-teal-50 border border-teal-200/80 text-[10px] font-bold text-teal-800 uppercase tracking-widest mb-1">
-                <Sparkles className="w-3 h-3 text-teal-600" />
-                <span>Front Desk Check-in</span>
-              </div>
               <h2 className="text-base sm:text-xl font-bold text-slate-900 tracking-tight">Student Express Check-in</h2>
               <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5">
-                Scan physical smart card or enter roll number to assign live consultation token
+                Scan student ID card or enter roll number.
               </p>
             </div>
 
@@ -520,7 +514,7 @@ export default function NfcCheckInDesk({ flash, setPage }) {
                       Select Check-in Method
                     </h3>
                     <p className="text-[11px] sm:text-xs text-slate-500 max-w-sm mx-auto">
-                      Choose contactless smart card tap or type roll number manually to assign an OPD token.
+                      Choose card tap or manual roll number entry.
                     </p>
                   </div>
 
@@ -539,18 +533,18 @@ export default function NfcCheckInDesk({ flash, setPage }) {
                           <Radio className="w-4 h-4 sm:w-7 sm:h-7 animate-pulse text-white" />
                         </div>
                         <span className="text-[9px] sm:text-[10px] font-bold text-teal-800 uppercase tracking-wider block mb-0.5 sm:mb-1">
-                          Fast Contactless Tap
+                          Smart Card
                         </span>
                         <h4 className="text-xs sm:text-base font-bold text-slate-900 group-hover:text-teal-950 transition-colors">
                           Smart Card Tap (RFID)
                         </h4>
                         <p className="text-[10px] sm:text-xs text-slate-500 mt-0.5 sm:mt-1 leading-snug sm:leading-relaxed">
-                          Touch physical Thapar ID card on phone's NFC reader or desktop USB scanner for instant verification.
+                          Tap student ID card on the reader for check-in.
                         </p>
                       </div>
 
                       <div className="mt-3 sm:mt-6 pt-2 sm:pt-3 border-t border-teal-100 flex items-center justify-between text-[10px] sm:text-xs font-bold text-teal-800 group-hover:text-teal-900">
-                        <span>Tap Card to Check-in</span>
+                        <span>Check In with Card</span>
                         <ArrowRight className="w-3.5 h-3.5 sm:w-4 sm:h-4 group-hover:translate-x-1 transition-transform" />
                       </div>
                     </button>
@@ -566,13 +560,13 @@ export default function NfcCheckInDesk({ flash, setPage }) {
                           <UserCheck className="w-4 h-4 sm:w-7 sm:h-7 text-slate-700" />
                         </div>
                         <span className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5 sm:mb-1">
-                          Manual Search
+                          Roll Number
                         </span>
                         <h4 className="text-xs sm:text-base font-bold text-slate-900 group-hover:text-slate-950 transition-colors">
                           Manual Roll Number
                         </h4>
                         <p className="text-[10px] sm:text-xs text-slate-500 mt-0.5 sm:mt-1 leading-snug sm:leading-relaxed">
-                          Lookup student profile by typing university roll number (e.g. 1024030109 or CS21B045).
+                          Enter university roll number to find student record.
                         </p>
                       </div>
 
@@ -673,7 +667,7 @@ export default function NfcCheckInDesk({ flash, setPage }) {
                             resolveCard(cardUidTransient);
                           }
                         }}
-                        placeholder="Or manual UID (e.g. 3255AF7A)..."
+                        placeholder="Enter Card UID..."
                         className="w-full px-4 py-2.5 rounded-xl border border-slate-200 bg-slate-50/70 text-xs font-mono uppercase text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-teal-500 focus:bg-white transition-all text-center"
                       />
                     </div>
@@ -725,7 +719,7 @@ export default function NfcCheckInDesk({ flash, setPage }) {
                     </div>
                     <h3 className="text-base font-bold text-slate-900">Enter University Roll Number</h3>
                     <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
-                      Lookup student profile manually to allocate an OPD consultation token.
+                      Enter roll number to allocate an OPD consultation token.
                     </p>
                   </div>
 
@@ -736,7 +730,7 @@ export default function NfcCheckInDesk({ flash, setPage }) {
                         type="text"
                         value={rollInput}
                         onChange={(e) => setRollInput(e.target.value)}
-                        placeholder="e.g. 1024030109 or CS21B045"
+                        placeholder="Enter roll number..."
                         autoFocus
                         className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 bg-slate-50/70 text-sm font-mono text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-teal-500 focus:bg-white transition-all"
                       />
@@ -1118,7 +1112,7 @@ export default function NfcCheckInDesk({ flash, setPage }) {
                 )}
                 {errorDetails.type === "UNSUPPORTED" && (
                   <p>
-                    Web NFC is restricted to mobile Android Chrome over HTTPS. Switch to <strong>Manual Roll Number</strong> or connect a USB RFID reader.
+                    Please switch to <strong>Manual Roll Number</strong> or use a USB RFID card scanner.
                   </p>
                 )}
                 {errorDetails.type === "PERMISSION" && (

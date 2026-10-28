@@ -1064,12 +1064,9 @@ export default function Doctors_Dashboard() {
                     <span className="text-[10px] px-2 py-0.5 rounded-md bg-teal-50 text-teal-800 font-semibold border border-teal-200">
                       Room {doctorProfile.room}
                     </span>
-                    <span className="text-[10px] px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800 font-semibold border border-emerald-200">
-                      OPD Shift Active
-                    </span>
                   </div>
                   <p className="text-xs text-slate-500 mt-0.5">
-                    {doctorProfile.specialization} • Shift Hours: {doctorProfile.shift} • TIET Health Centre
+                    {doctorProfile.specialization} • Shift: {doctorProfile.shift}
                   </p>
                 </div>
               </div>
@@ -1240,7 +1237,7 @@ export default function Doctors_Dashboard() {
                         </div>
                         <p className="text-xs font-bold text-slate-700">No Students in Queue</p>
                         <p className="text-[11px] text-slate-400">
-                          {patients.length === 0 ? 'Consultation line is clear. Call next when ready.' : 'No students matching filter.'}
+                          {patients.length === 0 ? 'No students currently waiting.' : 'No students matching filter.'}
                         </p>
                       </div>
                     ) : (
@@ -1343,7 +1340,7 @@ export default function Doctors_Dashboard() {
                     </div>
                     <h3 className="text-base font-bold text-slate-800">No Student Selected</h3>
                     <p className="text-xs text-slate-400 max-w-sm mx-auto">
-                      Select a student from the consultation line on the left or click "Call Next Student" to open vitals, history, and write prescriptions.
+                      Select a student from the queue to start consultation.
                     </p>
                     <button
                       onClick={handleCallNext}

@@ -219,6 +219,30 @@ export async function login(email, password) {
   }
 }
 
+export async function loginStudent(email, password) {
+  try {
+    return await request('/api/auth/student/login', {
+      method: 'POST',
+      body: JSON.stringify({ email, password }),
+    })
+  } catch (backendErr) {
+    if (DEMO_MODE || backendErr.status === 404 || backendErr.message?.includes('Failed to fetch')) {
+      const cleanEmail = (email || '').toLowerCase().trim()
+      const derivedRoll = (cleanEmail.match(/\d{6,10}/) || [])[0] || '102403499'
+      const namePart = cleanEmail.split('@')[0].replace(/[._]/g, ' ')
+      const formattedName = namePart ? namePart.replace(/\b\w/g, (c) => c.toUpperCase()) : 'Thapar Student'
+      return mockDelay({
+        access_token: 'demo-student-token-' + Date.now(),
+        roll_number: derivedRoll,
+        name: formattedName,
+        email: cleanEmail,
+        user_id: 1000,
+      }, 300)
+    }
+    throw backendErr
+  }
+}
+
 export async function loginStudentGoogle(credential, simulatedUser = null) {
   // If simulated student was passed (e.g. sandbox or demo)
   if (simulatedUser) {

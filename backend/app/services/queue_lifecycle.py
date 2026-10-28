@@ -477,7 +477,7 @@ def start_consultation(
             INSERT INTO VISIT_EVENT (visit_id, event_type, performed_by_user_id, notes)
             VALUES (%s, 'CONSULTATION_STARTED', %s, %s)
             """,
-            (visit_id, performed_by_user_id, f"Consultation explicitly started by Doctor #{doctor_id}"),
+            (visit_id, performed_by_user_id, f"Consultation started by Doctor #{doctor_id}"),
         )
 
     return {

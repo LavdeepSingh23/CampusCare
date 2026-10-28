@@ -7,6 +7,7 @@ import {
   getToken,
   getUserRole,
   login as apiLogin,
+  loginStudent as apiLoginStudent,
   loginStudentGoogle as apiLoginStudentGoogle,
   saveSession,
   saveStudentSession,
@@ -108,6 +109,31 @@ export function AuthProvider({ children }) {
     }
   }
 
+  async function loginStudent(email, password) {
+    setLoading(true)
+    setError('')
+    try {
+      const res = await apiLoginStudent(email, password)
+      const nextStudent = {
+        rollNumber: res.roll_number,
+        name: res.name,
+        email: res.email,
+        userId: res.user_id,
+      }
+      saveStudentSession({ token: res.access_token, ...nextStudent })
+      setStudent(nextStudent)
+      setDoctor(null)
+      setReceptionist(null)
+      setUserRole('STUDENT')
+      return true
+    } catch (err) {
+      setError(err.message || 'Student login failed. Please check your credentials.')
+      return false
+    } finally {
+      setLoading(false)
+    }
+  }
+
   async function loginStudentGoogle(credential, simulatedUser = null) {
     setLoading(true)
     setError('')
@@ -153,6 +179,7 @@ export function AuthProvider({ children }) {
         userRole,
         login,
         loginReceptionist,
+        loginStudent,
         loginStudentGoogle,
         logout,
         error,

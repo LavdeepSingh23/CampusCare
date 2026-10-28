@@ -9,8 +9,6 @@ import {
   Clock,
   ChevronDown,
   Shield,
-  CheckCircle2,
-  Users,
   Building2,
   ArrowRight,
   Stethoscope,
@@ -23,7 +21,6 @@ import {
   MapPin,
   Navigation,
   Compass,
-  AlertCircle,
   Phone,
   Mail,
   ExternalLink,
@@ -313,7 +310,7 @@ const MEDICAL_TEAM = [
     name: 'Dr. Ritu Bassi',
     designation: 'Senior Medical Officer',
     role: 'Lead Campus Physician & Chief Clinical Administrator',
-    qualification: 'M.B.B.S., PGDHA (23+ Years Clinical Experience)',
+    qualification: 'M.B.B.S., PGDHA',
     specialty: 'Internal medicine, student epidemiology, infectious diseases, and university emergency triage.',
     avatar: 'RB',
     avatarBg: 'bg-teal-900/80 border border-white/20',
@@ -824,27 +821,14 @@ export default function LandingPage() {
         )}
       </AnimatePresence>
 
-      {/* ── HERO SECTION: PRESERVED 100% UNCHANGED AS CONFIRMED ── */}
+      {/* ── HERO SECTION ── */}
       <main className="snap-hero relative z-10 w-full max-w-7xl mx-auto px-4 sm:px-6 pt-24 sm:pt-28 pb-8 flex flex-col items-center">
-        {/* Institutional Pill Badge (No logo) */}
-        <motion.div
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-          className="inline-flex items-center px-4 py-1.5 rounded-full bg-white/10 border border-white/20 backdrop-blur-md text-xs font-medium text-teal-100 mb-5 shadow-sm hover:bg-white/15 transition-colors duration-300"
-          style={{
-            boxShadow: 'inset 1px 1px 1px 0 rgba(255,255,255,0.3), inset -1px -1px 1px 0 rgba(255,255,255,0.15)',
-          }}
-        >
-          <span>Thapar Institute of Engineering & Technology</span>
-        </motion.div>
-
         {/* Headline */}
         <motion.h1
           initial={{ opacity: 0, y: 14 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.1, ease: [0.16, 1, 0.3, 1] }}
-          className="text-[2rem] sm:text-7xl lg:text-8xl font-extrabold tracking-tight text-center text-white max-w-4xl leading-[1.12]"
+          className="text-5xl sm:text-7xl lg:text-8xl font-extrabold tracking-tight text-center text-white max-w-4xl leading-[1.05]"
         >
           CampusCare
         </motion.h1>
@@ -854,48 +838,10 @@ export default function LandingPage() {
           initial={{ opacity: 0, y: 14 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.2, ease: [0.16, 1, 0.3, 1] }}
-          className="mt-2.5 sm:mt-3 text-xs sm:text-base text-teal-100/80 text-center max-w-2xl font-normal leading-relaxed px-2"
+          className="mt-4 text-base sm:text-lg text-teal-100/80 text-center max-w-2xl font-normal leading-relaxed"
         >
-          Your complete campus health companion — appointments, prescriptions, emergency services, and student wellness, all in one place.
+          Student healthcare, consultations, prescriptions, and 24/7 emergency support.
         </motion.p>
-
-        {/* ── Action Prompt Button ── */}
-        <motion.div
-          initial={{ opacity: 0, y: 14 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, delay: 0.3, ease: [0.16, 1, 0.3, 1] }}
-          className="mt-5 sm:mt-8 flex flex-col items-center justify-center w-full max-w-lg"
-        >
-          <motion.button
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-            onClick={() => scrollToElement('#campus-map')}
-            className="w-full py-2.5 sm:py-4 px-4 sm:px-8 rounded-full border border-white/20 bg-[#0e3b38]/90 hover:bg-[#124d49] text-white shadow-[0_10px_35px_rgba(0,0,0,0.35)] backdrop-blur-xl transition-all duration-300 cursor-pointer flex items-center justify-center gap-2 sm:gap-3 text-xs sm:text-base font-medium"
-            style={{
-              boxShadow: 'inset 2px 2px 2px 0 rgba(255,255,255,0.3), inset -2px -2px 2px 0 rgba(255,255,255,0.15), 0 10px 35px rgba(0,0,0,0.35)',
-            }}
-          >
-            <span className="h-1.5 w-1.5 sm:h-2 sm:w-2 rounded-full bg-white/90 shrink-0" />
-            <span className="truncate sm:whitespace-normal">How can CampusCare help you today?</span>
-            <ArrowRight className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-white ml-0.5 shrink-0" />
-          </motion.button>
-
-          {/* Subtle Floating Scroll Hint */}
-          <motion.button
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 0.75, y: [0, 4, 0] }}
-            whileHover={{ opacity: 1, scale: 1.04 }}
-            transition={{
-              opacity: { delay: 0.8, duration: 0.5 },
-              y: { repeat: Infinity, duration: 2.2, ease: 'easeInOut' },
-            }}
-            onClick={() => scrollToElement('#campus-map')}
-            className="mt-4 flex flex-col items-center gap-1 text-teal-200/60 hover:text-white text-[11px] font-medium transition-colors cursor-pointer group"
-          >
-            <span className="tracking-wider uppercase text-[10px]">Scroll to Explore Navigation & Health Centre</span>
-            <ChevronDown className="w-4 h-4 text-white group-hover:translate-y-0.5 transition-transform" />
-          </motion.button>
-        </motion.div>
       </main>
 
       {/* ── DYNAMIC COMPONENT 1: LIQUID GLASS STATS CARDS ── */}
@@ -914,7 +860,7 @@ export default function LandingPage() {
               </div>
             </div>
             <div className="text-xl sm:text-3xl font-extrabold text-white tracking-tight">24 / 7</div>
-            <p className="text-[11px] sm:text-xs text-white/70 mt-0.5 sm:mt-1 font-medium leading-snug">Continuous Weekday OPD & Night Shift</p>
+            <p className="text-[11px] sm:text-xs text-white/70 mt-0.5 sm:mt-1 font-medium leading-snug">Weekday OPD & Night Shift</p>
           </LiquidGlassCard>
 
           <LiquidGlassCard
@@ -930,7 +876,7 @@ export default function LandingPage() {
               </div>
             </div>
             <div className="text-xl sm:text-3xl font-extrabold text-white tracking-tight">100% Free</div>
-            <p className="text-[11px] sm:text-xs text-white/70 mt-0.5 sm:mt-1 font-medium leading-snug">Essential Formulary Meds for Students</p>
+            <p className="text-[11px] sm:text-xs text-white/70 mt-0.5 sm:mt-1 font-medium leading-snug">Essential Formulary Medications</p>
           </LiquidGlassCard>
 
           <LiquidGlassCard
@@ -946,7 +892,7 @@ export default function LandingPage() {
               </div>
             </div>
             <div className="text-xl sm:text-3xl font-extrabold text-white tracking-tight">23+ Years</div>
-            <p className="text-[11px] sm:text-xs text-white/70 mt-0.5 sm:mt-1 font-medium leading-snug">Senior Medical Officer Clinical Practice</p>
+            <p className="text-[11px] sm:text-xs text-white/70 mt-0.5 sm:mt-1 font-medium leading-snug">Clinical Practice Experience</p>
           </LiquidGlassCard>
 
           <LiquidGlassCard
@@ -962,7 +908,7 @@ export default function LandingPage() {
               </div>
             </div>
             <div className="text-xl sm:text-3xl font-extrabold text-white tracking-tight">&lt; 3 mins</div>
-            <p className="text-[11px] sm:text-xs text-white/70 mt-0.5 sm:mt-1 font-medium leading-snug">Average Campus Emergency Dispatch</p>
+            <p className="text-[11px] sm:text-xs text-white/70 mt-0.5 sm:mt-1 font-medium leading-snug">Average Emergency Response</p>
           </LiquidGlassCard>
         </div>
       </section>
@@ -970,15 +916,11 @@ export default function LandingPage() {
       {/* ── DYNAMIC COMPONENT 2: LIQUID GLASS REAL MAP ISLAND (#campus-map) ── */}
       <section id="campus-map" className="relative z-10 w-full max-w-6xl mx-auto px-4 sm:px-6 pt-24 sm:pt-28 pb-16 scroll-mt-28">
         <div className="text-center mb-8">
-          <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-white/10 border border-white/20 text-xs font-semibold text-white mb-2">
-            <Compass className="w-3.5 h-3.5" />
-            <span>Interactive Campus Navigation Desk</span>
-          </div>
-          <h2 className="text-xl sm:text-3xl lg:text-5xl font-extrabold text-white tracking-tight">
+          <h2 className="text-3xl sm:text-5xl font-extrabold text-white tracking-tight">
             Navigate to the Health Centre
           </h2>
-          <p className="mt-2 text-xs sm:text-base text-white/75 max-w-xl mx-auto">
-            Situated centrally at coordinates <strong className="text-white">30.356008° N, 76.368689° E</strong>. Explore the live map canvas or tap your hostel dock below.
+          <p className="mt-2 text-sm sm:text-base text-white/75 max-w-xl mx-auto">
+            Centrally situated on campus. View walking directions and routes from all hostels.
           </p>
         </div>
 
@@ -996,14 +938,9 @@ export default function LandingPage() {
                 <MapPin className="w-5 h-5 text-white" />
               </div>
               <div>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <h3 className="text-base sm:text-lg font-bold text-white">TIET Health Centre Station</h3>
-                  <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-white/15 text-white font-semibold border border-white/25">
-                    Live Destination
-                  </span>
-                </div>
+                <h3 className="text-base sm:text-lg font-bold text-white">TIET Health Centre Station</h3>
                 <p className="text-xs text-white/70 mt-0.5">
-                  Ground Floor Suites • Coordinates: <span className="font-mono text-white font-semibold">{HEALTH_CENTRE_COORDS.string}</span>
+                  Ground Floor Suites, Thapar University
                 </p>
               </div>
             </div>
@@ -1036,16 +973,6 @@ export default function LandingPage() {
                   Satellite
                 </button>
               </div>
-
-              {/* Copy Coordinates */}
-              <button
-                type="button"
-                onClick={handleCopyCoords}
-                className="px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/15 border border-white/15 text-xs font-semibold text-white flex items-center gap-1.5 transition-all cursor-pointer"
-              >
-                {copiedCoords ? <Check className="w-3.5 h-3.5 text-white" /> : <CreditCard className="w-3.5 h-3.5 text-white/80" />}
-                <span>{copiedCoords ? 'Copied' : '30.356008, 76.368689'}</span>
-              </button>
 
               {/* Direct Open in Google Maps */}
               <a
@@ -1110,7 +1037,6 @@ export default function LandingPage() {
                     <Navigation className="w-3.5 h-3.5" />
                     <span>Start Walking GPS</span>
                   </a>
-                  <span className="text-[10px] text-white/60 font-mono">Ground Floor Foyer</span>
                 </div>
               </LiquidGlassCard>
             </div>
@@ -1120,10 +1046,7 @@ export default function LandingPage() {
           <div className="relative z-20 p-4 sm:p-5 bg-gradient-to-t from-[#0c2e2b]/95 via-[#0c2e2b]/90 to-transparent border-t border-white/10">
             <div className="flex items-center justify-between mb-2">
               <span className="text-[11px] font-bold text-white uppercase tracking-wider">
-                Select Your Campus Location for Quick Walking Directions:
-              </span>
-              <span className="text-[11px] text-white/70 hidden sm:inline">
-                Tap any hostel to calculate walking distance
+                Select Campus Location for Directions:
               </span>
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
@@ -1162,15 +1085,11 @@ export default function LandingPage() {
       {/* ── DYNAMIC COMPONENT 3: LIQUID GLASS SLIDING OPD TIMETABLE (#opd-timings) ── */}
       <section id="opd-timings" className="relative z-10 w-full max-w-6xl mx-auto px-4 sm:px-6 py-16">
         <div className="text-center mb-10">
-          <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-white/10 border border-white/20 text-xs font-semibold text-white mb-2">
-            <Clock className="w-3.5 h-3.5" />
-            <span>Official University Healthcare Schedule</span>
-          </div>
-          <h2 className="text-xl sm:text-3xl lg:text-5xl font-extrabold text-white tracking-tight">
+          <h2 className="text-3xl sm:text-5xl font-extrabold text-white tracking-tight">
             OPD Timings & Duty Rosters
           </h2>
-          <p className="mt-2 text-xs sm:text-base text-white/75 max-w-xl mx-auto">
-            Interactive clinical shift schedules. Real-time active shift indicator updates in accordance with university clinic regulations.
+          <p className="mt-2 text-sm sm:text-base text-white/75 max-w-xl mx-auto">
+            Clinical hours, daily consultations, and emergency duty rosters.
           </p>
 
           {/* Live System Time Status Beacon - Crisp non-neon */}
@@ -1266,15 +1185,11 @@ export default function LandingPage() {
       {/* ── DYNAMIC COMPONENT 4: LIQUID GLASS 3D TILT CLINICAL FACILITIES (#facilities) ── */}
       <section id="facilities" className="relative z-10 w-full max-w-6xl mx-auto px-4 sm:px-6 py-16">
         <div className="text-center mb-10">
-          <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-white/10 border border-white/20 text-xs font-semibold text-white mb-2">
-            <HeartPulse className="w-3.5 h-3.5" />
-            <span>Full Comprehensive Clinical Infrastructure</span>
-          </div>
-          <h2 className="text-xl sm:text-3xl lg:text-5xl font-extrabold text-white tracking-tight">
+          <h2 className="text-3xl sm:text-5xl font-extrabold text-white tracking-tight">
             Facilities & Health Services
           </h2>
-          <p className="mt-2 text-xs sm:text-base text-white/75 max-w-xl mx-auto">
-            Hover over any clinic facility to experience dynamic 3D card tilt. Click any card to expand full medical details.
+          <p className="mt-2 text-sm sm:text-base text-white/75 max-w-xl mx-auto">
+            Comprehensive medical care and clinical infrastructure available on campus.
           </p>
         </div>
 
@@ -1331,15 +1246,11 @@ export default function LandingPage() {
       {/* ── DYNAMIC COMPONENT 5: LIQUID GLASS MEDICAL FACULTY FOCUS DECK (#doctors) ── */}
       <section id="doctors" className="relative z-10 w-full max-w-6xl mx-auto px-4 sm:px-6 py-16">
         <div className="text-center mb-10">
-          <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-white/10 border border-white/20 text-xs font-semibold text-white mb-2">
-            <Users className="w-3.5 h-3.5" />
-            <span>Campus Healthcare Leadership & Clinical Staff</span>
-          </div>
-          <h2 className="text-xl sm:text-3xl lg:text-5xl font-extrabold text-white tracking-tight">
+          <h2 className="text-3xl sm:text-5xl font-extrabold text-white tracking-tight">
             Medical Officers & Leadership
           </h2>
-          <p className="mt-2 text-xs sm:text-base text-white/75 max-w-xl mx-auto">
-            Experienced medical practitioners and university administrators managing student healthcare.
+          <p className="mt-2 text-sm sm:text-base text-white/75 max-w-xl mx-auto">
+            Experienced medical practitioners managing campus student healthcare.
           </p>
         </div>
 
@@ -1380,23 +1291,13 @@ export default function LandingPage() {
                       </div>
                     </div>
 
-                    <div className="space-y-2 mt-4 text-xs text-white/80">
-                      <div className="p-3 rounded-xl bg-white/[0.03] border border-white/5">
-                        <span className="text-[10px] text-white/70 font-bold uppercase block mb-0.5">Role</span>
-                        <p className="leading-relaxed">{doc.role}</p>
-                      </div>
-                      <div className="p-3 rounded-xl bg-white/[0.03] border border-white/5">
-                        <span className="text-[10px] text-white/70 font-bold uppercase block mb-0.5">Specialty & Oversight</span>
-                        <p className="leading-relaxed">{doc.specialty}</p>
-                      </div>
-                    </div>
+                    <p className="text-xs text-white/75 mt-4 leading-relaxed">
+                      {doc.specialty}
+                    </p>
                   </div>
 
-                  <div className="mt-5 pt-3 border-t border-white/10 flex items-center justify-between text-xs text-white/90">
-                    <span className="flex items-center gap-1">
-                      <CheckCircle2 className="w-3.5 h-3.5 text-white" />
-                      <span>TIET Verified</span>
-                    </span>
+                  <div className="mt-5 pt-3 border-t border-white/10 flex items-center justify-between text-xs text-white/80">
+                    <span>Office</span>
                     <span className="text-[11px] font-mono text-white font-bold">{doc.cabin}</span>
                   </div>
                 </LiquidGlassCard>
@@ -1405,23 +1306,6 @@ export default function LandingPage() {
           })}
         </div>
 
-        {/* Nursing Roster Bar */}
-        <div className="mt-6">
-          <LiquidGlassCard
-            borderRadius="18px"
-            shadowIntensity="xs"
-            glowIntensity="none"
-            className="p-4 sm:p-5 bg-white/[0.03] border border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-white/80"
-          >
-            <div className="flex items-center gap-2.5">
-              <Award className="w-4 h-4 text-white shrink-0" />
-              <span>
-                <strong>Supporting Clinical Roster:</strong> Qualified staff nurses, certified dispensary pharmacists, laboratory assistants, and 24x7 ambulance drivers on active rotation.
-              </span>
-            </div>
-            <span className="text-white font-semibold shrink-0">Health Centre Staff</span>
-          </LiquidGlassCard>
-        </div>
       </section>
 
       {/* ── DYNAMIC COMPONENT 6: LIQUID GLASS ACADEMIC STEPPER (#guidelines) ── */}
@@ -1433,15 +1317,11 @@ export default function LandingPage() {
           className="p-7 sm:p-10 bg-white/[0.03] border border-white/15 shadow-2xl"
         >
           <div className="text-center mb-8">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 border border-white/20 text-xs font-semibold text-white mb-2">
-              <GraduationCap className="w-3.5 h-3.5" />
-              <span>University Academic Protocol</span>
-            </div>
             <h3 className="text-2xl sm:text-4xl font-extrabold text-white">
               Medical Slips & Make-Up Exams
             </h3>
             <p className="text-xs sm:text-sm text-white/75 mt-1 max-w-xl mx-auto">
-              Follow the 3-step endorsement workflow for student medical leaves and make-up examination sanction.
+              Endorsement process for student medical leaves and make-up exams.
             </p>
           </div>
 
@@ -1483,9 +1363,6 @@ export default function LandingPage() {
             className="p-5 bg-white/[0.03] border border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-4"
           >
             <div>
-              <span className="text-[10px] font-bold text-white/70 uppercase tracking-wider block mb-1">
-                Step {ACADEMIC_STEPS[activeAcademicStep].step} Procedure
-              </span>
               <h4 className="text-base font-bold text-white">{ACADEMIC_STEPS[activeAcademicStep].title}</h4>
               <p className="text-xs text-white/80 mt-1 leading-relaxed max-w-2xl">
                 {ACADEMIC_STEPS[activeAcademicStep].desc}
@@ -1510,17 +1387,12 @@ export default function LandingPage() {
           glowIntensity="md"
           className="relative overflow-hidden p-8 sm:p-12 text-center border border-white/15 bg-white/[0.03] shadow-2xl"
         >
-          <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-rose-500/20 border border-rose-500/30 text-xs font-semibold text-rose-200 mb-3">
-            <AlertCircle className="w-3.5 h-3.5" />
-            <span>24/7 Campus Emergency Medical Hotline</span>
-          </div>
-
-          <h2 className="text-2xl sm:text-4xl lg:text-5xl font-extrabold text-white tracking-tight">
+          <h2 className="text-3xl sm:text-5xl font-extrabold text-white tracking-tight">
             Immediate Medical Assistance
           </h2>
 
           <p className="mt-3 text-sm sm:text-base text-white/75 max-w-xl mx-auto leading-relaxed">
-            Our campus ambulance and duty medical officers operate 24 hours a day. Dial directly for emergency hostel dispatch.
+            24-hour campus ambulance and emergency medical dispatch.
           </p>
 
           <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3.5">
@@ -1536,7 +1408,7 @@ export default function LandingPage() {
               onClick={() => navigate('/user_login')}
               className="w-full sm:w-auto px-8 py-3.5 rounded-full text-xs sm:text-sm font-bold text-slate-950 bg-white hover:bg-slate-100 shadow-[0_4px_20px_rgba(255,255,255,0.25)] transition-all cursor-pointer flex items-center justify-center gap-2"
             >
-              <span>Sign in with @thapar.edu</span>
+              <span>Sign In</span>
               <ArrowRight className="w-4 h-4" />
             </button>
           </div>
@@ -1711,7 +1583,7 @@ export default function LandingPage() {
 
                   <div className="p-3 rounded-2xl bg-white/5 border border-white/10 text-xs text-white/70">
                     <span className="font-semibold text-white block mb-0.5">Location</span>
-                    <span>TIET Health Centre Ground Floor, Room 101-105 (30.356008° N, 76.368689° E)</span>
+                    <span>TIET Health Centre Ground Floor, Rooms 101–105</span>
                   </div>
                 </div>
 

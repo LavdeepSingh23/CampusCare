@@ -380,18 +380,9 @@ function Home({
     <div className="space-y-4 sm:space-y-6">
       <div className="bg-gradient-to-r from-teal-50/80 via-white to-slate-50/50 border border-teal-100/90 rounded-2xl p-4 sm:p-6 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-3.5 sm:gap-4">
         <div>
-          <div className="flex items-center gap-2 mb-1">
-            <span className="relative flex h-2.5 w-2.5">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
-            </span>
-            <span className="text-[10px] sm:text-[11px] font-bold text-teal-800 tracking-wide uppercase">
-              TIET Health Centre • Front Desk Live
-            </span>
-          </div>
           <h2 className="text-lg sm:text-2xl font-bold text-slate-900 tracking-tight">{greet}, Reception Desk</h2>
           <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5 sm:mt-1">
-            {now.toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric" })} • OPD Station 1 active
+            {now.toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
           </p>
         </div>
 
@@ -428,7 +419,6 @@ function Home({
           </div>
           <div className="mt-2.5 sm:mt-3">
             <span className="text-xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">{realWaiting.length}</span>
-            <span className="text-[10px] sm:text-[11px] text-slate-400 block mt-0.5">~5 min avg wait time</span>
           </div>
         </div>
 
@@ -439,7 +429,6 @@ function Home({
           </div>
           <div className="mt-2.5 sm:mt-3">
             <span className="text-xl sm:text-3xl font-extrabold text-teal-800 tracking-tight">{realInConsult.length}</span>
-            <span className="text-[10px] sm:text-[11px] text-slate-400 block mt-0.5">Across doctor cabins</span>
           </div>
         </div>
 
@@ -450,7 +439,6 @@ function Home({
           </div>
           <div className="mt-2.5 sm:mt-3">
             <span className="text-xl sm:text-3xl font-extrabold text-orange-600 tracking-tight">{forMedicineCount}</span>
-            <span className="text-[10px] sm:text-[11px] text-slate-400 block mt-0.5">Ready for pharmacy</span>
           </div>
         </div>
 
@@ -461,7 +449,6 @@ function Home({
           </div>
           <div className="mt-2.5 sm:mt-3">
             <span className="text-xl sm:text-3xl font-extrabold text-slate-900 tracking-tight">{completedCount}</span>
-            <span className="text-[10px] sm:text-[11px] text-slate-400 block mt-0.5">Discharged & dispensed</span>
           </div>
         </div>
       </div>
@@ -471,7 +458,6 @@ function Home({
           <div className="flex items-center justify-between pb-3 border-b border-slate-100">
             <div>
               <h3 className="text-sm font-bold text-slate-900">Doctor Cabins Live Status</h3>
-              <p className="text-xs text-slate-500">Real-time consultation queue & availability</p>
             </div>
             <button
               onClick={() => setPage("queue")}
@@ -534,9 +520,8 @@ function Home({
 
         <div className="lg:col-span-5 bg-white rounded-2xl border border-slate-200/90 p-5 shadow-xs flex flex-col justify-between space-y-4">
           <div>
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+            <div className="pb-3 border-b border-slate-100">
               <h3 className="text-sm font-bold text-slate-900">Action Required</h3>
-              <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 font-semibold text-slate-600">Front Desk</span>
             </div>
  
             <div className="mt-4">
@@ -564,23 +549,22 @@ function Home({
                 <div className="p-4 rounded-xl bg-slate-50 border border-slate-200/70 text-center py-6">
                   <CheckCircle className="w-6 h-6 text-emerald-600 mx-auto mb-1.5" />
                   <p className="text-xs font-bold text-slate-800">All Prescriptions Cleared</p>
-                  <p className="text-[11px] text-slate-400 mt-0.5">No students are currently waiting at the medicine desk.</p>
+                  <p className="text-[11px] text-slate-400 mt-0.5">No pending prescriptions.</p>
                 </div>
               )}
             </div>
           </div>
  
           <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
-            <span>Counter 1 Shift:</span>
+            <span>Shift:</span>
             <span className="font-semibold text-slate-800">09:00 AM - 05:00 PM</span>
           </div>
         </div>
       </div>
  
       <div className="bg-white rounded-2xl border border-slate-200/90 p-5 shadow-xs">
-        <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-3">
+        <div className="pb-3 border-b border-slate-100 mb-3">
           <h3 className="text-sm font-bold text-slate-900">Recent Desk Activity</h3>
-          <span className="text-xs text-slate-400">Live operational log</span>
         </div>
  
         <div className="divide-y divide-slate-100">
@@ -595,7 +579,9 @@ function Home({
               <div key={l.eventId || i} className="py-2.5 flex items-center justify-between gap-4 text-xs">
                 <div className="flex items-center gap-3">
                   <span className="font-mono text-slate-400 text-[11px]">{timeStr}</span>
-                  <span className="font-semibold text-slate-800">{desc || kind}</span>
+                  <span className="font-semibold text-slate-800">
+                    {(desc || kind).replace("explicitly started", "started")}
+                  </span>
                 </div>
                 <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200/60">
                   {kind}
@@ -1643,7 +1629,7 @@ function Students({ visits }) {
     <div className="space-y-6">
       <PageHead
         title="Students Directory"
-        sub="Search registered TIET students and view verified medical telemetry"
+        sub="Search student records and profiles."
         badge={`${list.length} students`}
       />
 
@@ -1764,7 +1750,7 @@ function Students({ visits }) {
             {profileLoading ? (
               <div className="py-12 text-center text-xs text-slate-400 flex flex-col items-center gap-2">
                 <RotateCw className="w-5 h-5 animate-spin text-teal-600" />
-                <span>Loading clinical telemetry...</span>
+                <span>Loading student profile...</span>
               </div>
             ) : (
               <div className="space-y-4">
@@ -1935,7 +1921,6 @@ function Completed() {
             />
           </div>
           <div className="text-xs text-slate-500 flex items-center gap-2">
-            <span>Showing real-time database records</span>
             {loading && <RotateCw className="w-3.5 h-3.5 animate-spin text-teal-600" />}
           </div>
         </div>
@@ -2185,7 +2170,7 @@ function Activity() {
     <div className="space-y-6">
       <PageHead
         title="Activity Log"
-        sub="Audit feed of front desk check-ins, cabin transitions, dispensing, and emergency events"
+        sub="Daily log of clinic visits, consultations, and desk events."
         badge={`${items.length} events`}
         right={
           <button
@@ -2269,7 +2254,7 @@ function Activity() {
                   <span className="font-mono text-slate-400 text-xs w-14 shrink-0 pt-0.5">{timeStr}</span>
                   <div>
                     <span className="font-bold text-slate-900">{kind}</span>
-                    <p className="text-slate-500 text-[11px] mt-0.5">{desc}</p>
+                    <p className="text-slate-500 text-[11px] mt-0.5">{desc ? desc.replace("explicitly started", "started") : ""}</p>
                     {performer && <span className="text-[10px] text-teal-700 font-mono">By: {performer}</span>}
                   </div>
                 </div>

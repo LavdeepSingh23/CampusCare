@@ -265,22 +265,13 @@ export default function EmergencyDesk({ flash }) {
       {/* ── HEADER BANNER ── */}
       <div className="bg-gradient-to-r from-red-50 via-rose-50/50 to-white border border-red-200/80 rounded-2xl p-5 sm:p-6 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2 mb-1">
-            <span className="relative flex h-2.5 w-2.5">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500"></span>
-            </span>
-            <span className="text-[11px] font-bold text-red-800 tracking-wide uppercase">
-              Urgent Response • Emergency & Trauma Desk
-            </span>
-          </div>
+
           <h2 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
             <HeartPulse className="w-6 h-6 text-red-600" />
             <span>Emergency & Ambulance Dispatch</span>
           </h2>
           <p className="text-xs text-slate-500 mt-1 max-w-xl">
-            Triage critical trauma, anaphylaxis, and acute clinical events. Completely isolated from routine OPD queues
-            with dedicated municipal & campus ambulance routing.
+            Emergency triage, trauma cases, and campus ambulance dispatch.
           </p>
         </div>
 
