@@ -4,14 +4,14 @@ import tailwindcss from '@tailwindcss/vite'
 import basicSsl from '@vitejs/plugin-basic-ssl'
 import path from 'path'
 
-const isHttpOnly = process.env.VITE_HTTP === 'true' || process.env.HTTP === 'true'
+const useHttps = process.env.VITE_HTTPS === 'true' || process.env.HTTPS === 'true'
 
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [
     react(),
     tailwindcss(),
-    ...(isHttpOnly ? [] : [basicSsl()]),
+    ...(useHttps ? [basicSsl()] : []),
   ],
   resolve: {
     alias: {
