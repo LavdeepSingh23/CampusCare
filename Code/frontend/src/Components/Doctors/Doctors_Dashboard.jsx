@@ -475,7 +475,6 @@ export default function Doctors_Dashboard() {
                   : `TIET Student. Roll: ${roll}. Blood Group: ${item.bloodGroup || 'B+'}, Age: ${item.age || 20}.`,
                 allergies: allergiesList,
                 prescriptions: [],
-                vitals: { bp: '118/76', pulse: '72 bpm', temp: '98.4 °F', spo2: '99%' },
               }
             })
           )

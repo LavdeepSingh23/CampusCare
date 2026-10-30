@@ -6,6 +6,8 @@ const TOKEN_KEY = 'campuscare_token'
 const DOCTOR_KEY = 'campuscare_doctor'
 const STUDENT_KEY = 'campuscare_student'
 const RECEPTIONIST_KEY = 'campuscare_receptionist'
+const FACULTY_KEY = 'campuscare_faculty'
+const ADMIN_KEY = 'campuscare_admin'
 const ROLE_KEY = 'campuscare_role'
 
 export function saveSession({ token, doctorId, name, specialization }) {
@@ -14,6 +16,8 @@ export function saveSession({ token, doctorId, name, specialization }) {
   localStorage.setItem(DOCTOR_KEY, JSON.stringify({ doctorId, name, specialization }))
   localStorage.removeItem(STUDENT_KEY)
   localStorage.removeItem(RECEPTIONIST_KEY)
+  localStorage.removeItem(FACULTY_KEY)
+  localStorage.removeItem(ADMIN_KEY)
 }
 
 export function saveStudentSession({ token, rollNumber, name, email, userId }) {
@@ -22,6 +26,8 @@ export function saveStudentSession({ token, rollNumber, name, email, userId }) {
   localStorage.setItem(STUDENT_KEY, JSON.stringify({ rollNumber, name, email, userId }))
   localStorage.removeItem(DOCTOR_KEY)
   localStorage.removeItem(RECEPTIONIST_KEY)
+  localStorage.removeItem(FACULTY_KEY)
+  localStorage.removeItem(ADMIN_KEY)
 }
 
 export function saveReceptionistSession({ token, name, email, staffId }) {
@@ -30,6 +36,28 @@ export function saveReceptionistSession({ token, name, email, staffId }) {
   localStorage.setItem(RECEPTIONIST_KEY, JSON.stringify({ name, email, staffId }))
   localStorage.removeItem(DOCTOR_KEY)
   localStorage.removeItem(STUDENT_KEY)
+  localStorage.removeItem(FACULTY_KEY)
+  localStorage.removeItem(ADMIN_KEY)
+}
+
+export function saveFacultySession({ token, facultyId, name, email, department, designation, employeeCode, patientId, accountType }) {
+  localStorage.setItem(TOKEN_KEY, token)
+  localStorage.setItem(ROLE_KEY, 'FACULTY')
+  localStorage.setItem(FACULTY_KEY, JSON.stringify({ facultyId, name, email, department, designation, employeeCode, patientId, accountType }))
+  localStorage.removeItem(DOCTOR_KEY)
+  localStorage.removeItem(STUDENT_KEY)
+  localStorage.removeItem(RECEPTIONIST_KEY)
+  localStorage.removeItem(ADMIN_KEY)
+}
+
+export function saveAdminSession({ token, userId, email, name, role }) {
+  localStorage.setItem(TOKEN_KEY, token)
+  localStorage.setItem(ROLE_KEY, 'ADMIN')
+  localStorage.setItem(ADMIN_KEY, JSON.stringify({ userId, email, name, role }))
+  localStorage.removeItem(DOCTOR_KEY)
+  localStorage.removeItem(STUDENT_KEY)
+  localStorage.removeItem(RECEPTIONIST_KEY)
+  localStorage.removeItem(FACULTY_KEY)
 }
 
 export function clearSession() {
@@ -38,6 +66,8 @@ export function clearSession() {
   localStorage.removeItem(DOCTOR_KEY)
   localStorage.removeItem(STUDENT_KEY)
   localStorage.removeItem(RECEPTIONIST_KEY)
+  localStorage.removeItem(FACULTY_KEY)
+  localStorage.removeItem(ADMIN_KEY)
 }
 
 export function getToken() {
@@ -60,6 +90,16 @@ export function getStoredStudent() {
 
 export function getStoredReceptionist() {
   const raw = localStorage.getItem(RECEPTIONIST_KEY)
+  return raw ? JSON.parse(raw) : null
+}
+
+export function getStoredFaculty() {
+  const raw = localStorage.getItem(FACULTY_KEY)
+  return raw ? JSON.parse(raw) : null
+}
+
+export function getStoredAdmin() {
+  const raw = localStorage.getItem(ADMIN_KEY)
   return raw ? JSON.parse(raw) : null
 }
 
@@ -205,6 +245,72 @@ const MOCK_PATIENT_PROFILES = {
 }
 
 
+
+// Canonical Doctor Login
+export async function loginDoctor(email, password) {
+  return await request('/api/auth/doctor/login', {
+    method: 'POST',
+    body: JSON.stringify({ email, password }),
+  })
+}
+
+// Canonical Receptionist Login
+export async function loginReceptionist(email, password) {
+  return await request('/api/auth/receptionist/login', {
+    method: 'POST',
+    body: JSON.stringify({ email, password }),
+  })
+}
+
+// Canonical Admin Login
+export async function loginAdmin(email, password) {
+  return await request('/api/auth/admin/login', {
+    method: 'POST',
+    body: JSON.stringify({ email, password }),
+  })
+}
+
+// Direct Faculty Login (for approved directory email)
+export async function loginFacultyDirect(email, password = '') {
+  return await request('/api/auth/faculty/login', {
+    method: 'POST',
+    body: JSON.stringify({ email, password }),
+  })
+}
+
+// Canonical Faculty Institutional Login (Google OAuth)
+export async function loginFacultyInstitutional(credential, simulatedUser = null) {
+  if (simulatedUser) {
+    const email = (simulatedUser.email || '').toLowerCase().trim()
+    if (!email.endsWith('@thapar.edu')) {
+      throw new Error('Access restricted to @thapar.edu institutional accounts only. Please use your official Thapar University email.')
+    }
+    const facultyData = {
+      access_token: 'demo-faculty-token-' + Date.now(),
+      faculty_id: 1,
+      patient_id: 101,
+      user_id: 2000,
+      role: 'FACULTY',
+      name: simulatedUser.name || (email.includes('sharma') ? 'Dr. Rajesh Sharma' : 'Dr. Anita Verma'),
+      email: email,
+      department: simulatedUser.department || (email.includes('sharma') ? 'Computer Science & Engineering' : 'Electronics & Communication'),
+      designation: simulatedUser.designation || 'Professor',
+    }
+    return mockDelay(facultyData, 400)
+  }
+  return await request('/api/auth/faculty/institutional', {
+    method: 'POST',
+    body: JSON.stringify({ credential }),
+  })
+}
+
+// Central Identity & Session Revalidation
+export async function fetchCurrentUser() {
+  return await request('/api/auth/me', {
+    method: 'GET',
+  })
+}
+
 export async function login(email, password) {
   try {
     return await request('/api/auth/login', {
@@ -261,12 +367,22 @@ export async function loginStudentGoogle(credential, simulatedUser = null) {
     return mockDelay(studentData, 400)
   }
 
-  // Real backend verification
+  // Real backend verification (Canonical: /api/auth/student/google with fallback)
   try {
-    return await request('/api/auth/google/student', {
-      method: 'POST',
-      body: JSON.stringify({ credential }),
-    })
+    try {
+      return await request('/api/auth/student/google', {
+        method: 'POST',
+        body: JSON.stringify({ credential }),
+      })
+    } catch (err) {
+      if (err.status === 404) {
+        return await request('/api/auth/google/student', {
+          method: 'POST',
+          body: JSON.stringify({ credential }),
+        })
+      }
+      throw err
+    }
   } catch (err) {
     if (!DEMO_MODE) throw err
     // If backend is offline in DEMO_MODE, decode JWT payload
@@ -1178,3 +1294,51 @@ export async function deleteStudentMedication(medicationId) {
   }
 }
 
+
+
+// ── FACULTY & DEPENDENT PORTAL ENDPOINTS ──
+export async function fetchFacultyProfile() {
+  return await request('/api/faculty/me')
+}
+
+export async function fetchFacultyMedicalRecords() {
+  return await request('/api/faculty/records')
+}
+
+export async function fetchFacultyFamilyMembers() {
+  return await request('/api/faculty/family')
+}
+
+export async function addFacultyFamilyMember(payload) {
+  return await request('/api/faculty/family', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function fetchFamilyMemberRecords(dependentId) {
+  return await request(`/api/faculty/family/${dependentId}/records`)
+}
+
+// ── ADMIN FACULTY DIRECTORY ENDPOINTS ──
+export async function fetchAdminFacultyDirectory(params = {}) {
+  const q = new URLSearchParams()
+  if (params.department) q.append('department', params.department)
+  if (params.active !== undefined) q.append('active', params.active)
+  const qs = q.toString() ? `?${q.toString()}` : ''
+  return await request(`/api/admin/faculty-directory${qs}`)
+}
+
+export async function addAdminFacultyDirectoryEntry(payload) {
+  return await request('/api/admin/faculty-directory', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function updateAdminFacultyDirectoryEntry(directoryId, payload) {
+  return await request(`/api/admin/faculty-directory/${directoryId}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  })
+}

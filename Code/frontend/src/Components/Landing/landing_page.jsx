@@ -37,6 +37,7 @@ import {
   ChevronRight,
 } from 'lucide-react'
 import tiMark from '../../assets/ti-mark.png'
+import PortalSelectorModal from '../Auth/PortalSelectorModal'
 import campusCareLogo from '../../assets/campuscare-logo.png'
 import { LiquidGlassCard, LiquidGlassFilter } from '../ui/liquid-glass'
 
@@ -473,6 +474,7 @@ export default function LandingPage() {
   const [showEmergencyModal, setShowEmergencyModal] = useState(false)
   const [toastMessage, setToastMessage] = useState(null)
   const [mobileNavOpen, setMobileNavOpen] = useState(false)
+  const [isPortalModalOpen, setIsPortalModalOpen] = useState(false)
 
   const selectedLandmark = useMemo(
     () => CAMPUS_LANDMARKS.find((l) => l.id === selectedLandmarkId) || CAMPUS_LANDMARKS[0],
@@ -572,7 +574,7 @@ export default function LandingPage() {
         whileHover={{ scale: 1.04 }}
         whileTap={{ scale: 0.96 }}
         transition={{ type: 'spring', stiffness: 400, damping: 25 }}
-        onClick={() => navigate('/user_login')}
+        onClick={() => setIsPortalModalOpen(true)}
         className="fixed top-3 sm:top-6 right-3.5 sm:right-8 z-50 px-3.5 py-1.5 sm:px-5 sm:py-2 rounded-full text-xs sm:text-sm font-semibold text-slate-950 bg-white hover:bg-slate-100 shadow-[0_4px_18px_rgba(0,0,0,0.25)] transition-all duration-200 cursor-pointer select-none"
       >
         Sign in
@@ -1405,7 +1407,7 @@ export default function LandingPage() {
             </a>
 
             <button
-              onClick={() => navigate('/user_login')}
+              onClick={() => setIsPortalModalOpen(true)}
               className="w-full sm:w-auto px-8 py-3.5 rounded-full text-xs sm:text-sm font-bold text-slate-950 bg-white hover:bg-slate-100 shadow-[0_4px_20px_rgba(255,255,255,0.25)] transition-all cursor-pointer flex items-center justify-center gap-2"
             >
               <span>Sign In</span>
@@ -1600,6 +1602,12 @@ export default function LandingPage() {
           </div>
         )}
       </AnimatePresence>
+
+      {/* ── 4-Portal Sign-In Selection Modal (Doctor, Faculty, Student, Receptionist) ── */}
+      <PortalSelectorModal
+        isOpen={isPortalModalOpen}
+        onClose={() => setIsPortalModalOpen(false)}
+      />
     </div>
   )
 }

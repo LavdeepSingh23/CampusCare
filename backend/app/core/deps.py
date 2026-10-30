@@ -2,6 +2,7 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError
 
+from app.core.database import get_db_connection
 from app.core.security import decode_access_token
 
 bearer_scheme = HTTPBearer(auto_error=False)
@@ -18,6 +19,8 @@ class CurrentUser:
         roll_number: str = None,
         doctor_id: int = None,
         staff_id: int = None,
+        faculty_id: int = None,
+        patient_id: int = None,
     ):
         self.user_id = user_id
         self.role = role
@@ -25,6 +28,8 @@ class CurrentUser:
         self.roll_number = roll_number
         self.doctor_id = doctor_id
         self.staff_id = staff_id
+        self.faculty_id = faculty_id
+        self.patient_id = patient_id
 
 
 class CurrentDoctor:
@@ -48,12 +53,33 @@ class CurrentReceptionist:
         self.role = role
 
 
+class CurrentFaculty:
+    """Identity container for a validated Faculty JWT."""
+
+    def __init__(self, user_id: int, faculty_id: int, patient_id: int, email: str = None, role: str = "FACULTY"):
+        self.user_id = user_id
+        self.faculty_id = faculty_id
+        self.patient_id = patient_id
+        self.email = email
+        self.role = role
+
+
+class CurrentAdmin:
+    """Identity container for a validated Admin JWT."""
+
+    def __init__(self, user_id: int, staff_id: int, email: str = None, role: str = "ADMIN"):
+        self.user_id = user_id
+        self.staff_id = staff_id
+        self.email = email
+        self.role = role
+
+
 def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
 ) -> CurrentUser:
     """
     Validates the Authorization: Bearer <token> header, verifying signature,
-    expiration, and required claims.
+    expiration, required claims, and real-time database active account status.
     """
     if credentials is None:
         raise HTTPException(
@@ -71,13 +97,38 @@ def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
+    user_id = int(payload["sub"])
+    role = payload.get("role")
+
+    # Real-time database verification of account existence and status
+    connection = get_db_connection()
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT status, account_type FROM USER_ACCOUNT WHERE user_id = %s", (user_id,))
+            acc = cursor.fetchone()
+            if not acc:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="User account associated with this session no longer exists.",
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
+            if acc["status"] != "ACTIVE":
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="This account has been disabled. Please contact the campus health administrator.",
+                )
+    finally:
+        connection.close()
+
     return CurrentUser(
-        user_id=int(payload["sub"]),
-        role=payload["role"],
+        user_id=user_id,
+        role=role,
         email=payload.get("email"),
         roll_number=payload.get("roll_number"),
         doctor_id=payload.get("doctor_id"),
         staff_id=payload.get("staff_id"),
+        faculty_id=payload.get("faculty_id"),
+        patient_id=payload.get("patient_id"),
     )
 
 
@@ -86,7 +137,7 @@ def get_current_doctor(
 ) -> CurrentDoctor:
     """
     Role dependency: strictly restricts endpoint to authenticated DOCTOR accounts.
-    Rejects receptionists, students, or unauthenticated users with 403 Forbidden.
+    Rejects receptionists, faculty, students, or unauthenticated users with 403 Forbidden.
     """
     if user.role != "DOCTOR" or user.doctor_id is None:
         raise HTTPException(
@@ -108,7 +159,7 @@ def get_current_receptionist(
 ) -> CurrentReceptionist:
     """
     Role dependency: strictly restricts endpoint to authenticated RECEPTIONIST accounts.
-    Rejects doctors, students, or unauthenticated users with 403 Forbidden.
+    Rejects doctors, faculty, students, or unauthenticated users with 403 Forbidden.
     """
     if user.role != "RECEPTIONIST" or user.staff_id is None:
         raise HTTPException(
@@ -124,14 +175,55 @@ def get_current_receptionist(
     )
 
 
+def get_current_faculty(
+    user: CurrentUser = Depends(get_current_user),
+) -> CurrentFaculty:
+    """
+    Role dependency: strictly restricts endpoint to verified FACULTY accounts.
+    """
+    if user.role != "FACULTY" or user.faculty_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access forbidden: Verified faculty account required.",
+        )
+
+    return CurrentFaculty(
+        user_id=user.user_id,
+        faculty_id=user.faculty_id,
+        patient_id=user.patient_id,
+        email=user.email,
+        role=user.role,
+    )
+
+
+def get_current_admin(
+    user: CurrentUser = Depends(get_current_user),
+) -> CurrentAdmin:
+    """
+    Role dependency: strictly restricts endpoint to authorized ADMIN accounts.
+    """
+    if user.role != "ADMIN" or user.staff_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access forbidden: System administrator privileges required.",
+        )
+
+    return CurrentAdmin(
+        user_id=user.user_id,
+        staff_id=user.staff_id,
+        email=user.email,
+        role=user.role,
+    )
+
+
 def get_current_staff(
     user: CurrentUser = Depends(get_current_user),
 ) -> CurrentUser:
     """
-    Role dependency: allows either DOCTOR or RECEPTIONIST staff members.
-    Rejects students with 403 Forbidden.
+    Role dependency: allows DOCTOR, RECEPTIONIST, or ADMIN staff members.
+    Rejects students and faculty with 403 Forbidden.
     """
-    if user.role not in ("DOCTOR", "RECEPTIONIST") or user.staff_id is None:
+    if user.role not in ("DOCTOR", "RECEPTIONIST", "ADMIN") or user.staff_id is None:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Access forbidden: Medical staff or receptionist privileges required.",

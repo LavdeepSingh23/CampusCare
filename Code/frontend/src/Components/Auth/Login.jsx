@@ -15,6 +15,7 @@ import {
   Clock,
   ShieldAlert,
   RotateCcw,
+  BookOpen,
 } from 'lucide-react'
 import tiMark from '../../assets/ti-mark.png'
 
@@ -75,6 +76,7 @@ export default function Login({ defaultMode }) {
     loginReceptionist,
     loginStudent,
     loginStudentGoogle,
+    loginFaculty,
     error,
     setError,
     loading,
@@ -88,7 +90,7 @@ export default function Login({ defaultMode }) {
   const queryRole = searchParams.get('role') || searchParams.get('mode')
   const initialMode =
     defaultMode ||
-    (queryRole === 'student' ? 'student' : queryRole === 'receptionist' ? 'receptionist' : location.state?.mode || 'doctor')
+    (queryRole === 'student' ? 'student' : queryRole === 'receptionist' ? 'receptionist' : queryRole === 'faculty' ? 'faculty' : location.state?.mode || 'doctor')
 
   const [mode, setMode] = useState(initialMode) // 'doctor' | 'student' | 'receptionist'
   const [email, setEmail] = useState('')
@@ -113,6 +115,7 @@ export default function Login({ defaultMode }) {
   const [unauthorizedDomain, setUnauthorizedDomain] = useState('')
   const [googleLoading, setGoogleLoading] = useState(false)
   const [showSandboxModal, setShowSandboxModal] = useState(false)
+  const [showFacultySandboxModal, setShowFacultySandboxModal] = useState(false)
   const [customTestEmail, setCustomTestEmail] = useState('')
 
   const isSessionExpired = sessionExpired || searchParams.get('expired') === 'true' || location.state?.sessionExpired
@@ -131,7 +134,7 @@ export default function Login({ defaultMode }) {
       try {
         window.google.accounts.id.initialize({
           client_id: googleClientId,
-          callback: handleGoogleCredentialResponse,
+          callback: mode === "faculty" ? handleFacultyGoogleResponse : handleGoogleCredentialResponse,
           hosted_domain: 'thapar.edu',
           auto_select: false,
         })
@@ -204,6 +207,41 @@ export default function Login({ defaultMode }) {
     if (success) {
       setSessionExpired(false)
       navigate('/student_dashboard')
+    }
+  }
+
+  
+  async function handleFacultyGoogleResponse(response) {
+    if (!response?.credential) return
+    setGoogleLoading(true)
+    setGoogleError('')
+    try {
+      const fac = await loginFaculty(response.credential)
+      if (fac) {
+        setSessionExpired(false)
+        navigate('/faculty_dashboard')
+      }
+    } catch (err) {
+      setGoogleError(err.message || 'Faculty authentication failed.')
+    } finally {
+      setGoogleLoading(false)
+    }
+  }
+
+  async function handleFacultySimulatedSignIn(facultyAccount) {
+    setGoogleLoading(true)
+    setGoogleError('')
+    setShowFacultySandboxModal(false)
+    try {
+      const fac = await loginFaculty(null, facultyAccount)
+      if (fac) {
+        setSessionExpired(false)
+        navigate('/faculty_dashboard')
+      }
+    } catch (err) {
+      setGoogleError(err.message || 'Faculty sign-in failed.')
+    } finally {
+      setGoogleLoading(false)
     }
   }
 
@@ -314,12 +352,14 @@ export default function Login({ defaultMode }) {
                   ? 'Sign in to the Doctor Portal'
                   : mode === 'receptionist'
                   ? 'Sign in to the Receptionist Portal'
+                  : mode === 'faculty'
+                  ? 'Sign in to the Faculty Portal'
                   : 'Sign in to the Student Portal'}
               </p>
             </div>
 
-            {/* Mode Toggle (Doctor / Student / Receptionist) */}
-            <div className="grid grid-cols-3 w-full sm:w-auto sm:inline-flex bg-slate-100/90 rounded-xl sm:rounded-full p-1 border border-slate-200/80 gap-1 sm:gap-0 shadow-2xs">
+            {/* Mode Toggle (Doctor / Receptionist / Student / Faculty) — EXACTLY 4 VISIBLE CHOICES */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 w-full bg-slate-100/90 rounded-2xl p-1 border border-slate-200/80 gap-1 shadow-2xs">
               <button
                 type="button"
                 onClick={() => {
@@ -328,31 +368,14 @@ export default function Login({ defaultMode }) {
                   setGoogleError('')
                   setUnauthorizedDomain('')
                 }}
-                className={`py-1.5 px-1 sm:px-5 rounded-lg sm:rounded-full text-[11px] sm:text-xs font-semibold transition-all cursor-pointer text-center flex items-center justify-center gap-1 sm:gap-1.5 ${
+                className={`py-2 px-2 rounded-xl text-[11px] sm:text-xs font-semibold transition-all cursor-pointer text-center flex items-center justify-center gap-1.5 ${
                   mode === 'doctor'
                     ? 'bg-white text-slate-900 shadow-sm'
                     : 'text-slate-500 hover:text-slate-800'
                 }`}
               >
-                <Stethoscope className="w-3.5 h-3.5 shrink-0" />
-                <span><span className="sm:hidden">Doctor</span><span className="hidden sm:inline">Doctor Portal</span></span>
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setMode('student')
-                  setError('')
-                  setGoogleError('')
-                  setUnauthorizedDomain('')
-                }}
-                className={`py-1.5 px-1 sm:px-5 rounded-lg sm:rounded-full text-[11px] sm:text-xs font-semibold transition-all cursor-pointer text-center flex items-center justify-center gap-1 sm:gap-1.5 ${
-                  mode === 'student'
-                    ? 'bg-white text-slate-900 shadow-sm'
-                    : 'text-slate-500 hover:text-slate-800'
-                }`}
-              >
-                <GraduationCap className="w-3.5 h-3.5 shrink-0" />
-                <span><span className="sm:hidden">Student</span><span className="hidden sm:inline">Student Portal</span></span>
+                <Stethoscope className="w-3.5 h-3.5 shrink-0 text-teal-700" />
+                <span>Doctor</span>
               </button>
               <button
                 type="button"
@@ -362,14 +385,48 @@ export default function Login({ defaultMode }) {
                   setGoogleError('')
                   setUnauthorizedDomain('')
                 }}
-                className={`py-1.5 px-1 sm:px-5 rounded-lg sm:rounded-full text-[11px] sm:text-xs font-semibold transition-all cursor-pointer text-center flex items-center justify-center gap-1 sm:gap-1.5 ${
+                className={`py-2 px-2 rounded-xl text-[11px] sm:text-xs font-semibold transition-all cursor-pointer text-center flex items-center justify-center gap-1.5 ${
                   mode === 'receptionist'
                     ? 'bg-white text-slate-900 shadow-sm'
                     : 'text-slate-500 hover:text-slate-800'
                 }`}
               >
-                <UserCheck className="w-3.5 h-3.5 shrink-0" />
-                <span><span className="sm:hidden">Reception</span><span className="hidden sm:inline">Receptionist Portal</span></span>
+                <UserCheck className="w-3.5 h-3.5 shrink-0 text-slate-700" />
+                <span>Reception</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setMode('student')
+                  setError('')
+                  setGoogleError('')
+                  setUnauthorizedDomain('')
+                }}
+                className={`py-2 px-2 rounded-xl text-[11px] sm:text-xs font-semibold transition-all cursor-pointer text-center flex items-center justify-center gap-1.5 ${
+                  mode === 'student'
+                    ? 'bg-white text-slate-900 shadow-sm'
+                    : 'text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                <GraduationCap className="w-3.5 h-3.5 shrink-0 text-indigo-700" />
+                <span>Student</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setMode('faculty')
+                  setError('')
+                  setGoogleError('')
+                  setUnauthorizedDomain('')
+                }}
+                className={`py-2 px-2 rounded-xl text-[11px] sm:text-xs font-semibold transition-all cursor-pointer text-center flex items-center justify-center gap-1.5 ${
+                  mode === 'faculty'
+                    ? 'bg-white text-slate-900 shadow-sm'
+                    : 'text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                <BookOpen className="w-3.5 h-3.5 shrink-0 text-amber-700" />
+                <span>Faculty</span>
               </button>
             </div>
 
@@ -390,6 +447,63 @@ export default function Login({ defaultMode }) {
             {error && (
               <div className="bg-red-50 border border-red-200 rounded-2xl px-4 py-3 text-xs text-red-700 font-medium">
                 {error}
+              </div>
+            )}
+
+            
+            {/* ── FACULTY FORM (GOOGLE WORKSPACE INSTITUTIONAL AUTH) ── */}
+            {mode === 'faculty' && (
+              <div className="space-y-4">
+                {googleLoading && (
+                  <div className="rounded-2xl border border-teal-300 bg-teal-50/90 p-4 flex items-center gap-3 animate-pulse shadow-xs">
+                    <Loader2 className="w-5 h-5 text-teal-700 animate-spin shrink-0" />
+                    <div className="text-xs">
+                      <p className="font-bold text-teal-950">Verifying Faculty Institutional Credentials…</p>
+                      <p className="text-teal-800 mt-0.5">Checking approved University Faculty Directory.</p>
+                    </div>
+                  </div>
+                )}
+
+                {googleError && !googleLoading && (
+                  <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-xs text-red-800 flex items-start justify-between gap-3 shadow-xs">
+                    <div className="flex items-start gap-2.5">
+                      <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+                      <div>
+                        <p className="font-bold text-red-950">Faculty Authentication Error</p>
+                        <p className="mt-0.5 text-red-700 leading-relaxed">{googleError}</p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setGoogleError('')}
+                      className="text-red-400 hover:text-red-700 transition-colors p-1 cursor-pointer"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                )}
+
+                <div className="p-4 rounded-2xl bg-gradient-to-r from-amber-500/10 via-teal-500/10 to-transparent border border-amber-500/30 text-xs text-slate-700 space-y-2">
+                  <div className="flex items-center gap-2 text-slate-900 font-bold">
+                    <BookOpen className="w-4 h-4 text-amber-600" />
+                    <span>Official TIET Faculty & Staff Access</span>
+                  </div>
+                  <p className="text-slate-600 leading-relaxed">
+                    Faculty access is authenticated via institutional Google Workspace (<strong className="text-slate-800 font-mono">@thapar.edu</strong>) and verified against the University Faculty Directory.
+                  </p>
+                </div>
+
+                <div className="pt-2 flex flex-col items-center gap-3">
+                  <div ref={googleBtnRef} className="flex justify-center w-full min-h-[44px]" />
+
+                  <button
+                    type="button"
+                    onClick={() => setShowFacultySandboxModal(true)}
+                    className="text-[11px] font-semibold text-teal-700 hover:text-teal-900 hover:underline cursor-pointer"
+                  >
+                    Testing in Sandbox / Demo? Select Directory Faculty →
+                  </button>
+                </div>
               </div>
             )}
 
