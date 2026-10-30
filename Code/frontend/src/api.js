@@ -429,6 +429,35 @@ export function receptionCheckIn({
   })
 }
 
+export function searchCommunityProfiles(query = '', category = '') {
+  const params = new URLSearchParams()
+  if (query) params.append('query', query)
+  if (category && category !== 'ALL') params.append('category', category)
+  const qs = params.toString() ? `?${params.toString()}` : ''
+  return request(`/api/reception/community/search${qs}`)
+}
+
+export function registerCommunityMember(payload) {
+  return request('/api/reception/community/register', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export function recordCommunityVerification(payload) {
+  return request('/api/reception/community/verify', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export function checkInCommunityMember(payload) {
+  return request('/api/reception/community/checkin', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
 export function queueCheckIn({
   rollNumber,
   roll_number,

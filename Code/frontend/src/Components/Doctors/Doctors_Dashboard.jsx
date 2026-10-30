@@ -42,7 +42,9 @@ import {
   ShieldCheck,
   Layers,
   ClipboardList,
+  X,
 } from 'lucide-react'
+import { formatDosageMAN } from '../../utils/dosageFormatter'
 import { useAuth } from '../../context/AuthContext'
 import {
   fetchDoctorProfile,
@@ -86,6 +88,8 @@ export default function Doctors_Dashboard() {
 
   // Immersive E-Prescription Questionnaire Modal state
   const [isPrescriptionModalOpen, setIsPrescriptionModalOpen] = useState(false)
+  const [isPastHistoryModalOpen, setIsPastHistoryModalOpen] = useState(false)
+  const [presetPrescription, setPresetPrescription] = useState(null)
 
   // Doctor Profile info
   const [doctorProfile, setDoctorProfile] = useState({
@@ -176,6 +180,95 @@ export default function Doctors_Dashboard() {
     }
     return []
   }, [patientHistory])
+
+  // Grouped past consultation visits / records
+  const pastHistoryRecords = useMemo(() => {
+    if (Array.isArray(patientHistory) && patientHistory.length > 0) {
+      const recordsWithMeds = patientHistory.filter(
+        (h) => (Array.isArray(h.medicines) && h.medicines.length > 0) || h.diagnosis || h.notes || h.clinicalNotes
+      )
+      if (recordsWithMeds.length > 0) {
+        return recordsWithMeds.map((h, idx) => ({
+          id: h.visitId || h.visit_id || `hist-${idx}`,
+          date:
+            h.date ||
+            (h.checkedInAt
+              ? new Date(h.checkedInAt).toLocaleDateString('en-IN', {
+                  day: 'numeric',
+                  month: 'short',
+                  year: 'numeric',
+                })
+              : 'Prior Consultation'),
+          diagnosis: h.diagnosis || 'Clinical Consultation',
+          doctor: h.doctorName || h.doctor || 'Campus Physician',
+          notes: h.clinicalNotes || h.notes || '',
+          medicines: Array.isArray(h.medicines)
+            ? h.medicines.map((m) => ({
+                name: m.name,
+                dosage: m.timing || m.dosage || '1-0-1',
+                timing: m.timing || 'Morning & Night',
+                duration: m.duration || '3 days',
+                instruction: m.note || m.instruction || 'After food',
+              }))
+            : [],
+        }))
+      }
+    }
+    // Fallback grouping if previousPrescriptions has items
+    if (previousPrescriptions.length > 0) {
+      return [
+        {
+          id: 'past-archive-1',
+          date: previousPrescriptions[0]?.date || 'Prior Consultation',
+          diagnosis:
+            previousPrescriptions[0]?.diagnosis ||
+            selectedPatient?.complaint ||
+            'Prior Consultation',
+          doctor: 'Campus Health Centre',
+          notes: 'Archived clinical prescription on file.',
+          medicines: previousPrescriptions,
+        },
+      ]
+    }
+    return []
+  }, [patientHistory, previousPrescriptions, selectedPatient])
+
+  // Copy All Past Prescriptions into New Rx & Redirect directly to Formal Review
+  const handleCopyAllAndReview = (record) => {
+    const rawMeds = Array.isArray(record?.medicines) ? record.medicines : []
+    if (rawMeds.length === 0) {
+      triggerToast('No medications found in this past record.')
+      return
+    }
+
+    // Check for allergy conflicts
+    const conflicts = []
+    rawMeds.forEach((m) => {
+      const conflict = checkDrugAllergyConflict(m, selectedPatient?.allergies || [])
+      if (conflict?.hasConflict) conflicts.push(m.name)
+    })
+    if (conflicts.length > 0) {
+      triggerToast(`Allergy alert for: ${conflicts.join(', ')}. Please review carefully.`)
+    }
+
+    const formattedMeds = rawMeds.map((m) => ({
+      name: m.name,
+      dosage: m.dosage || m.timing || '1-0-1',
+      timing: m.timing || 'Morning & Night',
+      duration: m.duration || '3 days',
+      instruction: m.instruction || m.note || 'After food',
+    }))
+
+    setPresetPrescription({
+      diagnosis: record.diagnosis || selectedPatient?.complaint || 'General Consultation',
+      medicines: formattedMeds,
+      followUp: 'No schedule needed',
+      bedRest: 'No Bed Rest Advised',
+    })
+    setIsPastHistoryModalOpen(false)
+    setActiveTab('prescription')
+    setIsPrescriptionModalOpen(true)
+  }
 
   // Distinct Draft Consultation State
   const [draftDiagnosis, setDraftDiagnosis] = useState('')
@@ -355,8 +448,11 @@ export default function Doctors_Dashboard() {
                 name: item.name || item.student_name,
                 initials,
                 rollNo: roll,
+                communityCode: item.communityCode || item.community_code || null,
+                category: item.category || null,
+                patientType: item.patientType || item.patient_type || (item.communityCode ? 'COMMUNITY' : 'STUDENT'),
                 age: item.age || 20,
-                gender: 'Student',
+                gender: item.gender || (item.communityCode ? (item.category || 'Community') : 'Student'),
                 bloodGroup: item.bloodGroup || item.blood_group || 'B+',
                 waitTime: item.waitingSince ? `${item.waitingSince}` : `${(idx + 1) * 6} min`,
                 status,
@@ -374,7 +470,9 @@ export default function Doctors_Dashboard() {
                   (summary.conditions && summary.conditions !== 'None recorded'
                     ? summary.conditions
                     : 'OPD Health Evaluation'),
-                history: `TIET Student. Roll: ${roll}. Blood Group: ${item.bloodGroup || 'B+'}, Age: ${item.age || 20}.`,
+                history: item.communityCode
+                  ? `Campus Community (${item.category || 'Member'}). Code: ${roll}. Blood: ${item.bloodGroup || 'B+'}, Age: ${item.age || 20}.`
+                  : `TIET Student. Roll: ${roll}. Blood Group: ${item.bloodGroup || 'B+'}, Age: ${item.age || 20}.`,
                 allergies: allergiesList,
                 prescriptions: [],
                 vitals: { bp: '118/76', pulse: '72 bpm', temp: '98.4 °F', spo2: '99%' },
@@ -698,6 +796,9 @@ export default function Doctors_Dashboard() {
     const generalInstructions = [
       dietAdvice ? `Diet/Lifestyle: ${dietAdvice}` : '',
       followUp ? `Follow-up: ${followUp}` : '',
+      overrideData?.bedRest && overrideData.bedRest !== 'No Bed Rest Advised'
+        ? `Medical Leave / Bed Rest: ${overrideData.bedRest} (Official Academic Excuse for Make-Up Exam)`
+        : '',
     ].filter(Boolean).join('\n') || 'Take medicines as prescribed.'
 
     const medsList = overrideData?.medicines || draftMedicines
@@ -1379,103 +1480,80 @@ export default function Doctors_Dashboard() {
 
                         <span className="text-[11px] px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-800 font-semibold border border-emerald-200 shrink-0 hidden sm:inline-flex items-center gap-1.5">
                           <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-                          <span>TIET Verified Student</span>
+                          <span>{selectedPatient.communityCode ? `Community (${selectedPatient.category || 'Member'})` : 'TIET Verified Student'}</span>
                         </span>
                       </div>
 
-                      {/* 4 Vitals in a Spacious Confined Bar */}
-                      <div>
-                        <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 block mb-1.5">
-                          Baseline Clinical Vitals
-                        </span>
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 bg-slate-50 p-2.5 rounded-xl border border-slate-200/80 text-center">
-                          <div className="p-2 bg-white rounded-xl border border-slate-100 shadow-2xs">
-                            <span className="text-slate-400 block text-[10px] font-medium">Blood Pressure</span>
-                            <span className="font-bold text-slate-900 text-sm sm:text-base">{selectedPatient.vitals.bp}</span>
-                          </div>
-                          <div className="p-2 bg-white rounded-xl border border-slate-100 shadow-2xs">
-                            <span className="text-slate-400 block text-[10px] font-medium">Pulse Rate</span>
-                            <span className="font-bold text-slate-900 text-sm sm:text-base">{selectedPatient.vitals.pulse}</span>
-                          </div>
-                          <div className="p-2 bg-white rounded-xl border border-slate-100 shadow-2xs">
-                            <span className="text-slate-400 block text-[10px] font-medium">SpO2 Oxygen</span>
-                            <span className="font-bold text-slate-900 text-sm sm:text-base">{selectedPatient.vitals.spo2}</span>
-                          </div>
-                          <div className="p-2 bg-white rounded-xl border border-slate-100 shadow-2xs">
-                            <span className="text-slate-400 block text-[10px] font-medium">Temperature</span>
-                            <span className="font-bold text-slate-900 text-sm sm:text-base">{selectedPatient.vitals.temp}</span>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Allergy Alert */}
-                      {selectedPatient.allergies.some((a) => a !== 'None declared') ? (
-                        <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-xs sm:text-sm text-rose-900 flex items-start gap-2.5">
-                          <ShieldAlert className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
-                          <div>
-                            <span className="font-bold block text-xs">ALLERGY WARNING:</span>
-                            <span className="text-xs">Known allergic reaction to: <strong>{selectedPatient.allergies.join(', ')}</strong></span>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="p-2.5 rounded-xl bg-emerald-50/70 border border-emerald-200/70 text-xs text-emerald-800 flex items-center gap-2">
-                          <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
-                          <span>No Known Drug Allergies (NKDA) reported on health file</span>
-                        </div>
-                      )}
-
-                      {/* Triage Complaint */}
+                      {/* 1. Patient Complaint (First) */}
                       <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/80 space-y-1.5">
-                        <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 block">
-                          Chief Complaint (Triage Intake)
-                        </span>
-                        <p className="text-xs sm:text-sm text-slate-900 bg-white p-2.5 rounded-lg border border-slate-200 font-medium leading-relaxed">
-                          "{selectedPatient.complaint}"
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 block">
+                            Patient Complaint
+                          </span>
+                          <span className="text-[10px] text-slate-400 font-medium">Triage Intake</span>
+                        </div>
+                        <p className="text-xs sm:text-sm text-slate-900 bg-white p-2.5 rounded-lg border border-slate-200 font-medium leading-relaxed shadow-2xs">
+                          "{selectedPatient.complaint || 'General Consultation'}"
                         </p>
                       </div>
 
-                      {/* Past Prescriptions */}
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between text-xs">
-                          <span className="font-bold text-slate-600 flex items-center gap-1.5">
-                            <Clock className="w-3.5 h-3.5 text-slate-400" />
-                            <span>Past Prescriptions on File ({previousPrescriptions.length})</span>
-                          </span>
-                          <span className="text-[10px] text-slate-400">Medical Record History</span>
-                        </div>
-
-                        {previousPrescriptions.length === 0 ? (
-                          <p className="text-xs text-slate-400 italic">No prior prescriptions recorded for this student.</p>
-                        ) : (
-                          <div className="space-y-1.5 max-h-32 overflow-y-auto pr-1">
-                            {previousPrescriptions.map((rx, idx) => (
-                              <div
-                                key={idx}
-                                className="flex items-center justify-between p-2 rounded-xl bg-slate-50 border border-slate-200 text-xs"
-                              >
-                                <div className="truncate mr-2">
-                                  <span className="font-bold text-slate-900 text-xs block truncate">{rx.name}</span>
-                                  <span className="text-[11px] text-slate-500">{rx.dosage} • {rx.duration} ({rx.instruction})</span>
-                                </div>
-                                <button
-                                  type="button"
-                                  onClick={() => handleCopyPreviousPrescription(rx)}
-                                  className="px-2.5 py-1 rounded-lg bg-teal-50 text-teal-800 text-[10px] font-bold border border-teal-200 hover:bg-teal-100 cursor-pointer shrink-0"
-                                >
-                                  Copy to Rx
-                                </button>
-                              </div>
-                            ))}
+                      {/* 2. Drug Allergies Bar (Second, clean without NKDA acronym) */}
+                      {selectedPatient.allergies && selectedPatient.allergies.some((a) => a && a !== 'None declared' && a !== 'None') ? (
+                        <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-xs sm:text-sm text-rose-900 flex items-start gap-2.5 shadow-2xs">
+                          <ShieldAlert className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                          <div>
+                            <span className="font-bold block text-xs">Allergy Warning</span>
+                            <span className="text-xs">Known allergic reaction to: <strong className="font-semibold">{selectedPatient.allergies.join(', ')}</strong></span>
                           </div>
-                        )}
+                        </div>
+                      ) : (
+                        <div className="p-2.5 px-3 rounded-xl bg-emerald-50/70 border border-emerald-200/70 text-xs text-emerald-800 flex items-center justify-between shadow-2xs">
+                          <div className="flex items-center gap-2">
+                            <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+                            <span className="font-medium">No known drug allergies reported on health file</span>
+                          </div>
+                          <span className="text-[10px] font-bold uppercase text-emerald-700 bg-emerald-100/70 px-2 py-0.5 rounded">Allergy Safe</span>
+                        </div>
+                      )}
+
+                      {/* 3. Past Prescriptions & Medical History (Third, button trigger) */}
+                      <div>
+                        <button
+                          type="button"
+                          onClick={() => setIsPastHistoryModalOpen(true)}
+                          className="w-full p-3 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200 text-left transition-all flex items-center justify-between group cursor-pointer shadow-2xs"
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <div className="p-2 rounded-lg bg-white border border-slate-200 text-slate-600 group-hover:text-teal-800 transition-colors shrink-0">
+                              <Clock className="w-4 h-4" />
+                            </div>
+                            <div className="truncate">
+                              <div className="flex items-center gap-2">
+                                <span className="text-xs font-bold text-slate-900 group-hover:text-teal-900 transition-colors">
+                                  Past Prescriptions & History
+                                </span>
+                                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-teal-100 text-teal-800 shrink-0">
+                                  {previousPrescriptions.length} Records
+                                </span>
+                              </div>
+                              <p className="text-[11px] text-slate-500 truncate mt-0.5">
+                                {previousPrescriptions.length > 0
+                                  ? 'Click to view previous medications, consultation notes, or repeat Rx'
+                                  : 'No prior prescriptions recorded on file'}
+                              </p>
+                            </div>
+                          </div>
+                          <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-teal-700 group-hover:translate-x-0.5 transition-all shrink-0 ml-2" />
+                        </button>
                       </div>
                     </div>
 
-                    {/* Primary Prescription CTA */}
+                    {/* 4. Primary Prescription CTA */}
                     <div className="pt-3 border-t border-slate-100">
                       <button
                         type="button"
                         onClick={() => {
+                          setPresetPrescription(null)
                           setIsPrescriptionModalOpen(true)
                           setActiveTab('prescription')
                         }}
@@ -1531,26 +1609,6 @@ export default function Doctors_Dashboard() {
                 <p className="text-xs text-slate-500">
                   Roll No: <strong className="text-slate-700 font-mono">{selectedPatient.rollNo}</strong> • Age: {selectedPatient.age} yrs • Blood Group: <strong className="text-teal-800">{selectedPatient.bloodGroup}</strong>
                 </p>
-              </div>
-
-              {/* Vitals overview */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 max-w-lg mx-auto bg-slate-50 p-3 rounded-2xl border border-slate-200 text-xs">
-                <div>
-                  <span className="text-slate-400 block text-[10px]">Blood Pressure</span>
-                  <span className="font-bold text-slate-800">{selectedPatient.vitals.bp}</span>
-                </div>
-                <div>
-                  <span className="text-slate-400 block text-[10px]">Pulse Rate</span>
-                  <span className="font-bold text-slate-800">{selectedPatient.vitals.pulse}</span>
-                </div>
-                <div>
-                  <span className="text-slate-400 block text-[10px]">SpO2</span>
-                  <span className="font-bold text-slate-800">{selectedPatient.vitals.spo2}</span>
-                </div>
-                <div>
-                  <span className="text-slate-400 block text-[10px]">Temperature</span>
-                  <span className="font-bold text-slate-800">{selectedPatient.vitals.temp}</span>
-                </div>
               </div>
 
               <div className="pt-2 flex items-center justify-center gap-3">
@@ -1670,6 +1728,7 @@ export default function Doctors_Dashboard() {
           isOpen={isPrescriptionModalOpen}
           onClose={() => {
             setIsPrescriptionModalOpen(false)
+            setPresetPrescription(null)
             if (activeTab === 'prescription') {
               setActiveTab('queue')
             }
@@ -1678,7 +1737,141 @@ export default function Doctors_Dashboard() {
           doctor={doctorProfile}
           onFinalizePrescription={handleCompleteAndDispatch}
           isFinalizing={isFinalizing}
+          presetPrescription={presetPrescription}
         />
+
+        {/* ── PAST PRESCRIPTIONS & MEDICAL HISTORY POPUP MODAL ── */}
+        <AnimatePresence>
+          {isPastHistoryModalOpen && selectedPatient && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-slate-900/60 backdrop-blur-xs">
+              <motion.div
+                initial={{ opacity: 0, scale: 0.96, y: 10 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.96, y: 10 }}
+                transition={{ duration: 0.15 }}
+                className="w-full max-w-2xl bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[88vh]"
+              >
+                {/* Header */}
+                <div className="p-4 sm:p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/70">
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-2 rounded-xl bg-teal-50 border border-teal-200 text-teal-800">
+                      <Clock className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm sm:text-base font-bold text-slate-900">
+                        Past Prescriptions & Clinical History
+                      </h3>
+                      <p className="text-xs text-slate-500">
+                        Student: <strong className="text-slate-800">{selectedPatient.name}</strong> • Roll No: {selectedPatient.rollNo} • Blood: <span className="font-semibold text-teal-800">{selectedPatient.bloodGroup}</span>
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsPastHistoryModalOpen(false)}
+                    className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 transition-colors cursor-pointer"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                {/* Body */}
+                <div className="p-4 sm:p-6 overflow-y-auto space-y-4 flex-1">
+                  {pastHistoryRecords.length === 0 ? (
+                    <div className="p-8 text-center border border-dashed border-slate-200 rounded-2xl bg-slate-50/50 space-y-2">
+                      <Clock className="w-8 h-8 mx-auto text-slate-300" />
+                      <p className="text-sm font-semibold text-slate-700">No Past Prescriptions on File</p>
+                      <p className="text-xs text-slate-400">
+                        This student has no archived clinical prescriptions or past medication history in the university health registry.
+                      </p>
+                    </div>
+                  ) : (
+                    pastHistoryRecords.map((record) => (
+                      <div
+                        key={record.id}
+                        className="rounded-xl border border-slate-200 bg-white p-4 space-y-3 shadow-2xs hover:border-slate-300 transition-colors"
+                      >
+                        {/* Record Top Bar */}
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2.5 border-b border-slate-100">
+                          <div className="flex items-center gap-2">
+                            <span className="text-[11px] font-bold px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 border border-slate-200 inline-flex items-center gap-1">
+                              <Calendar className="w-3 h-3 text-slate-500" />
+                              <span>{record.date}</span>
+                            </span>
+                            <span className="text-xs font-semibold text-teal-900 bg-teal-50 px-2.5 py-0.5 rounded-md border border-teal-200">
+                              Diagnosis: {record.diagnosis}
+                            </span>
+                          </div>
+                          <span className="text-[11px] text-slate-500">
+                            Attended by: <strong className="text-slate-700">{record.doctor}</strong>
+                          </span>
+                        </div>
+
+                        {/* Clinical Notes if available */}
+                        {record.notes && (
+                          <p className="text-xs text-slate-600 bg-slate-50/80 p-2.5 rounded-lg border border-slate-100 italic leading-relaxed">
+                            "{record.notes}"
+                          </p>
+                        )}
+
+                        {/* Prescribed Medicines in simplified view */}
+                        <div>
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1.5">
+                            Prescribed Medications ({record.medicines.length})
+                          </span>
+                          <div className="space-y-1.5">
+                            {record.medicines.map((m, mIdx) => (
+                              <div
+                                key={mIdx}
+                                className="flex items-center justify-between p-2 rounded-lg bg-slate-50/80 border border-slate-100 text-xs"
+                              >
+                                <div className="truncate mr-2">
+                                  <span className="font-bold text-slate-900 block truncate">
+                                    {m.name}
+                                  </span>
+                                  <span className="text-[11px] text-slate-500">
+                                    {m.duration} • {m.instruction}
+                                  </span>
+                                </div>
+                                <span className="font-mono font-bold text-[11px] text-teal-900 bg-teal-100/70 px-2 py-0.5 rounded shrink-0">
+                                  {formatDosageMAN(m.dosage || m.timing)}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Copy All Button to repeat full prescription and redirect directly to formal review */}
+                        <div className="pt-2 flex justify-end">
+                          <button
+                            type="button"
+                            onClick={() => handleCopyAllAndReview(record)}
+                            className="w-full sm:w-auto px-4 py-2 rounded-xl bg-teal-800 hover:bg-teal-900 text-white text-xs font-bold flex items-center justify-center gap-2 cursor-pointer shadow-xs transition-all"
+                          >
+                            <RotateCcw className="w-3.5 h-3.5 text-teal-200" />
+                            <span>Copy All to New Rx & Review</span>
+                            <ArrowRight className="w-3.5 h-3.5 text-teal-200" />
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                {/* Footer */}
+                <div className="p-3.5 border-t border-slate-100 bg-slate-50/70 flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => setIsPastHistoryModalOpen(false)}
+                    className="px-4 py-2 rounded-xl border border-slate-300 hover:bg-slate-100 text-slate-700 text-xs font-semibold cursor-pointer"
+                  >
+                    Close
+                  </button>
+                </div>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
 
         {/* ── SUCCESS MODAL ── */}
         <AnimatePresence>

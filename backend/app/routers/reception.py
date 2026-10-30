@@ -62,6 +62,78 @@ class CheckInRequest(BaseModel):
         return val.strip() if val and val.strip() else None
 
 
+class CommunityRegisterRequest(BaseModel):
+    full_name: Optional[str] = Field(None, max_length=150)
+    fullName: Optional[str] = Field(None, max_length=150)
+    category: str = Field(..., description="CARETAKER, CAMPUS_WORKER, GUARD, or OTHER")
+    category_other: Optional[str] = Field(None, max_length=150)
+    categoryOther: Optional[str] = Field(None, max_length=150)
+    affiliation_details: Optional[str] = Field(None, max_length=255)
+    affiliationDetails: Optional[str] = Field(None, max_length=255)
+    age: Optional[int] = Field(None, ge=1, le=120)
+    gender: Optional[str] = Field("OTHER")
+    blood_group: Optional[str] = Field(None, max_length=10)
+    bloodGroup: Optional[str] = Field(None, max_length=10)
+    allow_duplicate: Optional[bool] = False
+    allowDuplicate: Optional[bool] = False
+
+    def get_full_name(self) -> str:
+        name = self.full_name or self.fullName or ""
+        if not name.strip() or len(name.strip()) < 2:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="full_name (or fullName) is required with minimum 2 characters",
+            )
+        return name.strip()
+
+    def get_category_other(self) -> Optional[str]:
+        return self.category_other or self.categoryOther
+
+    def get_affiliation(self) -> str:
+        aff = self.affiliation_details or self.affiliationDetails or ""
+        return aff.strip()
+
+    def get_blood_group(self) -> Optional[str]:
+        bg = self.blood_group or self.bloodGroup
+        return bg.strip().upper() if bg else None
+
+    def get_allow_duplicate(self) -> bool:
+        return bool(self.allow_duplicate or self.allowDuplicate)
+
+
+class CommunityVerifyRequest(BaseModel):
+    patient_id: Optional[int] = None
+    patientId: Optional[int] = None
+    outcome: str = Field(..., description="VERIFIED, REJECTED, FLAGGED")
+    notes: Optional[str] = Field(None, max_length=500)
+
+    def get_patient_id(self) -> int:
+        pid = self.patient_id or self.patientId
+        if not pid:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="patient_id is required")
+        return pid
+
+
+class CommunityCheckInRequest(BaseModel):
+    patient_id: Optional[int] = None
+    patientId: Optional[int] = None
+    doctor_id: Optional[int] = None
+    doctorId: Optional[int] = None
+    complaint: Optional[str] = Field(None, max_length=300)
+
+    def get_patient_id(self) -> int:
+        pid = self.patient_id or self.patientId
+        if not pid:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="patient_id is required")
+        return pid
+
+    def get_doctor_id(self) -> int:
+        did = self.doctor_id if self.doctor_id is not None else self.doctorId
+        if not did:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="doctor_id is required")
+        return did
+
+
 def _active_visit(cursor, roll_number: str):
     placeholders = ",".join(["%s"] * len(ACTIVE_VISIT_STATES))
     cursor.execute(
@@ -262,6 +334,169 @@ def check_in(body: CheckInRequest, me: CurrentReceptionist = Depends(get_current
             conn.close()
 
 
+# ── Community Member Endpoints ─────────────────────────────────────────
+
+@router.get("/community/search")
+@router.get("/community/profiles")
+def search_community(
+    query: Optional[str] = Query("", description="Search by name, community code, or affiliation"),
+    category: Optional[str] = Query(None, description="Optional category filter: CARETAKER, CAMPUS_WORKER, GUARD, OTHER"),
+    _: CurrentReceptionist = Depends(get_current_receptionist),
+):
+    """
+    Searches registered community members. Returns candidate profiles with identity, category,
+    last manual verification status, and active visit status.
+    """
+    conn = get_db_connection()
+    try:
+        results = ql.search_community_profiles(conn, query=query, category=category)
+        return {"profiles": results, "count": len(results)}
+    finally:
+        conn.close()
+
+
+@router.post("/community/register", status_code=status.HTTP_201_CREATED)
+def register_community(
+    body: CommunityRegisterRequest,
+    me: CurrentReceptionist = Depends(get_current_receptionist),
+):
+    """
+    Registers a new community member and assigns a concurrency-safe CC-COM-XXXX code.
+    Checks for duplicates unless allow_duplicate=true.
+    """
+    name = body.get_full_name()
+    if len(name) < 2:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Full name must be at least 2 characters")
+
+    affil = body.get_affiliation()
+    if len(affil) < 2:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Affiliation / workplace details must be at least 2 characters")
+
+    cat = body.category.strip().upper()
+    if cat not in ql.VALID_COMMUNITY_CATEGORIES:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"Category must be one of {ql.VALID_COMMUNITY_CATEGORIES}")
+
+    cat_other = body.get_category_other()
+    if cat == "OTHER" and (not cat_other or not cat_other.strip()):
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Description is required when category is 'OTHER'")
+
+    conn = get_db_connection()
+    try:
+        profile = ql.register_community_member(
+            conn=conn,
+            full_name=name,
+            category=cat,
+            affiliation_details=affil,
+            age=body.age,
+            gender=body.gender or "OTHER",
+            blood_group=body.get_blood_group(),
+            category_other=cat_other,
+            registered_by_user_id=me.user_id,
+            allow_duplicate=body.get_allow_duplicate(),
+        )
+        conn.commit()
+        return profile
+    except ql.DuplicateRecordError as exc:
+        conn.rollback()
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
+    except ql.InvalidTransitionError as exc:
+        conn.rollback()
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
+    except Exception as exc:
+        conn.rollback()
+        logger.error("Error registering community member: %s", exc, exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Registration error: {exc}")
+    finally:
+        conn.close()
+
+
+@router.post("/community/verify")
+def verify_community(
+    body: CommunityVerifyRequest,
+    me: CurrentReceptionist = Depends(get_current_receptionist),
+):
+    """
+    Records an auditable manual identity verification decision for a community member.
+    """
+    pid = body.get_patient_id()
+    outcome = body.outcome.strip().upper()
+    if outcome not in ql.VALID_VERIFICATION_OUTCOMES:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"Outcome must be one of {ql.VALID_VERIFICATION_OUTCOMES}")
+
+    conn = get_db_connection()
+    try:
+        res = ql.record_manual_verification(
+            conn=conn,
+            patient_id=pid,
+            receptionist_user_id=me.user_id,
+            outcome=outcome,
+            notes=body.notes,
+        )
+        conn.commit()
+        return res
+    except ql.ResourceNotFoundError as exc:
+        conn.rollback()
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+    except ql.InvalidTransitionError as exc:
+        conn.rollback()
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
+    except Exception as exc:
+        conn.rollback()
+        logger.error("Error recording manual verification: %s", exc, exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Verification error: {exc}")
+    finally:
+        conn.close()
+
+
+@router.post("/community/checkin", status_code=status.HTTP_201_CREATED)
+@router.post("/community/check-ins", status_code=status.HTTP_201_CREATED)
+def check_in_community(
+    body: CommunityCheckInRequest,
+    me: CurrentReceptionist = Depends(get_current_receptionist),
+):
+    """
+    Atomic check-in for a verified community member into a doctor's queue:
+    - Enforces latest manual verification status is VERIFIED.
+    - Prevents duplicate active visits.
+    - Allocates queue sequence under doctor row lock.
+    - Creates VISIT, QUEUE_ENTRY, and VISIT_EVENT atomically.
+    """
+    pid = body.get_patient_id()
+    doctor_id = body.get_doctor_id()
+
+    conn = get_db_connection()
+    try:
+        result = ql.check_in_community_member(
+            conn=conn,
+            patient_id=pid,
+            doctor_id=doctor_id,
+            performed_by_user_id=me.user_id,
+            complaint=body.complaint,
+        )
+        conn.commit()
+        return result
+    except ql.ResourceNotFoundError as exc:
+        conn.rollback()
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+    except ql.ActiveVisitConflictError as exc:
+        conn.rollback()
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
+    except ql.DoctorUnavailableError as exc:
+        conn.rollback()
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
+    except ql.InvalidTransitionError as exc:
+        conn.rollback()
+        err_str = str(exc)
+        code = status.HTTP_403_FORBIDDEN if "verification status" in err_str.lower() else status.HTTP_400_BAD_REQUEST
+        raise HTTPException(status_code=code, detail=err_str)
+    except Exception as exc:
+        conn.rollback()
+        logger.error("Error checking in community member: %s", exc, exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Check-in error: {exc}")
+    finally:
+        conn.close()
+
+
 # ── 4. live queue for the front-desk screen (poll every few seconds) ───
 @router.get("/queue")
 def front_desk_queue(
@@ -279,8 +514,11 @@ def front_desk_queue(
             sql = """
                 SELECT qe.queue_entry_id, qe.doctor_id, qe.queue_sequence, qe.entered_at, qe.called_at,
                        qe.status AS queue_status, qe.entry_reason,
-                       v.visit_id, v.roll_number, v.status AS visit_status, v.checked_in_at,
-                       st.full_name, st.blood_group,
+                       v.visit_id, v.roll_number, v.patient_id, v.status AS visit_status, v.checked_in_at,
+                       COALESCE(st.full_name, p.full_name) AS full_name,
+                       COALESCE(st.blood_group, p.blood_group) AS blood_group,
+                       cp.community_code, cp.category AS community_category,
+                       p.patient_type,
                        ua.email AS doctor_email,
                        sp.name AS specialty,
                        (SELECT ve.notes FROM VISIT_EVENT ve
@@ -288,7 +526,9 @@ def front_desk_queue(
                         ORDER BY ve.event_id DESC LIMIT 1) AS checkin_notes
                 FROM QUEUE_ENTRY qe
                 JOIN VISIT v ON v.visit_id = qe.visit_id
-                JOIN STUDENT st ON st.roll_number = v.roll_number
+                LEFT JOIN PATIENT p ON p.patient_id = v.patient_id
+                LEFT JOIN STUDENT st ON st.roll_number = v.roll_number
+                LEFT JOIN COMMUNITY_PROFILE cp ON cp.patient_id = p.patient_id
                 JOIN DOCTOR d ON d.doctor_id = qe.doctor_id
                 JOIN STAFF s ON s.staff_id = d.staff_id
                 JOIN USER_ACCOUNT ua ON ua.user_id = s.user_id
@@ -336,9 +576,12 @@ def front_desk_queue(
             "queue_entry_id": r["queue_entry_id"],
             "visitId": r["visit_id"],
             "visit_id": r["visit_id"],
-            "rollNumber": r["roll_number"],
-            "roll_number": r["roll_number"],
-            "rollNo": r["roll_number"],
+            "rollNumber": r["roll_number"] or r.get("community_code") or f"PAT-{r.get('patient_id')}",
+            "roll_number": r["roll_number"] or r.get("community_code") or f"PAT-{r.get('patient_id')}",
+            "rollNo": r["roll_number"] or r.get("community_code") or f"PAT-{r.get('patient_id')}",
+            "communityCode": r.get("community_code"),
+            "category": r.get("community_category") or "Student",
+            "patientType": r.get("patient_type") or ("COMMUNITY" if not r["roll_number"] else "STUDENT"),
             "name": r["full_name"],
             "student_name": r["full_name"],
             "bloodGroup": r.get("blood_group"),
@@ -724,16 +967,21 @@ def list_completed_visits(
     try:
         with conn.cursor() as cur:
             sql = """
-                SELECT v.visit_id, v.roll_number, v.doctor_id, v.status AS visit_status,
+                SELECT v.visit_id, v.roll_number, v.patient_id, v.doctor_id, v.status AS visit_status,
                        v.checked_in_at, v.consultation_started_at, v.consultation_completed_at, v.completed_at,
-                       st.full_name AS student_name, st.blood_group,
+                       COALESCE(st.full_name, p.full_name) AS student_name,
+                       COALESCE(st.blood_group, p.blood_group) AS blood_group,
+                       cp.community_code, cp.category AS community_category,
+                       p.patient_type,
                        ua.email AS doctor_email, sp.name AS specialty,
                        disp.dispensing_id, disp.status AS dispensing_status, disp.change_reason,
                        (SELECT ve.notes FROM VISIT_EVENT ve
                         WHERE ve.visit_id = v.visit_id AND ve.event_type = 'CHECKED_IN'
                         ORDER BY ve.event_id DESC LIMIT 1) AS checkin_notes
                 FROM VISIT v
-                JOIN STUDENT st ON st.roll_number = v.roll_number
+                LEFT JOIN PATIENT p ON p.patient_id = v.patient_id
+                LEFT JOIN STUDENT st ON st.roll_number = v.roll_number
+                LEFT JOIN COMMUNITY_PROFILE cp ON cp.patient_id = p.patient_id
                 JOIN DOCTOR d ON d.doctor_id = v.doctor_id
                 JOIN STAFF s ON s.staff_id = d.staff_id
                 JOIN USER_ACCOUNT ua ON ua.user_id = s.user_id

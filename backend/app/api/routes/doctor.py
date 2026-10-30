@@ -197,14 +197,20 @@ def get_doctor_queue(
                 """
                 SELECT qe.queue_entry_id, qe.doctor_id, qe.queue_sequence, qe.status AS queue_status,
                        qe.entered_at, qe.called_at, qe.entry_reason,
-                       v.visit_id, v.roll_number, v.status AS visit_status, v.checked_in_at,
-                       st.full_name, st.date_of_birth, st.blood_group,
+                       v.visit_id, v.roll_number, v.patient_id, v.status AS visit_status, v.checked_in_at,
+                       COALESCE(st.full_name, p.full_name) AS full_name,
+                       COALESCE(st.date_of_birth, p.date_of_birth) AS date_of_birth,
+                       COALESCE(st.blood_group, p.blood_group) AS blood_group,
+                       cp.community_code, cp.category AS community_category,
+                       p.patient_type, p.age AS patient_age,
                        (SELECT ve.notes FROM VISIT_EVENT ve
                         WHERE ve.visit_id = v.visit_id AND ve.event_type = 'CHECKED_IN'
                         ORDER BY ve.event_id DESC LIMIT 1) AS checkin_notes
                 FROM QUEUE_ENTRY qe
                 JOIN VISIT v ON v.visit_id = qe.visit_id
-                JOIN STUDENT st ON st.roll_number = v.roll_number
+                LEFT JOIN PATIENT p ON p.patient_id = v.patient_id
+                LEFT JOIN STUDENT st ON st.roll_number = v.roll_number
+                LEFT JOIN COMMUNITY_PROFILE cp ON cp.patient_id = p.patient_id
                 WHERE qe.doctor_id = %s AND qe.status IN ('IN_CONSULTATION', 'WAITING')
                 ORDER BY FIELD(qe.status, 'IN_CONSULTATION', 'WAITING'), qe.queue_sequence ASC, qe.entered_at ASC
                 """,
@@ -242,14 +248,17 @@ def get_doctor_queue(
             "visit_id": r["visit_id"],
             "doctorId": doctor_id,
             "doctor_id": doctor_id,
-            "rollNumber": r["roll_number"],
-            "roll_number": r["roll_number"],
-            "rollNo": r["roll_number"],
+            "rollNumber": r["roll_number"] or r.get("community_code") or f"PAT-{r.get('patient_id')}",
+            "roll_number": r["roll_number"] or r.get("community_code") or f"PAT-{r.get('patient_id')}",
+            "rollNo": r["roll_number"] or r.get("community_code") or f"PAT-{r.get('patient_id')}",
+            "communityCode": r.get("community_code"),
+            "category": r.get("community_category") or "Student",
+            "patientType": r.get("patient_type") or ("COMMUNITY" if not r["roll_number"] else "STUDENT"),
             "name": r["full_name"],
             "student_name": r["full_name"],
             "bloodGroup": r.get("blood_group"),
             "blood_group": r.get("blood_group"),
-            "age": _calculate_age(r.get("date_of_birth")),
+            "age": _calculate_age(r.get("date_of_birth")) or r.get("patient_age") or 30,
 
             # Status & Queue sequence
             "status": "In Consultation" if r["queue_status"] == "IN_CONSULTATION" else "Waiting",

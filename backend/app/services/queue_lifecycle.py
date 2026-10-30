@@ -65,6 +65,11 @@ class CardNotActiveError(QueueLifecycleError):
     pass
 
 
+class DuplicateRecordError(QueueLifecycleError):
+    """Raised when registering a community member whose profile matches an existing record."""
+    pass
+
+
 def _is_mysql(conn) -> bool:
     """Helper to detect MySQL vs SQLite wrapper."""
     return not conn.__class__.__name__.startswith("SQLite")
@@ -76,13 +81,30 @@ def get_active_visit_for_student(cursor, roll_number: str, for_update: bool = Fa
     lock_clause = " FOR UPDATE" if for_update and hasattr(cursor, "execute") else ""
     cursor.execute(
         f"""
-        SELECT visit_id, roll_number, doctor_id, status, checked_in_at
+        SELECT visit_id, patient_id, roll_number, doctor_id, status, checked_in_at
         FROM VISIT
         WHERE roll_number = %s AND status IN ({placeholders})
         ORDER BY checked_in_at DESC
         LIMIT 1{lock_clause}
         """,
         (roll_number, *ACTIVE_VISIT_STATES),
+    )
+    return cursor.fetchone()
+
+
+def get_active_visit_for_patient(cursor, patient_id: int, for_update: bool = False) -> Optional[Dict[str, Any]]:
+    """Checks if a patient (student or community) already has an active visit in progress."""
+    placeholders = ",".join(["%s"] * len(ACTIVE_VISIT_STATES))
+    lock_clause = " FOR UPDATE" if for_update and hasattr(cursor, "execute") else ""
+    cursor.execute(
+        f"""
+        SELECT visit_id, patient_id, roll_number, doctor_id, status, checked_in_at
+        FROM VISIT
+        WHERE patient_id = %s AND status IN ({placeholders})
+        ORDER BY checked_in_at DESC
+        LIMIT 1{lock_clause}
+        """,
+        (patient_id, *ACTIVE_VISIT_STATES),
     )
     return cursor.fetchone()
 
@@ -171,9 +193,9 @@ def check_in_student(
 
         # 2. Lock student record to serialize concurrent check-in attempts
         if _is_mysql(conn):
-            cur.execute("SELECT roll_number, full_name, status FROM STUDENT WHERE roll_number = %s FOR UPDATE", (roll_number,))
+            cur.execute("SELECT roll_number, full_name, status, patient_id FROM STUDENT WHERE roll_number = %s FOR UPDATE", (roll_number,))
         else:
-            cur.execute("SELECT roll_number, full_name, status FROM STUDENT WHERE roll_number = %s", (roll_number,))
+            cur.execute("SELECT roll_number, full_name, status, patient_id FROM STUDENT WHERE roll_number = %s", (roll_number,))
         student = cur.fetchone()
         if not student:
             raise ResourceNotFoundError(f"Student with roll number '{roll_number}' not found.")
@@ -190,10 +212,10 @@ def check_in_student(
         # 4. Create new visit
         cur.execute(
             """
-            INSERT INTO VISIT (roll_number, doctor_id, status, checked_in_at)
-            VALUES (%s, %s, 'WAITING_FOR_DOCTOR', NOW())
+            INSERT INTO VISIT (patient_id, roll_number, doctor_id, status, checked_in_at)
+            VALUES (%s, %s, %s, 'WAITING_FOR_DOCTOR', NOW())
             """,
-            (roll_number, doctor_id),
+            (student.get("patient_id"), roll_number, doctor_id),
         )
         visit_id = cur.lastrowid
 
@@ -241,6 +263,382 @@ def check_in_student(
     }
 
 
+# ── Community Member Registration, Verification & Check-in ────────────
+
+VALID_COMMUNITY_CATEGORIES = ("CARETAKER", "CAMPUS_WORKER", "GUARD", "OTHER")
+VALID_VERIFICATION_OUTCOMES = ("VERIFIED", "REJECTED", "FLAGGED")
+
+
+def generate_community_code(cursor) -> str:
+    """Generates a concurrency-safe, monotonic community code backed by COMMUNITY_SEQUENCE."""
+    cursor.execute("INSERT INTO COMMUNITY_SEQUENCE () VALUES ()")
+    seq_id = cursor.lastrowid
+    return f"CC-COM-{seq_id}"
+
+
+def check_potential_duplicate(
+    cursor,
+    full_name: str,
+    category: str,
+    affiliation_details: str,
+) -> Optional[Dict[str, Any]]:
+    """Checks if an exact or near duplicate community profile already exists."""
+    cursor.execute(
+        """
+        SELECT p.patient_id, p.full_name, cp.community_id, cp.community_code,
+               cp.category, cp.affiliation_details
+        FROM COMMUNITY_PROFILE cp
+        JOIN PATIENT p ON p.patient_id = cp.patient_id
+        WHERE LOWER(TRIM(p.full_name)) = LOWER(TRIM(%s))
+          AND cp.category = %s
+          AND LOWER(TRIM(cp.affiliation_details)) = LOWER(TRIM(%s))
+        LIMIT 1
+        """,
+        (full_name, category, affiliation_details),
+    )
+    return cursor.fetchone()
+
+
+def search_community_profiles(
+    conn,
+    query: str = "",
+    category: Optional[str] = None,
+    limit: int = 50,
+) -> List[Dict[str, Any]]:
+    """
+    Searches registered community member profiles by code, name, or affiliation.
+    Returns candidate cards with last verification outcome and active visit status.
+    """
+    with conn.cursor() as cur:
+        sql = """
+            SELECT p.patient_id, p.full_name, p.age, p.date_of_birth, p.gender, p.blood_group,
+                   cp.community_id, cp.community_code, cp.category, cp.category_other, cp.affiliation_details,
+                   cp.created_at,
+                   (SELECT mv.verification_outcome FROM MANUAL_VERIFICATION mv
+                    WHERE mv.patient_id = p.patient_id
+                    ORDER BY mv.verification_id DESC LIMIT 1) AS last_verification_outcome,
+                   (SELECT mv.verified_at FROM MANUAL_VERIFICATION mv
+                    WHERE mv.patient_id = p.patient_id
+                    ORDER BY mv.verification_id DESC LIMIT 1) AS last_verified_at,
+                   (SELECT mv.notes FROM MANUAL_VERIFICATION mv
+                    WHERE mv.patient_id = p.patient_id
+                    ORDER BY mv.verification_id DESC LIMIT 1) AS last_verification_notes,
+                   (SELECT v.status FROM VISIT v
+                    WHERE v.patient_id = p.patient_id AND v.status IN ('CHECKED_IN','WAITING_FOR_DOCTOR','CALLED','IN_CONSULTATION','WAITING_FOR_MEDICINE')
+                    ORDER BY v.checked_in_at DESC LIMIT 1) AS active_visit_status
+            FROM COMMUNITY_PROFILE cp
+            JOIN PATIENT p ON p.patient_id = cp.patient_id
+            WHERE 1=1
+        """
+        params = []
+        q = (query or "").strip()
+        if q:
+            sql += " AND (cp.community_code LIKE %s OR p.full_name LIKE %s OR cp.affiliation_details LIKE %s)"
+            term = f"%{q}%"
+            params.extend([term, term, term])
+
+        if category and category.upper() in VALID_COMMUNITY_CATEGORIES:
+            sql += " AND cp.category = %s"
+            params.append(category.upper())
+
+        sql += " ORDER BY cp.community_id DESC LIMIT %s"
+        params.append(limit)
+
+        cur.execute(sql, tuple(params))
+        rows = cur.fetchall()
+
+        results = []
+        for r in rows:
+            results.append({
+                "patientId": r["patient_id"],
+                "communityId": r["community_id"],
+                "communityCode": r["community_code"],
+                "fullName": r["full_name"],
+                "name": r["full_name"],
+                "age": r["age"],
+                "gender": r["gender"],
+                "bloodGroup": r["blood_group"],
+                "category": r["category"],
+                "categoryOther": r["category_other"],
+                "affiliationDetails": r["affiliation_details"],
+                "createdAt": r["created_at"].isoformat() if r.get("created_at") else None,
+                "lastVerificationOutcome": r.get("last_verification_outcome") or "UNVERIFIED",
+                "lastVerifiedAt": r["last_verified_at"].isoformat() if r.get("last_verified_at") else None,
+                "lastVerificationNotes": r.get("last_verification_notes"),
+                "activeVisitStatus": r.get("active_visit_status"),
+                "hasActiveVisit": bool(r.get("active_visit_status")),
+            })
+        return results
+
+
+def register_community_member(
+    conn,
+    full_name: str,
+    category: str,
+    affiliation_details: str,
+    age: Optional[int] = None,
+    gender: str = "OTHER",
+    blood_group: Optional[str] = None,
+    category_other: Optional[str] = None,
+    registered_by_user_id: Optional[int] = None,
+    allow_duplicate: bool = False,
+) -> Dict[str, Any]:
+    """
+    Registers a new community member in PATIENT and COMMUNITY_PROFILE.
+    Generates a unique concurrency-safe community code (CC-COM-XXXX).
+    """
+    norm_name = full_name.strip()
+    norm_category = category.strip().upper()
+    norm_affil = affiliation_details.strip()
+
+    if norm_category not in VALID_COMMUNITY_CATEGORIES:
+        raise InvalidTransitionError(f"Invalid category '{category}'. Must be one of {VALID_COMMUNITY_CATEGORIES}.")
+
+    if norm_category == "OTHER" and (not category_other or not category_other.strip()):
+        raise InvalidTransitionError("A description in 'category_other' is required when category is 'OTHER'.")
+
+    norm_gender = (gender or "OTHER").strip().upper()
+    if norm_gender not in ("MALE", "FEMALE", "OTHER"):
+        norm_gender = "OTHER"
+
+    with conn.cursor() as cur:
+        # Check potential duplicates
+        duplicate = check_potential_duplicate(cur, norm_name, norm_category, norm_affil)
+        if duplicate and not allow_duplicate:
+            raise DuplicateRecordError(
+                f"A community profile with the same name, category, and affiliation already exists: {duplicate['community_code']} ({duplicate['full_name']})."
+            )
+
+        # 1. Insert into PATIENT
+        cur.execute(
+            """
+            INSERT INTO PATIENT (patient_type, full_name, age, gender, blood_group)
+            VALUES ('COMMUNITY', %s, %s, %s, %s)
+            """,
+            (norm_name, age, norm_gender, blood_group.strip().upper() if blood_group else None),
+        )
+        patient_id = cur.lastrowid
+
+        # 2. Concurrency-safe community code allocation
+        community_code = generate_community_code(cur)
+
+        # 3. Resolve staff_id if user_id is provided
+        staff_id = None
+        if registered_by_user_id:
+            cur.execute("SELECT staff_id FROM STAFF WHERE user_id = %s LIMIT 1", (registered_by_user_id,))
+            st_row = cur.fetchone()
+            if st_row:
+                staff_id = st_row["staff_id"]
+
+        # 4. Insert into COMMUNITY_PROFILE
+        cur.execute(
+            """
+            INSERT INTO COMMUNITY_PROFILE
+                (patient_id, community_code, category, category_other, affiliation_details, registered_by_staff_id)
+            VALUES (%s, %s, %s, %s, %s, %s)
+            """,
+            (patient_id, community_code, norm_category, category_other.strip() if category_other else None, norm_affil, staff_id),
+        )
+        community_id = cur.lastrowid
+
+    return {
+        "patientId": patient_id,
+        "communityId": community_id,
+        "communityCode": community_code,
+        "fullName": norm_name,
+        "name": norm_name,
+        "age": age,
+        "gender": norm_gender,
+        "bloodGroup": blood_group,
+        "category": norm_category,
+        "categoryOther": category_other,
+        "affiliationDetails": norm_affil,
+    }
+
+
+def record_manual_verification(
+    conn,
+    patient_id: int,
+    receptionist_user_id: int,
+    outcome: str,
+    notes: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Records a manual identity verification decision in MANUAL_VERIFICATION."""
+    norm_outcome = outcome.strip().upper()
+    if norm_outcome not in VALID_VERIFICATION_OUTCOMES:
+        raise InvalidTransitionError(f"Invalid verification outcome '{outcome}'. Must be one of {VALID_VERIFICATION_OUTCOMES}.")
+
+    with conn.cursor() as cur:
+        cur.execute("SELECT patient_id, full_name, patient_type FROM PATIENT WHERE patient_id = %s", (patient_id,))
+        patient = cur.fetchone()
+        if not patient:
+            raise ResourceNotFoundError(f"Patient #{patient_id} not found.")
+
+        cur.execute(
+            """
+            INSERT INTO MANUAL_VERIFICATION (patient_id, receptionist_user_id, verification_outcome, notes)
+            VALUES (%s, %s, %s, %s)
+            """,
+            (patient_id, receptionist_user_id, norm_outcome, (notes or "").strip()[:500] if notes else None),
+        )
+        verif_id = cur.lastrowid
+
+    return {
+        "verificationId": verif_id,
+        "patientId": patient_id,
+        "outcome": norm_outcome,
+        "notes": notes,
+        "patientName": patient["full_name"],
+    }
+
+
+def check_in_community_member(
+    conn,
+    patient_id: int,
+    doctor_id: int,
+    performed_by_user_id: int,
+    complaint: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    Atomic check-in for a verified community member into a doctor's queue:
+    1. Verifies patient exists and is of type COMMUNITY.
+    2. Enforces verification gate: latest MANUAL_VERIFICATION must be VERIFIED.
+    3. Serializes under doctor row lock to prevent race conditions.
+    4. Checks doctor availability on CURDATE().
+    5. Enforces single active visit constraint for patient.
+    6. Inserts VISIT (patient_id, doctor_id, status='WAITING_FOR_DOCTOR', roll_number=NULL).
+    7. Allocates sequence and inserts QUEUE_ENTRY.
+    8. Records audit event in VISIT_EVENT.
+    """
+    with conn.cursor() as cur:
+        # 1. Fetch community profile and patient
+        cur.execute(
+            """
+            SELECT p.patient_id, p.full_name, p.gender, p.age, p.blood_group,
+                   cp.community_id, cp.community_code, cp.category, cp.affiliation_details
+            FROM PATIENT p
+            JOIN COMMUNITY_PROFILE cp ON cp.patient_id = p.patient_id
+            WHERE p.patient_id = %s
+            """,
+            (patient_id,),
+        )
+        comm_patient = cur.fetchone()
+        if not comm_patient:
+            raise ResourceNotFoundError(f"Community profile for patient #{patient_id} not found.")
+
+        # 2. Verification Gate check
+        cur.execute(
+            """
+            SELECT verification_id, verification_outcome, verified_at
+            FROM MANUAL_VERIFICATION
+            WHERE patient_id = %s
+            ORDER BY verification_id DESC
+            LIMIT 1
+            """,
+            (patient_id,),
+        )
+        latest_verif = cur.fetchone()
+        if not latest_verif or latest_verif.get("verification_outcome") != "VERIFIED":
+            status_desc = latest_verif.get("verification_outcome") if latest_verif else "UNVERIFIED"
+            raise InvalidTransitionError(
+                f"Community member '{comm_patient['full_name']}' ({comm_patient['community_code']}) cannot be queued: verification status is '{status_desc}'. "
+                "Only members with a confirmed 'VERIFIED' status can be moved to the doctor queue."
+            )
+
+        # 3. Doctor validation under row lock
+        if _is_mysql(conn):
+            cur.execute("SELECT doctor_id FROM DOCTOR WHERE doctor_id = %s FOR UPDATE", (doctor_id,))
+        else:
+            cur.execute("SELECT doctor_id FROM DOCTOR WHERE doctor_id = %s", (doctor_id,))
+        doctor = cur.fetchone()
+        if not doctor:
+            raise ResourceNotFoundError(f"Doctor #{doctor_id} not found.")
+
+        lock_avail = " FOR UPDATE" if _is_mysql(conn) else ""
+        cur.execute(
+            f"""
+            SELECT status FROM DOCTOR_AVAILABILITY
+            WHERE doctor_id = %s AND availability_date = CURDATE()
+            LIMIT 1{lock_avail}
+            """,
+            (doctor_id,),
+        )
+        avail = cur.fetchone()
+        if avail and avail.get("status") == "UNAVAILABLE":
+            raise DoctorUnavailableError(f"Doctor #{doctor_id} is marked unavailable today.")
+
+        # 4. Check for active visit
+        active_visit = get_active_visit_for_patient(cur, patient_id, for_update=True)
+        if active_visit:
+            raise ActiveVisitConflictError(
+                f"Community member '{comm_patient['community_code']}' already has an active visit in progress (Status: {active_visit['status']})."
+            )
+
+        # 5. Create new visit
+        cur.execute(
+            """
+            INSERT INTO VISIT (patient_id, roll_number, doctor_id, status, checked_in_at)
+            VALUES (%s, NULL, %s, 'WAITING_FOR_DOCTOR', NOW())
+            """,
+            (patient_id, doctor_id),
+        )
+        visit_id = cur.lastrowid
+
+        # 6. Allocate sequence safely under doctor lock
+        seq = allocate_next_queue_sequence(cur, doctor_id, conn)
+
+        # 7. Insert Queue Entry
+        cur.execute(
+            """
+            INSERT INTO QUEUE_ENTRY
+                (visit_id, doctor_id, queue_sequence, status, entered_at, queue_data, entry_reason)
+            VALUES (%s, %s, %s, 'WAITING', NOW(), NOW(), 'INITIAL_CHECKIN')
+            """,
+            (visit_id, doctor_id, seq),
+        )
+        queue_entry_id = cur.lastrowid
+
+        # 8. Audit log in VISIT_EVENT
+        cat_title = comm_patient['category'].replace('_', ' ').title()
+        note = f"Community check-in ({cat_title} - {comm_patient['community_code']})" + (f" - {complaint}" if complaint else "")
+        cur.execute(
+            """
+            INSERT INTO VISIT_EVENT (visit_id, event_type, performed_by_user_id, notes)
+            VALUES (%s, 'CHECKED_IN', %s, %s)
+            """,
+            (visit_id, performed_by_user_id, note[:500]),
+        )
+
+        # 9. Compute current line position
+        cur.execute(
+            "SELECT COUNT(*) AS n FROM QUEUE_ENTRY WHERE doctor_id = %s AND status = 'WAITING'",
+            (doctor_id,),
+        )
+        pos_row = cur.fetchone()
+        position = pos_row["n"] if pos_row else 1
+
+    return {
+        "visitId": visit_id,
+        "visit_id": visit_id,
+        "queueEntryId": queue_entry_id,
+        "queue_entry_id": queue_entry_id,
+        "queueNo": seq,
+        "tokenNumber": seq,
+        "token_number": seq,
+        "queueSequence": seq,
+        "position": position,
+        "queuePosition": position,
+        "doctorId": doctor_id,
+        "cabinNumber": f"Cabin {doctor_id}",
+        "patientId": patient_id,
+        "communityCode": comm_patient["community_code"],
+        "rollNumber": comm_patient["community_code"],
+        "name": comm_patient["full_name"],
+        "category": comm_patient["category"],
+        "status": "WAITING_FOR_DOCTOR",
+    }
+
+
 def call_next_patient(
     conn,
     doctor_id: int,
@@ -264,10 +662,14 @@ def call_next_patient(
         # 2. Check if already in consultation
         cur.execute(
             """
-            SELECT qe.queue_entry_id, qe.queue_sequence, v.visit_id, v.roll_number, st.full_name
+            SELECT qe.queue_entry_id, qe.queue_sequence, v.visit_id, v.roll_number, v.patient_id,
+                   COALESCE(st.full_name, p.full_name) AS full_name,
+                   cp.community_code, cp.category AS community_category
             FROM QUEUE_ENTRY qe
             JOIN VISIT v ON v.visit_id = qe.visit_id
-            JOIN STUDENT st ON st.roll_number = v.roll_number
+            LEFT JOIN PATIENT p ON p.patient_id = v.patient_id
+            LEFT JOIN STUDENT st ON st.roll_number = v.roll_number
+            LEFT JOIN COMMUNITY_PROFILE cp ON cp.patient_id = p.patient_id
             WHERE qe.doctor_id = %s AND qe.status = 'IN_CONSULTATION'
             LIMIT 1
             """,
@@ -275,15 +677,17 @@ def call_next_patient(
         )
         existing = cur.fetchone()
         if existing:
+            roll_disp = existing["roll_number"] or existing.get("community_code") or f"PAT-{existing['patient_id']}"
             return {
                 "status": "already_in_consultation",
                 "queueEntryId": existing["queue_entry_id"],
                 "queue_entry_id": existing["queue_entry_id"],
                 "visitId": existing["visit_id"],
                 "visit_id": existing["visit_id"],
-                "rollNumber": existing["roll_number"],
-                "roll_number": existing["roll_number"],
+                "rollNumber": roll_disp,
+                "roll_number": roll_disp,
                 "name": existing["full_name"],
+                "category": existing.get("community_category") or "Student",
                 "sequence": existing["queue_sequence"],
                 "queueNo": existing["queue_sequence"],
                 "queue_number": existing["queue_sequence"],
@@ -295,10 +699,14 @@ def call_next_patient(
         lock_clause = " FOR UPDATE" if _is_mysql(conn) else ""
         cur.execute(
             f"""
-            SELECT qe.queue_entry_id, qe.queue_sequence, v.visit_id, v.roll_number, st.full_name
+            SELECT qe.queue_entry_id, qe.queue_sequence, v.visit_id, v.roll_number, v.patient_id,
+                   COALESCE(st.full_name, p.full_name) AS full_name,
+                   cp.community_code, cp.category AS community_category
             FROM QUEUE_ENTRY qe
             JOIN VISIT v ON v.visit_id = qe.visit_id
-            JOIN STUDENT st ON st.roll_number = v.roll_number
+            LEFT JOIN PATIENT p ON p.patient_id = v.patient_id
+            LEFT JOIN STUDENT st ON st.roll_number = v.roll_number
+            LEFT JOIN COMMUNITY_PROFILE cp ON cp.patient_id = p.patient_id
             WHERE qe.doctor_id = %s AND qe.status = 'WAITING'
             ORDER BY qe.queue_sequence ASC, qe.entered_at ASC
             LIMIT 1{lock_clause}
@@ -345,15 +753,17 @@ def call_next_patient(
             (visit_id, performed_by_user_id, f"Called by Doctor #{doctor_id}"),
         )
 
+    next_roll_disp = next_patient["roll_number"] or next_patient.get("community_code") or f"PAT-{next_patient['patient_id']}"
     return {
         "status": "called",
         "queueEntryId": queue_entry_id,
         "queue_entry_id": queue_entry_id,
         "visitId": visit_id,
         "visit_id": visit_id,
-        "rollNumber": next_patient["roll_number"],
-        "roll_number": next_patient["roll_number"],
+        "rollNumber": next_roll_disp,
+        "roll_number": next_roll_disp,
         "name": next_patient["full_name"],
+        "category": next_patient.get("community_category") or "Student",
         "sequence": next_patient["queue_sequence"],
         "queueNo": next_patient["queue_sequence"],
         "queue_number": next_patient["queue_sequence"],

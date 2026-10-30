@@ -20,12 +20,24 @@ import {
   Sparkles,
   Smartphone,
   ShieldCheck,
+  Users,
+  Building2,
+  Shield,
+  HardHat,
+  Plus,
+  ChevronRight,
+  Filter,
+  FileText,
 } from "lucide-react";
 import {
   lookupStudent,
   fetchReceptionDoctors,
   receptionCheckIn,
   resolveRfidCard,
+  searchCommunityProfiles,
+  registerCommunityMember,
+  recordCommunityVerification,
+  checkInCommunityMember,
 } from "../../api";
 import {
   isWebNfcSupported,
@@ -125,6 +137,229 @@ export default function NfcCheckInDesk({ flash, setPage }) {
         flash?.("Could not load doctor directory: " + err.message);
       });
   }, [flash]);
+
+  // ── Community Member Workflow State ──
+  const [commSubView, setCommSubView] = useState("SEARCH"); // "SEARCH" | "REGISTER"
+  const [commSearchQuery, setCommSearchQuery] = useState("");
+  const [commCategoryFilter, setCommCategoryFilter] = useState("ALL");
+  const [commSearchResults, setCommSearchResults] = useState([]);
+  const [isSearchingComm, setIsSearchingComm] = useState(false);
+  const [selectedCommMember, setSelectedCommMember] = useState(null);
+
+  // Registration form
+  const [regName, setRegName] = useState("");
+  const [regCategory, setRegCategory] = useState("CARETAKER");
+  const [regCategoryOther, setRegCategoryOther] = useState("");
+  const [regAffiliation, setRegAffiliation] = useState("");
+  const [regAge, setRegAge] = useState("");
+  const [regGender, setRegGender] = useState("Male");
+  const [regBloodGroup, setRegBloodGroup] = useState("");
+  const [regError, setRegError] = useState(null);
+  const [isRegisteringComm, setIsRegisteringComm] = useState(false);
+  const [duplicateWarning, setDuplicateWarning] = useState(null);
+
+  // Manual verification
+  const [commVerifOutcome, setCommVerifOutcome] = useState("VERIFIED");
+  const [commVerifNotes, setCommVerifNotes] = useState("");
+  const [isSavingVerif, setIsSavingVerif] = useState(false);
+
+  // Community check-in
+  const [commDoctorId, setCommDoctorId] = useState(null);
+  const [commComplaint, setCommComplaint] = useState("");
+  const [isCheckingInComm, setIsCheckingInComm] = useState(false);
+  const [commCheckInResult, setCommCheckInResult] = useState(null);
+  const [commCheckInError, setCommCheckInError] = useState(null);
+
+  // Search community profiles
+  const handleSearchCommunity = useCallback(
+    async (queryVal = commSearchQuery, catVal = commCategoryFilter) => {
+      setIsSearchingComm(true);
+      try {
+        const res = await searchCommunityProfiles(queryVal, catVal);
+        const list = res?.profiles || res?.data || (Array.isArray(res) ? res : []);
+        setCommSearchResults(list);
+      } catch (err) {
+        console.warn("Community search error:", err);
+        flash?.("Search failed: " + (err.detail || err.message));
+      } finally {
+        setIsSearchingComm(false);
+      }
+    },
+    [commSearchQuery, commCategoryFilter, flash]
+  );
+
+  const handleSelectCommunityMember = (member) => {
+    setSelectedCommMember(member);
+    const existingStatus = member.verificationStatus || member.verification_status;
+    setCommVerifOutcome(existingStatus && existingStatus !== "UNVERIFIED" ? existingStatus : "VERIFIED");
+    setCommVerifNotes("");
+    setCommCheckInError(null);
+    if (!commDoctorId && doctors.length > 0) {
+      const firstAvail = doctors.find((x) => x.available)?.doctorId || doctors[0]?.doctorId;
+      setCommDoctorId(firstAvail);
+    }
+  };
+
+  const handleRegisterCommunity = async (e, bypassDuplicate = false) => {
+    if (e) e.preventDefault();
+    setRegError(null);
+
+    if (!regName.trim() || regName.trim().length < 2) {
+      setRegError("Full name is required (minimum 2 characters).");
+      return;
+    }
+    if (!regCategory) {
+      setRegError("Please select a community category.");
+      return;
+    }
+    if (regCategory === "OTHER" && !regCategoryOther.trim()) {
+      setRegError("Please specify a description for OTHER category.");
+      return;
+    }
+    if (!regAffiliation.trim()) {
+      setRegError("Campus affiliation / department workplace is required.");
+      return;
+    }
+
+    if (!bypassDuplicate) {
+      const norm = regName.trim().toLowerCase();
+      const existing = commSearchResults.find(
+        (m) => m.fullName.toLowerCase() === norm && m.category === regCategory
+      );
+      if (existing) {
+        setDuplicateWarning(existing);
+        return;
+      }
+    }
+
+    setIsRegisteringComm(true);
+    try {
+      const payload = {
+        fullName: regName.trim(),
+        category: regCategory,
+        categoryOther: regCategory === "OTHER" ? regCategoryOther.trim() : null,
+        affiliationDetails: regAffiliation.trim(),
+        age: regAge ? parseInt(regAge, 10) : null,
+        gender: regGender || "Male",
+        bloodGroup: regBloodGroup.trim() || null,
+        allowDuplicate: bypassDuplicate,
+      };
+
+      const res = await registerCommunityMember(payload);
+      const data = res?.data || res;
+      if (data?.communityCode || data?.community_code) {
+        const commCode = data.communityCode || data.community_code;
+        flash?.(`Community Member Registered: ${commCode}`);
+        setDuplicateWarning(null);
+        setRegName("");
+        setRegCategoryOther("");
+        setRegAffiliation("");
+        setRegAge("");
+        setRegBloodGroup("");
+
+        const newMem = {
+          patientId: data.patientId || data.patient_id,
+          communityId: data.communityId || data.community_id,
+          communityCode: commCode,
+          fullName: data.fullName || data.full_name,
+          category: data.category,
+          categoryOther: data.categoryOther || data.category_other,
+          affiliationDetails: data.affiliationDetails || data.affiliation_details,
+          age: data.age,
+          gender: data.gender,
+          bloodGroup: data.bloodGroup || data.blood_group,
+          verificationStatus: "UNVERIFIED",
+        };
+        setSelectedCommMember(newMem);
+        setCommVerifOutcome("VERIFIED");
+        setCommSubView("SEARCH");
+        handleSearchCommunity("", "ALL");
+      }
+    } catch (err) {
+      console.error("Community registration error:", err);
+      setRegError(err.detail || err.message || "Failed to register profile.");
+    } finally {
+      setIsRegisteringComm(false);
+    }
+  };
+
+  const handleSaveVerification = async () => {
+    if (!selectedCommMember) return;
+    setIsSavingVerif(true);
+    try {
+      const res = await recordCommunityVerification({
+        patientId: selectedCommMember.patientId || selectedCommMember.patient_id,
+        outcome: commVerifOutcome,
+        notes: commVerifNotes.trim() || null,
+      });
+      const data = res?.data || res;
+      if (data) {
+        setSelectedCommMember((prev) => ({
+          ...prev,
+          verificationStatus: commVerifOutcome,
+        }));
+        flash?.(`Verification recorded: ${commVerifOutcome}`);
+      }
+    } catch (err) {
+      flash?.("Failed to record verification: " + (err.detail || err.message));
+    } finally {
+      setIsSavingVerif(false);
+    }
+  };
+
+  const handleCheckInCommunityMember = async () => {
+    if (!selectedCommMember) return;
+    if (commVerifOutcome !== "VERIFIED") {
+      setCommCheckInError("Only verified community members can enter the routine doctor queue.");
+      return;
+    }
+    if (!commDoctorId) {
+      setCommCheckInError("Please select an available doctor.");
+      return;
+    }
+
+    setIsCheckingInComm(true);
+    setCommCheckInError(null);
+
+    try {
+      const res = await checkInCommunityMember({
+        patientId: selectedCommMember.patientId || selectedCommMember.patient_id,
+        doctorId: commDoctorId,
+        complaint: commComplaint.trim() || "General Consultation",
+      });
+
+      const data = res?.data || res;
+      if (data?.tokenNumber || data?.token_number || data?.visitId || data?.visit_id) {
+        setCommCheckInResult({
+          visitId: data.visitId || data.visit_id,
+          tokenNumber: data.tokenNumber || data.token_number,
+          queuePosition: data.queuePosition || data.queue_position,
+          cabinNumber: data.cabinNumber || data.cabin_number,
+        });
+        flash?.(`Queue token issued: #${data.tokenNumber || data.token_number}`);
+      }
+    } catch (err) {
+      console.error("Community check-in failed:", err);
+      if (err.status === 409 || err.message?.includes("active visit") || err.detail?.includes("active visit")) {
+        setCommCheckInError("Active Visit Conflict: This member already has an active visit in progress.");
+      } else {
+        setCommCheckInError(err.detail || err.message || "Check-in failed. Please try again.");
+      }
+    } finally {
+      setIsCheckingInComm(false);
+    }
+  };
+
+  const resetCommunityWorkflow = () => {
+    setSelectedCommMember(null);
+    setCommCheckInResult(null);
+    setCommCheckInError(null);
+    setCommComplaint("");
+    setDuplicateWarning(null);
+    setRegError(null);
+    setCommSubView("SEARCH");
+    setMode("CHOICE");
+  };
 
   // Stop active NFC scan
   const cancelNfcScan = useCallback(() => {
@@ -518,7 +753,7 @@ export default function NfcCheckInDesk({ flash, setPage }) {
                     </p>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-4 pt-1">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-4 pt-1">
                     {/* Option 1: Smart Card Tap (RFID / NFC) */}
                     <button
                       type="button"
@@ -526,11 +761,11 @@ export default function NfcCheckInDesk({ flash, setPage }) {
                         setMode("NFC");
                         triggerWebNfcScan({ auto: false });
                       }}
-                      className="group relative p-3.5 sm:p-6 rounded-xl sm:rounded-3xl border-2 border-teal-500/30 hover:border-teal-600 bg-gradient-to-b from-teal-50/70 to-white hover:from-teal-50 shadow-xs hover:shadow-md transition-all text-left flex flex-col justify-between cursor-pointer"
+                      className="group relative p-3.5 sm:p-5 rounded-xl sm:rounded-3xl border-2 border-teal-500/30 hover:border-teal-600 bg-gradient-to-b from-teal-50/70 to-white hover:from-teal-50 shadow-xs hover:shadow-md transition-all text-left flex flex-col justify-between cursor-pointer"
                     >
                       <div>
-                        <div className="h-9 w-9 sm:h-14 sm:w-14 rounded-lg sm:rounded-2xl bg-teal-700 text-white flex items-center justify-center mb-2.5 sm:mb-4 shadow-sm group-hover:scale-105 transition-transform">
-                          <Radio className="w-4 h-4 sm:w-7 sm:h-7 animate-pulse text-white" />
+                        <div className="h-9 w-9 sm:h-12 sm:w-12 rounded-lg sm:rounded-2xl bg-teal-700 text-white flex items-center justify-center mb-2.5 sm:mb-3 shadow-sm group-hover:scale-105 transition-transform">
+                          <Radio className="w-4 h-4 sm:w-6 sm:h-6 animate-pulse text-white" />
                         </div>
                         <span className="text-[9px] sm:text-[10px] font-bold text-teal-800 uppercase tracking-wider block mb-0.5 sm:mb-1">
                           Smart Card
@@ -539,11 +774,11 @@ export default function NfcCheckInDesk({ flash, setPage }) {
                           Smart Card Tap (RFID)
                         </h4>
                         <p className="text-[10px] sm:text-xs text-slate-500 mt-0.5 sm:mt-1 leading-snug sm:leading-relaxed">
-                          Tap student ID card on the reader for check-in.
+                          Tap student ID card on the reader for instant check-in.
                         </p>
                       </div>
 
-                      <div className="mt-3 sm:mt-6 pt-2 sm:pt-3 border-t border-teal-100 flex items-center justify-between text-[10px] sm:text-xs font-bold text-teal-800 group-hover:text-teal-900">
+                      <div className="mt-3 sm:mt-5 pt-2 sm:pt-3 border-t border-teal-100 flex items-center justify-between text-[10px] sm:text-xs font-bold text-teal-800 group-hover:text-teal-900">
                         <span>Check In with Card</span>
                         <ArrowRight className="w-3.5 h-3.5 sm:w-4 sm:h-4 group-hover:translate-x-1 transition-transform" />
                       </div>
@@ -553,11 +788,11 @@ export default function NfcCheckInDesk({ flash, setPage }) {
                     <button
                       type="button"
                       onClick={() => setMode("MANUAL")}
-                      className="group relative p-3.5 sm:p-6 rounded-xl sm:rounded-3xl border-2 border-slate-200 hover:border-slate-300 bg-white hover:bg-slate-50/50 shadow-xs hover:shadow-md transition-all text-left flex flex-col justify-between cursor-pointer"
+                      className="group relative p-3.5 sm:p-5 rounded-xl sm:rounded-3xl border-2 border-slate-200 hover:border-slate-300 bg-white hover:bg-slate-50/50 shadow-xs hover:shadow-md transition-all text-left flex flex-col justify-between cursor-pointer"
                     >
                       <div>
-                        <div className="h-9 w-9 sm:h-14 sm:w-14 rounded-lg sm:rounded-2xl bg-slate-100 text-slate-700 group-hover:bg-slate-200 flex items-center justify-center mb-2.5 sm:mb-4 shadow-xs transition-colors">
-                          <UserCheck className="w-4 h-4 sm:w-7 sm:h-7 text-slate-700" />
+                        <div className="h-9 w-9 sm:h-12 sm:w-12 rounded-lg sm:rounded-2xl bg-slate-100 text-slate-700 group-hover:bg-slate-200 flex items-center justify-center mb-2.5 sm:mb-3 shadow-xs transition-colors">
+                          <UserCheck className="w-4 h-4 sm:w-6 sm:h-6 text-slate-700" />
                         </div>
                         <span className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5 sm:mb-1">
                           Roll Number
@@ -566,12 +801,43 @@ export default function NfcCheckInDesk({ flash, setPage }) {
                           Manual Roll Number
                         </h4>
                         <p className="text-[10px] sm:text-xs text-slate-500 mt-0.5 sm:mt-1 leading-snug sm:leading-relaxed">
-                          Enter university roll number to find student record.
+                          Search student database by university roll number.
                         </p>
                       </div>
 
-                      <div className="mt-3 sm:mt-6 pt-2 sm:pt-3 border-t border-slate-100 flex items-center justify-between text-[10px] sm:text-xs font-bold text-slate-700 group-hover:text-slate-900">
+                      <div className="mt-3 sm:mt-5 pt-2 sm:pt-3 border-t border-slate-100 flex items-center justify-between text-[10px] sm:text-xs font-bold text-slate-700 group-hover:text-slate-900">
                         <span>Enter Roll Number</span>
+                        <ArrowRight className="w-3.5 h-3.5 sm:w-4 sm:h-4 group-hover:translate-x-1 transition-transform" />
+                      </div>
+                    </button>
+
+                    {/* Option 3: Other / Community Member */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMode("COMMUNITY");
+                        setCommSubView("SEARCH");
+                        handleSearchCommunity("", "ALL");
+                      }}
+                      className="group relative p-3.5 sm:p-5 rounded-xl sm:rounded-3xl border-2 border-indigo-200 hover:border-indigo-600 bg-gradient-to-b from-indigo-50/60 to-white hover:from-indigo-50 shadow-xs hover:shadow-md transition-all text-left flex flex-col justify-between cursor-pointer"
+                    >
+                      <div>
+                        <div className="h-9 w-9 sm:h-12 sm:w-12 rounded-lg sm:rounded-2xl bg-indigo-700 text-white flex items-center justify-center mb-2.5 sm:mb-3 shadow-sm group-hover:scale-105 transition-transform">
+                          <Users className="w-4 h-4 sm:w-6 sm:h-6 text-white" />
+                        </div>
+                        <span className="text-[9px] sm:text-[10px] font-bold text-indigo-800 uppercase tracking-wider block mb-0.5 sm:mb-1">
+                          Community
+                        </span>
+                        <h4 className="text-xs sm:text-base font-bold text-slate-900 group-hover:text-indigo-950 transition-colors">
+                          Other / Community
+                        </h4>
+                        <p className="text-[10px] sm:text-xs text-slate-500 mt-0.5 sm:mt-1 leading-snug sm:leading-relaxed">
+                          Caretaker, Campus Worker, Guard, or Other affiliate check-in.
+                        </p>
+                      </div>
+
+                      <div className="mt-3 sm:mt-5 pt-2 sm:pt-3 border-t border-indigo-100 flex items-center justify-between text-[10px] sm:text-xs font-bold text-indigo-800 group-hover:text-indigo-900">
+                        <span>Community Check-In</span>
                         <ArrowRight className="w-3.5 h-3.5 sm:w-4 sm:h-4 group-hover:translate-x-1 transition-transform" />
                       </div>
                     </button>
@@ -745,6 +1011,729 @@ export default function NfcCheckInDesk({ flash, setPage }) {
                       <ArrowRight className="w-3.5 h-3.5" />
                     </button>
                   </form>
+                </div>
+              )}
+
+              {/* ── STEP 2C: OTHER / COMMUNITY MEMBER WORKFLOW ── */}
+              {mode === "COMMUNITY" && (
+                <div className="space-y-5 py-2">
+                  {/* Top Bar with Navigation */}
+                  <div className="flex items-center justify-between pb-3 border-b border-slate-100 flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={resetCommunityWorkflow}
+                      className="text-xs font-bold text-slate-600 hover:text-slate-900 flex items-center gap-1.5 px-3 py-1.5 rounded-xl hover:bg-slate-100 transition-colors cursor-pointer"
+                    >
+                      <span>← Back to Check-in Options</span>
+                    </button>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] font-bold text-indigo-900 bg-indigo-50 px-2.5 py-0.5 rounded-full border border-indigo-200">
+                        Community Member Desk
+                      </span>
+                      <span className="text-[10px] text-slate-500 font-medium hidden sm:inline">
+                        Caretaker • Campus Worker • Guard • Other
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* ──────────────────────────────────────────────────────────
+                      VIEW A: COMMUNITY OPD TOKEN CONFIRMED SUCCESS SCREEN
+                     ────────────────────────────────────────────────────────── */}
+                  {commCheckInResult ? (
+                    <div className="py-4 text-center space-y-6">
+                      <div className="h-16 w-16 rounded-full bg-emerald-50 border-2 border-emerald-200 text-emerald-600 flex items-center justify-center mx-auto shadow-sm">
+                        <CheckCircle2 className="w-8 h-8" />
+                      </div>
+
+                      <div>
+                        <span className="text-[10px] uppercase font-bold tracking-wider px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 font-mono">
+                          Community OPD Token Issued
+                        </span>
+                        <h3 className="text-xl font-bold text-slate-900 mt-3">
+                          {selectedCommMember?.fullName}
+                        </h3>
+                        <p className="text-xs font-mono font-bold text-indigo-700 mt-0.5">
+                          {selectedCommMember?.communityCode} • {selectedCommMember?.category}
+                        </p>
+                      </div>
+
+                      <div className="p-5 rounded-2xl border border-indigo-200 bg-indigo-50/50 max-w-sm mx-auto space-y-3 text-left">
+                        <div className="text-center">
+                          <span className="text-[10px] font-bold text-indigo-800 uppercase tracking-wider block">
+                            OPD Token Sequence
+                          </span>
+                          <span className="text-4xl font-extrabold text-indigo-950 font-mono">
+                            #{pad(commCheckInResult.tokenNumber || commCheckInResult.sequence || 1)}
+                          </span>
+                        </div>
+
+                        <div className="border-t border-indigo-200/60 pt-3 text-xs space-y-1.5 text-slate-700">
+                          <div className="flex justify-between">
+                            <span className="text-slate-500">Assigned Doctor:</span>
+                            <span className="font-bold text-slate-900">
+                              {doctors.find((d) => d.doctorId === commDoctorId)?.name || "Assigned Doctor"}
+                            </span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-slate-500">Cabin / Room:</span>
+                            <span className="font-semibold text-slate-800">
+                              {commCheckInResult.cabinNumber || "OPD Cabin 2"}
+                            </span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-slate-500">Affiliation:</span>
+                            <span className="font-medium text-slate-800">
+                              {selectedCommMember?.affiliationDetails || "TIET Campus"}
+                            </span>
+                          </div>
+                          {commCheckInResult.queuePosition != null && (
+                            <div className="flex justify-between">
+                              <span className="text-slate-500">Queue Position:</span>
+                              <span className="font-bold text-emerald-800">
+                                #{commCheckInResult.queuePosition} in line
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="pt-2 flex justify-center">
+                        <button
+                          type="button"
+                          onClick={resetCommunityWorkflow}
+                          className="px-6 py-2.5 rounded-xl bg-teal-800 hover:bg-teal-900 text-white text-xs font-bold transition-all shadow-xs cursor-pointer flex items-center gap-2"
+                        >
+                          <Check className="w-4 h-4" />
+                          <span>Return to Check-in Desk</span>
+                        </button>
+                      </div>
+                    </div>
+                  ) : selectedCommMember ? (
+                    /* ──────────────────────────────────────────────────────────
+                       VIEW B: SELECTED PROFILE: MANUAL VERIFICATION GATE & CHECK-IN
+                      ────────────────────────────────────────────────────────── */
+                    <div className="space-y-5">
+                      <div className="flex items-center justify-between pb-1">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedCommMember(null)}
+                          className="text-xs font-bold text-slate-600 hover:text-slate-900 flex items-center gap-1 cursor-pointer"
+                        >
+                          <span>← Back to Profile Search</span>
+                        </button>
+                        <span className="text-xs text-slate-400">Step 2: Verify & Check In</span>
+                      </div>
+
+                      {/* Member Identity Card */}
+                      <div className="p-4 rounded-2xl border border-indigo-100 bg-indigo-50/40 space-y-2">
+                        <div className="flex items-start justify-between flex-wrap gap-2">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <h3 className="text-base font-bold text-slate-900">
+                                {selectedCommMember.fullName}
+                              </h3>
+                              <span className="text-xs font-mono font-bold px-2 py-0.5 rounded-md bg-white border border-indigo-200 text-indigo-900 shadow-2xs">
+                                {selectedCommMember.communityCode}
+                              </span>
+                            </div>
+                            <p className="text-xs text-slate-600 mt-1">
+                              Category: <strong className="text-slate-800 font-semibold">{selectedCommMember.category}</strong>
+                              {selectedCommMember.categoryOther && ` (${selectedCommMember.categoryOther})`}
+                              {" • "}
+                              Affiliation: <strong className="text-slate-800 font-semibold">{selectedCommMember.affiliationDetails || "Campus"}</strong>
+                            </p>
+                          </div>
+                          <div className="text-right">
+                            <span className="text-xs text-slate-500 block">
+                              Age: {selectedCommMember.age || "—"} yrs • Blood: <strong className="text-teal-800">{selectedCommMember.bloodGroup || "—"}</strong>
+                            </span>
+                            <span className="text-[10px] text-slate-400 block mt-0.5">
+                              Gender: {selectedCommMember.gender || "—"}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Manual Verification Security Gate */}
+                      <div className="p-4 rounded-2xl border border-slate-200 bg-white space-y-3.5 shadow-2xs">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <ShieldCheck className="w-4 h-4 text-indigo-700" />
+                            <h4 className="text-xs sm:text-sm font-bold text-slate-900 uppercase tracking-wide">
+                              Identity Verification (Required Gate)
+                            </h4>
+                          </div>
+                          <span className="text-[10px] text-slate-500">Visual Assessment Required</span>
+                        </div>
+                        <p className="text-xs text-slate-500 leading-relaxed">
+                          Receptionists must visually evaluate identity via campus badge, uniform, department affiliation, or personal recognition before queue placement.
+                        </p>
+
+                        {/* 3 Outcome Options */}
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                          <button
+                            type="button"
+                            onClick={() => setCommVerifOutcome("VERIFIED")}
+                            className={`p-3 rounded-xl border text-left cursor-pointer transition-all flex flex-col justify-between ${
+                              commVerifOutcome === "VERIFIED"
+                                ? "bg-emerald-50/80 border-emerald-500 ring-2 ring-emerald-500/20 text-emerald-950 font-bold"
+                                : "bg-white border-slate-200 hover:bg-slate-50 text-slate-700"
+                            }`}
+                          >
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs font-bold text-emerald-900">VERIFIED</span>
+                              {commVerifOutcome === "VERIFIED" && <Check className="w-3.5 h-3.5 text-emerald-700" />}
+                            </div>
+                            <span className="text-[10px] text-slate-500 mt-1 font-normal">
+                              Identity verified via badge / uniform. Eligible for doctor queue.
+                            </span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => setCommVerifOutcome("FLAGGED")}
+                            className={`p-3 rounded-xl border text-left cursor-pointer transition-all flex flex-col justify-between ${
+                              commVerifOutcome === "FLAGGED"
+                                ? "bg-amber-50/80 border-amber-500 ring-2 ring-amber-500/20 text-amber-950 font-bold"
+                                : "bg-white border-slate-200 hover:bg-slate-50 text-slate-700"
+                            }`}
+                          >
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs font-bold text-amber-900">FLAGGED</span>
+                              {commVerifOutcome === "FLAGGED" && <AlertTriangle className="w-3.5 h-3.5 text-amber-700" />}
+                            </div>
+                            <span className="text-[10px] text-slate-500 mt-1 font-normal">
+                              Identity uncertain or badge missing. Routine check-in blocked.
+                            </span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => setCommVerifOutcome("REJECTED")}
+                            className={`p-3 rounded-xl border text-left cursor-pointer transition-all flex flex-col justify-between ${
+                              commVerifOutcome === "REJECTED"
+                                ? "bg-rose-50/80 border-rose-500 ring-2 ring-rose-500/20 text-rose-950 font-bold"
+                                : "bg-white border-slate-200 hover:bg-slate-50 text-slate-700"
+                            }`}
+                          >
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs font-bold text-rose-900">REJECTED</span>
+                              {commVerifOutcome === "REJECTED" && <X className="w-3.5 h-3.5 text-rose-700" />}
+                            </div>
+                            <span className="text-[10px] text-slate-500 mt-1 font-normal">
+                              Unauthorized visitor / invalid. Routine check-in denied.
+                            </span>
+                          </button>
+                        </div>
+
+                        {/* Optional Verification Notes */}
+                        <div>
+                          <label className="text-[11px] font-bold text-slate-600 block mb-1">
+                            Verification Notes / Badge No. (Optional Audit Trail):
+                          </label>
+                          <input
+                            type="text"
+                            value={commVerifNotes}
+                            onChange={(e) => setCommVerifNotes(e.target.value)}
+                            placeholder="e.g. Verified with campus maintenance security ID badge #8492"
+                            className="w-full px-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-lg outline-none focus:bg-white focus:border-indigo-500"
+                          />
+                        </div>
+
+                        <div className="flex justify-end">
+                          <button
+                            type="button"
+                            disabled={isSavingVerif}
+                            onClick={handleSaveVerification}
+                            className="px-3.5 py-1.5 rounded-lg border border-slate-300 hover:bg-slate-50 text-xs font-semibold text-slate-700 cursor-pointer transition-colors"
+                          >
+                            {isSavingVerif ? "Saving..." : "Record Verification Decision"}
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Gate Enforcement & Doctor Check-In */}
+                      {commVerifOutcome === "REJECTED" ? (
+                        <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200 text-xs text-rose-900 space-y-1">
+                          <div className="flex items-center gap-2 font-bold text-rose-950">
+                            <AlertCircle className="w-4 h-4 text-rose-600" />
+                            <span>Routine Check-in Denied</span>
+                          </div>
+                          <p className="text-[11px] text-rose-800">
+                            This person's verification status is REJECTED. Routine doctor consultation queue entry is denied.
+                          </p>
+                        </div>
+                      ) : commVerifOutcome === "FLAGGED" ? (
+                        <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 text-xs text-amber-900 space-y-1">
+                          <div className="flex items-center gap-2 font-bold text-amber-950">
+                            <AlertTriangle className="w-4 h-4 text-amber-600" />
+                            <span>Identity Flagged — Routine Queue Paused</span>
+                          </div>
+                          <p className="text-[11px] text-amber-800">
+                            This member has an unresolved verification flag. Routine consultation queue entry is blocked until verified by authorized personnel.
+                          </p>
+                        </div>
+                      ) : (
+                        /* Eligible for Queue Check-In */
+                        <div className="p-4 rounded-2xl border border-teal-200 bg-teal-50/30 space-y-4">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <CheckCircle2 className="w-4 h-4 text-teal-700" />
+                              <h4 className="text-xs sm:text-sm font-bold text-slate-900 uppercase tracking-wide">
+                                Allocate Doctor & Move to Queue
+                              </h4>
+                            </div>
+                            <span className="text-[10px] font-bold text-teal-800 bg-teal-100/70 px-2.5 py-0.5 rounded-full">
+                              Verified Identity
+                            </span>
+                          </div>
+
+                          {/* Doctor Assignment */}
+                          <div className="space-y-1.5">
+                            <label className="text-[11px] font-bold text-slate-700 block">
+                              Select Available Doctor:
+                            </label>
+                            <select
+                              value={commDoctorId || ""}
+                              onChange={(e) => setCommDoctorId(Number(e.target.value))}
+                              className="w-full px-3 py-2 rounded-xl bg-white border border-slate-300 text-xs font-semibold text-slate-900 outline-none focus:border-teal-600"
+                            >
+                              <option value="">-- Choose Doctor --</option>
+                              {doctors.map((doc) => (
+                                <option key={doc.doctorId} value={doc.doctorId}>
+                                  {doc.name} — {doc.room || "Cabin 1"} {doc.available ? "(Available)" : "(Busy)"}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+
+                          {/* Complaint / Triage */}
+                          <div className="space-y-1.5">
+                            <label className="text-[11px] font-bold text-slate-700 block">
+                              Patient Complaint / Triage Reason:
+                            </label>
+                            <input
+                              type="text"
+                              value={commComplaint}
+                              onChange={(e) => setCommComplaint(e.target.value)}
+                              placeholder="e.g. Acute joint pain, fever, wound dressing..."
+                              className="w-full px-3 py-2 rounded-xl bg-white border border-slate-300 text-xs text-slate-900 outline-none focus:border-teal-600"
+                            />
+                            {/* Quick symptoms */}
+                            <div className="flex items-center gap-1.5 flex-wrap pt-1">
+                              {["General OPD", "Fever", "Severe Cough", "Injury / Dressing", "Acidity"].map((sym) => (
+                                <button
+                                  key={sym}
+                                  type="button"
+                                  onClick={() => setCommComplaint(sym)}
+                                  className="text-[10px] px-2 py-0.5 rounded-md bg-white border border-slate-200 text-slate-600 hover:bg-teal-50 hover:text-teal-800 hover:border-teal-200 cursor-pointer transition-colors"
+                                >
+                                  {sym}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+
+                          {commCheckInError && (
+                            <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-800 font-semibold flex items-center gap-2">
+                              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                              <span>{commCheckInError}</span>
+                            </div>
+                          )}
+
+                          <div className="pt-2 flex justify-end">
+                            <button
+                              type="button"
+                              disabled={isCheckingInComm || !commDoctorId}
+                              onClick={handleCheckInCommunityMember}
+                              className="px-6 py-2.5 rounded-xl bg-teal-800 hover:bg-teal-900 disabled:bg-slate-300 disabled:cursor-not-allowed text-white text-xs font-bold transition-all shadow-xs cursor-pointer flex items-center gap-2"
+                            >
+                              {isCheckingInComm ? (
+                                <>
+                                  <RotateCw className="w-4 h-4 animate-spin" />
+                                  <span>Placing in Queue...</span>
+                                </>
+                              ) : (
+                                <>
+                                  <span>Confirm Check-In & Move to Queue</span>
+                                  <ArrowRight className="w-4 h-4" />
+                                </>
+                              )}
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    /* ──────────────────────────────────────────────────────────
+                       VIEW C: PROFILE SEARCH & CANDIDATE SELECTION OR REGISTRATION
+                      ────────────────────────────────────────────────────────── */
+                    <div className="space-y-4">
+                      {/* Sub-view switcher tabs */}
+                      <div className="flex items-center justify-between border-b border-slate-200 pb-3 flex-wrap gap-2">
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setCommSubView("SEARCH")}
+                            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold cursor-pointer transition-colors flex items-center gap-1.5 ${
+                              commSubView === "SEARCH"
+                                ? "bg-indigo-700 text-white shadow-2xs"
+                                : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                            }`}
+                          >
+                            <Search className="w-3.5 h-3.5" />
+                            <span>Search Community Profiles</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setCommSubView("REGISTER")}
+                            className={`px-3.5 py-1.5 rounded-xl text-xs font-bold cursor-pointer transition-colors flex items-center gap-1.5 ${
+                              commSubView === "REGISTER"
+                                ? "bg-indigo-700 text-white shadow-2xs"
+                                : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                            }`}
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            <span>+ Register New Member</span>
+                          </button>
+                        </div>
+
+                        <span className="text-[11px] text-slate-500 font-medium">
+                          {commSearchResults.length} Profiles on file
+                        </span>
+                      </div>
+
+                      {commSubView === "SEARCH" ? (
+                        /* Search and Candidates View */
+                        <div className="space-y-3.5">
+                          {/* Search Input Bar */}
+                          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                            <div className="relative flex-1">
+                              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                              <input
+                                type="text"
+                                value={commSearchQuery}
+                                onChange={(e) => {
+                                  setCommSearchQuery(e.target.value);
+                                  handleSearchCommunity(e.target.value, commCategoryFilter);
+                                }}
+                                placeholder="Search by name, community code (CC-COM-XXXX), or department..."
+                                className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-slate-200 bg-slate-50/70 text-xs sm:text-sm text-slate-900 placeholder:text-slate-400 outline-none focus:bg-white focus:border-indigo-600"
+                              />
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleSearchCommunity(commSearchQuery, commCategoryFilter)}
+                              className="px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold cursor-pointer shrink-0 transition-colors"
+                            >
+                              Search
+                            </button>
+                          </div>
+
+                          {/* Category Filter Pills */}
+                          <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+                            {["ALL", "CARETAKER", "CAMPUS_WORKER", "GUARD", "OTHER"].map((cat) => (
+                              <button
+                                key={cat}
+                                type="button"
+                                onClick={() => {
+                                  setCommCategoryFilter(cat);
+                                  handleSearchCommunity(commSearchQuery, cat);
+                                }}
+                                className={`px-2.5 py-1 rounded-lg text-xs font-semibold whitespace-nowrap cursor-pointer border transition-colors ${
+                                  commCategoryFilter === cat
+                                    ? "bg-indigo-700 text-white border-indigo-700"
+                                    : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
+                                }`}
+                              >
+                                {cat === "ALL" ? "All Categories" : cat.replace("_", " ")}
+                              </button>
+                            ))}
+                          </div>
+
+                          {/* Results List */}
+                          {isSearchingComm ? (
+                            <div className="py-8 text-center text-slate-400 flex items-center justify-center gap-2 text-xs">
+                              <RotateCw className="w-4 h-4 animate-spin text-indigo-600" />
+                              <span>Searching community registry...</span>
+                            </div>
+                          ) : commSearchResults.length === 0 ? (
+                            <div className="p-8 text-center border border-dashed border-slate-200 rounded-2xl bg-slate-50/50 space-y-2">
+                              <Users className="w-8 h-8 text-slate-300 mx-auto" />
+                              <h4 className="text-xs font-bold text-slate-700">No Community Profiles Found</h4>
+                              <p className="text-[11px] text-slate-500 max-w-sm mx-auto">
+                                No registered profiles matched your search. Register a new community profile below to assign a permanent code.
+                              </p>
+                              <button
+                                type="button"
+                                onClick={() => setCommSubView("REGISTER")}
+                                className="mt-2 px-4 py-2 rounded-xl bg-indigo-700 hover:bg-indigo-800 text-white text-xs font-bold cursor-pointer inline-flex items-center gap-1.5 shadow-2xs"
+                              >
+                                <Plus className="w-3.5 h-3.5" />
+                                <span>Register New Community Member</span>
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-96 overflow-y-auto pr-1">
+                              {commSearchResults.map((m) => {
+                                const vStatus = m.verificationStatus || m.verification_status || "UNVERIFIED";
+                                const isVerified = vStatus === "VERIFIED";
+                                const isFlagged = vStatus === "FLAGGED";
+                                const isRejected = vStatus === "REJECTED";
+
+                                return (
+                                  <div
+                                    key={m.communityId || m.patientId}
+                                    className="p-3.5 rounded-xl border border-slate-200 bg-white hover:border-indigo-300 transition-all shadow-2xs flex flex-col justify-between space-y-2.5"
+                                  >
+                                    <div>
+                                      <div className="flex items-center justify-between gap-1">
+                                        <span className="text-xs font-mono font-bold px-2 py-0.5 rounded bg-indigo-50 text-indigo-900 border border-indigo-200">
+                                          {m.communityCode}
+                                        </span>
+                                        <span
+                                          className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                                            isVerified
+                                              ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                                              : isFlagged
+                                              ? "bg-amber-50 text-amber-800 border-amber-200"
+                                              : isRejected
+                                              ? "bg-rose-50 text-rose-800 border-rose-200"
+                                              : "bg-slate-100 text-slate-600 border-slate-200"
+                                          }`}
+                                        >
+                                          {vStatus}
+                                        </span>
+                                      </div>
+
+                                      <h4 className="text-sm font-bold text-slate-900 mt-2 truncate">
+                                        {m.fullName}
+                                      </h4>
+                                      <p className="text-[11px] text-slate-500 mt-0.5 truncate">
+                                        {m.category} {m.categoryOther ? `(${m.categoryOther})` : ""} • {m.affiliationDetails || "Campus"}
+                                      </p>
+                                      <p className="text-[10px] text-slate-400 mt-0.5">
+                                        Age: {m.age || "—"} yrs • Blood: {m.bloodGroup || "—"}
+                                      </p>
+                                    </div>
+
+                                    <div className="pt-2 border-t border-slate-100 flex justify-end">
+                                      <button
+                                        type="button"
+                                        onClick={() => handleSelectCommunityMember(m)}
+                                        className="w-full sm:w-auto px-3 py-1.5 rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-900 text-xs font-bold cursor-pointer transition-colors flex items-center justify-center gap-1"
+                                      >
+                                        <span>Select & Verify</span>
+                                        <ChevronRight className="w-3.5 h-3.5" />
+                                      </button>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        /* Registration Form View */
+                        <form onSubmit={(e) => handleRegisterCommunity(e, false)} className="space-y-4">
+                          <div className="p-3.5 rounded-xl bg-indigo-50/50 border border-indigo-100">
+                            <h4 className="text-xs font-bold text-indigo-950">
+                              Community Member Registration
+                            </h4>
+                            <p className="text-[11px] text-indigo-800 mt-0.5">
+                              Assigns a permanent, concurrency-safe community identifier (e.g. CC-COM-1001). No phone number or national ID is collected.
+                            </p>
+                          </div>
+
+                          {/* Full Name */}
+                          <div className="space-y-1">
+                            <label className="text-xs font-bold text-slate-700 block">
+                              Full Name <span className="text-rose-500">*</span>:
+                            </label>
+                            <input
+                              type="text"
+                              value={regName}
+                              onChange={(e) => {
+                                setRegName(e.target.value);
+                                setDuplicateWarning(null);
+                              }}
+                              placeholder="e.g. Ramesh Kumar"
+                              className="w-full px-3 py-2 text-xs bg-white border border-slate-300 rounded-xl outline-none focus:border-indigo-600"
+                            />
+                          </div>
+
+                          {/* Category Dropdown (Exactly 4 approved) */}
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div className="space-y-1">
+                              <label className="text-xs font-bold text-slate-700 block">
+                                Approved Category <span className="text-rose-500">*</span>:
+                              </label>
+                              <select
+                                value={regCategory}
+                                onChange={(e) => {
+                                  setRegCategory(e.target.value);
+                                  setDuplicateWarning(null);
+                                }}
+                                className="w-full px-3 py-2 text-xs bg-white border border-slate-300 rounded-xl outline-none focus:border-indigo-600 font-semibold text-slate-900"
+                              >
+                                <option value="CARETAKER">CARETAKER</option>
+                                <option value="CAMPUS_WORKER">CAMPUS_WORKER</option>
+                                <option value="GUARD">GUARD</option>
+                                <option value="OTHER">OTHER (requires description)</option>
+                              </select>
+                            </div>
+
+                            {/* Affiliation / Department */}
+                            <div className="space-y-1">
+                              <label className="text-xs font-bold text-slate-700 block">
+                                Department / Workplace <span className="text-rose-500">*</span>:
+                              </label>
+                              <input
+                                type="text"
+                                value={regAffiliation}
+                                onChange={(e) => setRegAffiliation(e.target.value)}
+                                placeholder="e.g. Hostel J Housekeeping, Civil Works, Gate 2"
+                                className="w-full px-3 py-2 text-xs bg-white border border-slate-300 rounded-xl outline-none focus:border-indigo-600"
+                              />
+                            </div>
+                          </div>
+
+                          {/* Description if OTHER */}
+                          {regCategory === "OTHER" && (
+                            <div className="space-y-1 p-3 rounded-xl bg-amber-50/50 border border-amber-200">
+                              <label className="text-xs font-bold text-amber-950 block">
+                                Specify Role / Affiliation for OTHER <span className="text-rose-500">*</span>:
+                              </label>
+                              <input
+                                type="text"
+                                value={regCategoryOther}
+                                onChange={(e) => setRegCategoryOther(e.target.value)}
+                                placeholder="e.g. Construction Contractor, Visiting Vendor, Guest Worker"
+                                className="w-full px-3 py-1.5 text-xs bg-white border border-amber-300 rounded-lg outline-none focus:border-amber-600"
+                              />
+                            </div>
+                          )}
+
+                          {/* Demographics: Age, Gender, Blood Group */}
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                            <div className="space-y-1">
+                              <label className="text-xs font-bold text-slate-700 block">
+                                Reported Age (Years):
+                              </label>
+                              <input
+                                type="number"
+                                min="1"
+                                max="120"
+                                value={regAge}
+                                onChange={(e) => setRegAge(e.target.value)}
+                                placeholder="e.g. 38"
+                                className="w-full px-3 py-2 text-xs bg-white border border-slate-300 rounded-xl outline-none focus:border-indigo-600"
+                              />
+                            </div>
+
+                            <div className="space-y-1">
+                              <label className="text-xs font-bold text-slate-700 block">
+                                Gender:
+                              </label>
+                              <select
+                                value={regGender}
+                                onChange={(e) => setRegGender(e.target.value)}
+                                className="w-full px-3 py-2 text-xs bg-white border border-slate-300 rounded-xl outline-none focus:border-indigo-600 text-slate-900"
+                              >
+                                <option value="Male">Male</option>
+                                <option value="Female">Female</option>
+                                <option value="Other">Other</option>
+                              </select>
+                            </div>
+
+                            <div className="space-y-1">
+                              <label className="text-xs font-bold text-slate-700 block">
+                                Blood Group (Optional):
+                              </label>
+                              <select
+                                value={regBloodGroup}
+                                onChange={(e) => setRegBloodGroup(e.target.value)}
+                                className="w-full px-3 py-2 text-xs bg-white border border-slate-300 rounded-xl outline-none focus:border-indigo-600 text-slate-900"
+                              >
+                                <option value="">Unknown / Not Provided</option>
+                                <option value="A+">A+</option>
+                                <option value="A-">A-</option>
+                                <option value="B+">B+</option>
+                                <option value="B-">B-</option>
+                                <option value="O+">O+</option>
+                                <option value="O-">O-</option>
+                                <option value="AB+">AB+</option>
+                                <option value="AB-">AB-</option>
+                              </select>
+                            </div>
+                          </div>
+
+                          {/* Duplicate Detection Warning Banner */}
+                          {duplicateWarning && (
+                            <div className="p-3.5 rounded-xl bg-amber-50 border border-amber-300 text-xs space-y-2">
+                              <div className="flex items-center gap-2 font-bold text-amber-950">
+                                <AlertTriangle className="w-4 h-4 text-amber-700 shrink-0" />
+                                <span>Potential Duplicate Record Detected</span>
+                              </div>
+                              <p className="text-[11px] text-amber-900 leading-relaxed">
+                                A profile with the name <strong>"{duplicateWarning.fullName}"</strong> in category <strong>{duplicateWarning.category}</strong> already exists ({duplicateWarning.communityCode}).
+                              </p>
+                              <div className="flex items-center gap-2 pt-1 flex-wrap">
+                                <button
+                                  type="button"
+                                  onClick={() => handleSelectCommunityMember(duplicateWarning)}
+                                  className="px-3 py-1 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-bold text-[11px] cursor-pointer"
+                                >
+                                  Select Existing Profile ({duplicateWarning.communityCode})
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={(e) => handleRegisterCommunity(e, true)}
+                                  className="px-3 py-1 rounded-lg border border-amber-400 bg-white hover:bg-amber-100 text-amber-900 font-bold text-[11px] cursor-pointer"
+                                >
+                                  Confirm as Distinct Person & Register
+                                </button>
+                              </div>
+                            </div>
+                          )}
+
+                          {regError && (
+                            <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-800 font-semibold flex items-center gap-2">
+                              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                              <span>{regError}</span>
+                            </div>
+                          )}
+
+                          <div className="flex items-center justify-end gap-2 pt-2">
+                            <button
+                              type="button"
+                              onClick={() => setCommSubView("SEARCH")}
+                              className="px-4 py-2 rounded-xl border border-slate-300 text-slate-700 hover:bg-slate-50 text-xs font-bold transition-colors cursor-pointer"
+                            >
+                              Cancel & Back to Search
+                            </button>
+                            <button
+                              type="submit"
+                              disabled={isRegisteringComm}
+                              className="px-5 py-2 rounded-xl bg-indigo-700 hover:bg-indigo-800 disabled:opacity-50 text-white text-xs font-bold transition-all shadow-xs cursor-pointer flex items-center gap-1.5"
+                            >
+                              {isRegisteringComm ? (
+                                <>
+                                  <RotateCw className="w-3.5 h-3.5 animate-spin" />
+                                  <span>Allocating ID & Registering...</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Check className="w-3.5 h-3.5" />
+                                  <span>Register Community Member</span>
+                                </>
+                              )}
+                            </button>
+                          </div>
+                        </form>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
             </motion.div>

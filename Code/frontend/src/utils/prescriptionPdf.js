@@ -1,4 +1,5 @@
 import { jsPDF } from 'jspdf'
+import { formatDosageMAN } from './dosageFormatter'
 
 /**
  * CampusCare Formal Black-and-White E-Prescription PDF Generator
@@ -191,7 +192,7 @@ export function generatePrescriptionPdf({
   y += 5
   medList.forEach((med, idx) => {
     const medName = (med.name || med.medicine_name || 'Medicine').toUpperCase()
-    const dosage = med.dosage || med.timing || '1-0-1'
+    const dosage = formatDosageMAN(med.dosage || med.timing || '1-0-1')
     const duration = med.duration || '3 Days'
     const instruction = med.instruction || 'After Food'
     const qty = med.qty || 1
@@ -251,8 +252,32 @@ export function generatePrescriptionPdf({
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(9)
   doc.setTextColor(0, 0, 0)
-  const followUp = prescription?.followUp || prescription?.follow_up || 'In 3 Days'
+  const followUpRaw = prescription?.followUp || prescription?.follow_up || 'No schedule needed'
+  const followUp = followUpRaw === 'No schedule needed' ? 'No schedule needed (SOS if symptoms persist)' : followUpRaw
   doc.text(`Follow Up: ${followUp}`, margin, y)
+
+  // ── ACADEMIC LEAVE & BED REST DIRECTIVE (MAKE-UP EXAM PROOF) ──
+  const bedRest = prescription?.bedRest || prescription?.bed_rest
+  if (bedRest && bedRest !== 'No Bed Rest Advised') {
+    y += 5
+    const boxHeight = 15
+    doc.setDrawColor(0, 0, 0)
+    doc.setLineWidth(0.4)
+    doc.rect(margin, y, contentWidth, boxHeight)
+
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(8)
+    doc.setTextColor(0, 0, 0)
+    doc.text('OFFICIAL MEDICAL CERTIFICATE / ACADEMIC EXCUSE (PROOF FOR MAKE-UP EXAM)', margin + 2.5, y + 4.5)
+
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(7.5)
+    doc.setTextColor(20, 20, 20)
+    const certText = `Advised strict medical bed rest for ${bedRest} with effect from ${dateFormatted}. The student is medically unfit to attend academic lectures, laboratories, or examinations during this period.`
+    const splitCert = doc.splitTextToSize(certText, contentWidth - 5)
+    doc.text(splitCert, margin + 2.5, y + 8.5)
+    y += boxHeight
+  }
 
   // ── DOCTOR SIGNATURE (BOTTOM RIGHT) ──
   const signY = pageHeight - 32

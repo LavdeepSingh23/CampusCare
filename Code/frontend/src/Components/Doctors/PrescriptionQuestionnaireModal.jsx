@@ -11,38 +11,25 @@ import {
   AlertTriangle,
   ShieldAlert,
   ShieldCheck,
-  Sparkles,
   ArrowRight,
   ArrowLeft,
-  RotateCcw,
-  User,
-  HeartPulse,
-  Activity,
-  Clock,
   FileText,
   Pill,
   Calendar,
   Stethoscope,
-  ChevronRight,
-  Info,
+  Bed,
 } from 'lucide-react'
 import {
   Questionnaire,
   QuestionnaireProgress,
   QuestionnaireItem,
   QuestionnaireTitle,
-  QuestionnaireDescription,
   QuestionnaireChoices,
   QuestionnaireChoice,
-  QuestionnaireChoiceDescription,
-  QuestionnaireInput,
-  QuestionnaireError,
   QuestionnaireActions,
   QuestionnairePrevious,
-  QuestionnaireSkip,
   QuestionnaireNext,
   QuestionnaireSubmit,
-  buttonVariants,
 } from '../ui/questionnaire'
 import { cn } from '../../lib/utils'
 import {
@@ -52,9 +39,9 @@ import {
 import {
   calculatePrescriptionQuantity,
   checkDrugAllergyConflict,
-  validatePrescriptionDraft,
 } from '../../utils/prescriptionCalculations'
 import { generatePrescriptionPdf } from '../../utils/prescriptionPdf'
+import { formatDosageMAN } from '../../utils/dosageFormatter'
 
 /* ── PRE-CONFIGURED CLINICAL EVIDENCE PROTOCOLS ── */
 const CLINICAL_PROTOCOLS = {
@@ -62,7 +49,6 @@ const CLINICAL_PROTOCOLS = {
     code: 'URI',
     label: 'Viral Upper Respiratory Infection',
     shortcut: '1',
-    observations: ['Throat congested and erythematous', 'Chest clear bilaterally', 'Afebrile at examination', 'Vitals stable'],
     medications: [
       {
         name: 'Paracetamol 650mg',
@@ -92,14 +78,13 @@ const CLINICAL_PROTOCOLS = {
         unit: 'tabs',
       },
     ],
-    dietAdvice: 'Warm saline gargles thrice daily, steam inhalation, and ample warm fluid intake.',
-    followUp: 'In 3 Days',
+    followUp: 'No schedule needed',
+    bedRest: '2 Days Bed Rest',
   },
   'Acute Pharyngitis / Tonsillitis': {
     code: 'PHARYNG',
     label: 'Acute Pharyngitis / Tonsillitis',
     shortcut: '2',
-    observations: ['Pharyngeal congestion marked', 'Bilateral tonsillar hypertrophy', 'Cervical lymphadenopathy mild'],
     medications: [
       {
         name: 'Azithromycin 500mg',
@@ -129,14 +114,13 @@ const CLINICAL_PROTOCOLS = {
         unit: 'tabs',
       },
     ],
-    dietAdvice: 'Warm saline gargles thrice daily, soft non-spicy diet, avoid cold beverages.',
     followUp: 'In 3 Days',
+    bedRest: '2 Days Bed Rest',
   },
   'Allergic Rhinitis / Sinusitis': {
     code: 'RHINITIS',
     label: 'Allergic Rhinitis / Sinusitis',
     shortcut: '3',
-    observations: ['Nasal mucosal edema present', 'Clear rhinorrhea noted', 'Posterior pharyngeal wall cobblestoning'],
     medications: [
       {
         name: 'Levocetirizine 5mg + Montelukast 10mg',
@@ -157,14 +141,13 @@ const CLINICAL_PROTOCOLS = {
         unit: 'tabs',
       },
     ],
-    dietAdvice: 'Avoid allergen and cold air exposure, steam inhalation twice daily.',
-    followUp: 'In 5 Days',
+    followUp: 'No schedule needed',
+    bedRest: 'No Bed Rest Advised',
   },
   'Acute Gastritis / Dyspepsia': {
     code: 'GASTRITIS',
     label: 'Acute Gastritis / Dyspepsia',
     shortcut: '4',
-    observations: ['Epigastric tenderness mild', 'Abdomen soft, non-distended', 'Bowel sounds present and normal'],
     medications: [
       {
         name: 'Pantoprazole 40mg',
@@ -194,14 +177,13 @@ const CLINICAL_PROTOCOLS = {
         unit: 'bottle',
       },
     ],
-    dietAdvice: 'Bland non-spicy diet, small frequent meals, avoid tea, coffee and oily foods.',
     followUp: 'In 3 Days',
+    bedRest: 'No Bed Rest Advised',
   },
   'Tension Headache / Migraine': {
     code: 'HEADACHE',
     label: 'Tension Headache / Migraine',
     shortcut: '5',
-    observations: ['Neurological exam intact', 'Neck muscle tenderness present', 'Photophobia mild, afebrile'],
     medications: [
       {
         name: 'Paracetamol 650mg',
@@ -222,14 +204,13 @@ const CLINICAL_PROTOCOLS = {
         unit: 'tabs',
       },
     ],
-    dietAdvice: 'Strict screen break, adequate hydration, dark quiet room rest.',
-    followUp: 'SOS as needed',
+    followUp: 'No schedule needed',
+    bedRest: '1 Day Bed Rest',
   },
   'Acute Muscular Strain': {
     code: 'STRAIN',
     label: 'Acute Muscular Strain',
     shortcut: '6',
-    observations: ['Localized muscle tenderness', 'Range of motion mildly guarded', 'No joint effusion'],
     medications: [
       {
         name: 'Aceclofenac 100mg + Paracetamol 325mg',
@@ -250,14 +231,13 @@ const CLINICAL_PROTOCOLS = {
         unit: 'tabs',
       },
     ],
-    dietAdvice: 'Rest affected muscle, warm compress, avoid strenuous athletic activity.',
-    followUp: 'In 5 Days',
+    followUp: 'No schedule needed',
+    bedRest: '2 Days Bed Rest',
   },
   'Acute Gastroenteritis': {
     code: 'AGE',
     label: 'Acute Gastroenteritis',
     shortcut: '7',
-    observations: ['Diffuse abdominal discomfort', 'Mild dehydration signs', 'Hyperactive bowel sounds'],
     medications: [
       {
         name: 'ORS Sachet (Oral Rehydration Salts)',
@@ -287,44 +267,51 @@ const CLINICAL_PROTOCOLS = {
         unit: 'tabs',
       },
     ],
-    dietAdvice: 'Strict oral rehydration solution, boiled cooled water, banana and rice curd diet.',
     followUp: 'In 2 Days',
+    bedRest: '3 Days Bed Rest',
   },
 }
 
-/* ── COMMON CLINICAL FINDINGS REPOSITORY ── */
-const CLINICAL_OBSERVATION_PRESETS = [
-  'Throat congested and erythematous',
-  'Chest clear bilaterally, vesicular breath sounds',
-  'Afebrile at examination',
-  'Vitals stable, hemodynamically compensated',
-  'Abdomen soft, non-tender, no organomegaly',
-  'Tonsillar hypertrophy with exudates',
-  'Posterior pharyngeal cobblestoning',
-  'Nasal mucosal congestion present',
-  'Muscle tenderness without focal neurological deficit',
-  'Pupils equal and reactive, neck supple',
+/* ── MASTER DIAGNOSES LIST FOR SEARCH & GHOST AUTOCOMPLETE ── */
+const MASTER_DIAGNOSES = [
+  'Viral Upper Respiratory Infection',
+  'Acute Pharyngitis / Tonsillitis',
+  'Allergic Rhinitis / Sinusitis',
+  'Acute Gastritis / Dyspepsia',
+  'Tension Headache / Migraine',
+  'Acute Muscular Strain',
+  'Acute Gastroenteritis',
+  'Acute Bronchitis',
+  'Conjunctivitis (Pink Eye)',
+  'Contact Dermatitis',
+  'Urinary Tract Infection (UTI)',
+  'Acid Peptic Disease (GERD)',
+  'Otitis Media (Ear Infection)',
+  'Oral Aphthous Ulcers',
+  'Typhoid Fever (Suspected)',
+  'Viral Fever / Pyrexia of Unknown Origin',
+  'Sprained Ankle / Ligament Strain',
+  'Lumbago / Acute Lower Back Pain',
 ]
 
-/* ── DIET & LIFESTYLE PRESETS ── */
-const DIET_ADVICE_PRESETS = [
-  'Warm saline gargles thrice daily',
-  'Steam inhalation twice daily',
-  'Adequate oral hydration (2.5 - 3L daily)',
-  'Bland, non-spicy, easily digestible diet',
-  'Avoid cold beverages and refrigerated foods',
-  'Adequate physical rest and uninterrupted sleep',
-  'Strict screen rest and dark room environment',
-  'Oral rehydration salts (ORS) in boiled cooled water',
-]
-
-/* ── FOLLOW UP INTERVALS ── */
+/* ── FOLLOW UP OPTIONS (NO SUBTEXT) ── */
 const FOLLOW_UP_OPTIONS = [
-  { label: 'In 2 Days', desc: 'Short-term review for acute symptoms' },
-  { label: 'In 3 Days', desc: 'Standard clinical evaluation interval' },
-  { label: 'In 5 Days', desc: 'Completion of antimicrobial/anti-inflammatory course' },
-  { label: 'In 7 Days', desc: 'Resolution and post-recovery assessment' },
-  { label: 'SOS as needed', desc: 'Return immediately if warning signs or persistent fever develop' },
+  'No schedule needed',
+  'In 2 Days',
+  'In 3 Days',
+  'In 5 Days',
+  'In 1 Week',
+  'SOS as needed',
+]
+
+/* ── BED REST DIRECTIVE OPTIONS (NO SUBTEXT) ── */
+const BED_REST_OPTIONS = [
+  'No Bed Rest Advised',
+  '1 Day Bed Rest',
+  '2 Days Bed Rest',
+  '3 Days Bed Rest',
+  '5 Days Bed Rest',
+  'Custom Days',
 ]
 
 export default function PrescriptionQuestionnaireModal({
@@ -334,21 +321,24 @@ export default function PrescriptionQuestionnaireModal({
   doctor,
   onFinalizePrescription,
   isFinalizing,
+  presetPrescription = null,
 }) {
-  // Stepper state: 1: Diagnosis | 2: Examination | 3: Medications | 4: Advice & Follow-up | 5: Formal Rx Review
+  // Stepper state: 1: Diagnosis | 2: Medications | 3: Follow-up & Bed Rest | 4: Formal Rx Review
   const [currentStep, setCurrentStep] = useState(1)
 
   // Clinical Draft State
   const [selectedDiagnosis, setSelectedDiagnosis] = useState('')
+  const [diagnosisSearchInput, setDiagnosisSearchInput] = useState('')
   const [customDiagnosis, setCustomDiagnosis] = useState('')
-  const [selectedFindings, setSelectedFindings] = useState([])
-  const [customClinicalNotes, setCustomClinicalNotes] = useState('')
   const [prescribedMedicines, setPrescribedMedicines] = useState([])
-  const [selectedAdvice, setSelectedAdvice] = useState([])
-  const [customAdvice, setCustomAdvice] = useState('')
-  const [selectedFollowUp, setSelectedFollowUp] = useState('In 3 Days')
+  const [selectedFollowUp, setSelectedFollowUp] = useState('No schedule needed')
+  
+  // Bed Rest State
+  const [selectedBedRest, setSelectedBedRest] = useState('No Bed Rest Advised')
+  const [customBedRestDays, setCustomBedRestDays] = useState('3')
+  const [customBedRestReason, setCustomBedRestReason] = useState('')
 
-  // Drug Catalog / Formulary State inside Question 3
+  // Step 2 Medication Search & Custom Adder
   const [drugSearchQuery, setDrugSearchQuery] = useState('')
   const [activeCategory, setActiveCategory] = useState('All')
   const [customDrugName, setCustomDrugName] = useState('')
@@ -357,7 +347,6 @@ export default function PrescriptionQuestionnaireModal({
   const [customNight, setCustomNight] = useState(true)
   const [customDuration, setCustomDuration] = useState('3 days')
   const [customInstruction, setCustomInstruction] = useState('After food')
-  const [customManualQty, setCustomManualQty] = useState('')
 
   // Validation / Error Notification
   const [stepError, setStepError] = useState(null)
@@ -365,80 +354,290 @@ export default function PrescriptionQuestionnaireModal({
   // Effective Clinical Diagnosis string
   const effectiveDiagnosis = customDiagnosis.trim() || selectedDiagnosis || ''
 
-  // Initialize or reset draft when patient opens
+  // Effective Bed Rest Certificate string
+  const effectiveBedRestString = useMemo(() => {
+    if (selectedBedRest === 'No Bed Rest Advised') return 'No Bed Rest Advised'
+    if (selectedBedRest === 'Custom Days') {
+      const days = parseInt(customBedRestDays, 10) || 1
+      const reasonPart = customBedRestReason.trim() ? ` (${customBedRestReason.trim()})` : ''
+      return `${days} Day${days > 1 ? 's' : ''} Bed Rest${reasonPart}`
+    }
+    return selectedBedRest
+  }, [selectedBedRest, customBedRestDays, customBedRestReason])
+
+  // Initialize or reset draft when patient opens or repeat prescription is loaded
   useEffect(() => {
+    if (presetPrescription && isOpen) {
+      const diag = presetPrescription.diagnosis || patient?.complaint || 'General Consultation'
+      setSelectedDiagnosis(diag)
+      setDiagnosisSearchInput(diag)
+      setCustomDiagnosis(diag)
+      setPrescribedMedicines(Array.isArray(presetPrescription.medicines) ? presetPrescription.medicines : [])
+      setSelectedFollowUp(presetPrescription.followUp || 'No schedule needed')
+      setSelectedBedRest(presetPrescription.bedRest || 'No Bed Rest Advised')
+      setCustomBedRestDays('3')
+      setCustomBedRestReason('')
+      setStepError(null)
+      setCurrentStep(4) // Directly redirect to formal prescription review step
+      return
+    }
+
     if (patient && isOpen) {
       setCurrentStep(1)
       setSelectedDiagnosis('')
+      setDiagnosisSearchInput('')
       setCustomDiagnosis('')
-      setSelectedFindings([])
-      setCustomClinicalNotes('')
       setPrescribedMedicines([])
-      setSelectedAdvice([])
-      setCustomAdvice('')
-      setSelectedFollowUp('In 3 Days')
+      setSelectedFollowUp('No schedule needed')
+      setSelectedBedRest('No Bed Rest Advised')
+      setCustomBedRestDays('3')
+      setCustomBedRestReason('')
       setStepError(null)
       setDrugSearchQuery('')
+      setCustomDrugName('')
+      setCustomMorning(true)
+      setCustomAfternoon(false)
+      setCustomNight(true)
+      setCustomDuration('3 days')
+      setCustomInstruction('After food')
+      setActiveCategory('All')
     }
-  }, [patient?.rollNo, isOpen])
+  }, [patient?.rollNo, isOpen, presetPrescription])
 
-  // Filter Formulary Drugs
+  /* ── 1. STEP 1: DIAGNOSIS GHOST MATCH & COMPREHENSIVE SEARCH FILTER ── */
+  const topDiagnosisMatch = useMemo(() => {
+    const q = diagnosisSearchInput.trim().toLowerCase()
+    if (!q) return null
+    const allDiagnoses = [
+      ...Object.values(CLINICAL_PROTOCOLS).map((p) => p.label),
+      ...MASTER_DIAGNOSES,
+    ]
+    // 1. Starts with exact query
+    const prefix = allDiagnoses.find((d) => d.toLowerCase().startsWith(q))
+    if (prefix) return prefix
+    // 2. Starts with any word
+    const word = allDiagnoses.find((d) => {
+      const words = d.toLowerCase().split(/[\s()/-]+/)
+      return words.some((w) => w.startsWith(q))
+    })
+    if (word) return word
+    // 3. Contains match
+    return allDiagnoses.find((d) => d.toLowerCase().includes(q)) || null
+  }, [diagnosisSearchInput])
+
+  const diagnosisGhostSuffix = useMemo(() => {
+    if (!diagnosisSearchInput || !topDiagnosisMatch) return ''
+    if (topDiagnosisMatch.toLowerCase().startsWith(diagnosisSearchInput.toLowerCase())) {
+      return topDiagnosisMatch.slice(diagnosisSearchInput.length)
+    }
+    return ''
+  }, [diagnosisSearchInput, topDiagnosisMatch])
+
+  // Filter diagnoses comprehensively across clinical protocols and master list
+  const searchDiagnosisResults = useMemo(() => {
+    const q = diagnosisSearchInput.trim().toLowerCase()
+    if (!q) {
+      return Object.entries(CLINICAL_PROTOCOLS).map(([key, proto]) => ({
+        id: key,
+        label: proto.label,
+        isProtocol: true,
+        protocolKey: key,
+        shortcut: proto.shortcut,
+      }))
+    }
+
+    const results = []
+    const seen = new Set()
+
+    // 1. Clinical protocols matching
+    Object.entries(CLINICAL_PROTOCOLS).forEach(([key, proto]) => {
+      if (
+        proto.label.toLowerCase().includes(q) ||
+        proto.code.toLowerCase().includes(q) ||
+        (proto.medications && proto.medications.some((m) => m.name.toLowerCase().includes(q)))
+      ) {
+        results.push({
+          id: key,
+          label: proto.label,
+          isProtocol: true,
+          protocolKey: key,
+          shortcut: proto.shortcut,
+        })
+        seen.add(proto.label.toLowerCase())
+      }
+    })
+
+    // 2. Master diagnoses matching
+    MASTER_DIAGNOSES.forEach((diag) => {
+      if (!seen.has(diag.toLowerCase()) && diag.toLowerCase().includes(q)) {
+        results.push({
+          id: diag,
+          label: diag,
+          isProtocol: false,
+          protocolKey: null,
+          shortcut: null,
+        })
+        seen.add(diag.toLowerCase())
+      }
+    })
+
+    // 3. Custom entry if user typed a unique term
+    if (!seen.has(q) && q.length > 0) {
+      results.push({
+        id: '__custom__',
+        label: diagnosisSearchInput.trim(),
+        isCustom: true,
+        isProtocol: false,
+        shortcut: null,
+      })
+    }
+
+    return results
+  }, [diagnosisSearchInput])
+
+  /* ── 2. STEP 2: FORMULARY SEARCH & SAFE STRING FILTER (CRASH FIX) ── */
   const filteredDrugs = useMemo(() => {
     let list = MEDICINE_FORMULARY
-    if (activeCategory !== 'All') {
+    const q = drugSearchQuery.trim().toLowerCase()
+    if (!q && activeCategory !== 'All') {
       list = list.filter((m) => m.category === activeCategory)
+    } else if (q) {
+      list = list.filter((m) => {
+        const nameMatch = m.name?.toLowerCase().includes(q)
+        const genMatch = m.genericName?.toLowerCase().includes(q)
+        // Safe string / array check for indications:
+        const indMatch = typeof m.indications === 'string'
+          ? m.indications.toLowerCase().includes(q)
+          : Array.isArray(m.indications)
+          ? m.indications.some((ind) => String(ind).toLowerCase().includes(q))
+          : false
+        return Boolean(nameMatch || genMatch || indMatch)
+      })
     }
-    if (drugSearchQuery.trim()) {
-      const q = drugSearchQuery.toLowerCase()
-      list = list.filter(
-        (m) =>
-          m.name.toLowerCase().includes(q) ||
-          m.genericName.toLowerCase().includes(q) ||
-          m.indications.some((ind) => ind.toLowerCase().includes(q))
-      )
-    }
-    return list.slice(0, 10)
+    return list.slice(0, 12)
   }, [drugSearchQuery, activeCategory])
 
-  // Auto-fill fast-track protocol
-  const applyProtocol = (protocolKey) => {
-    const proto = CLINICAL_PROTOCOLS[protocolKey]
-    if (!proto) return
+  const formularyGhostMatch = useMemo(() => {
+    const q = drugSearchQuery.trim().toLowerCase()
+    if (!q || q.length < 1) return null
+    // 1. Exact prefix
+    const prefix = MEDICINE_FORMULARY.find((m) => m.name.toLowerCase().startsWith(q))
+    if (prefix) return prefix.name
+    // 2. Word prefix (e.g. "dolo" -> "Paracetamol 650mg (Dolo)")
+    const word = MEDICINE_FORMULARY.find((m) => {
+      const words = m.name.toLowerCase().split(/[\s()/-]+/)
+      return words.some((w) => w.startsWith(q))
+    })
+    if (word) return word.name
+    // 3. Generic name prefix
+    const gen = MEDICINE_FORMULARY.find((m) => m.genericName?.toLowerCase().startsWith(q))
+    if (gen) return gen.name
+    // 4. Contains
+    const contains = MEDICINE_FORMULARY.find(
+      (m) => m.name.toLowerCase().includes(q) || m.genericName?.toLowerCase().includes(q)
+    )
+    return contains ? contains.name : null
+  }, [drugSearchQuery])
 
-    setSelectedDiagnosis(proto.label)
-    setCustomDiagnosis('')
-    setSelectedFindings(proto.observations)
-    setPrescribedMedicines(proto.medications)
-    setSelectedAdvice([proto.dietAdvice])
-    setSelectedFollowUp(proto.followUp)
+  const formularyGhostSuffix = useMemo(() => {
+    if (!drugSearchQuery || !formularyGhostMatch) return ''
+    if (formularyGhostMatch.toLowerCase().startsWith(drugSearchQuery.toLowerCase())) {
+      return formularyGhostMatch.slice(drugSearchQuery.length)
+    }
+    return ''
+  }, [drugSearchQuery, formularyGhostMatch])
+
+  /* ── 3. STEP 2: CUSTOM DRUG GHOST MATCH ── */
+  const customGhostMatch = useMemo(() => {
+    const q = customDrugName.trim().toLowerCase()
+    if (!q || q.length < 1) return null
+    const prefix = MEDICINE_FORMULARY.find((m) => m.name.toLowerCase().startsWith(q))
+    if (prefix) return prefix
+    const word = MEDICINE_FORMULARY.find((m) => {
+      const words = m.name.toLowerCase().split(/[\s()/-]+/)
+      return words.some((w) => w.startsWith(q))
+    })
+    if (word) return word
+    return MEDICINE_FORMULARY.find(
+      (m) => m.name.toLowerCase().includes(q) || m.genericName?.toLowerCase().includes(q)
+    ) || null
+  }, [customDrugName])
+
+  const customGhostSuffix = useMemo(() => {
+    if (!customDrugName || !customGhostMatch) return ''
+    if (customGhostMatch.name.toLowerCase().startsWith(customDrugName.toLowerCase())) {
+      return customGhostMatch.name.slice(customDrugName.length)
+    }
+    return ''
+  }, [customDrugName, customGhostMatch])
+
+  // Select diagnosis by full name
+  const handleSelectDiagnosisByName = (diagName) => {
+    if (!diagName) return
+    const matchedProtocolEntry = Object.entries(CLINICAL_PROTOCOLS).find(
+      ([_, proto]) => proto.label.toLowerCase() === diagName.toLowerCase()
+    )
+
+    if (matchedProtocolEntry) {
+      handleToggleDiagnosis(matchedProtocolEntry[0])
+    } else {
+      setSelectedDiagnosis(diagName)
+      setCustomDiagnosis(diagName)
+      setDiagnosisSearchInput(diagName)
+    }
     setStepError(null)
   }
 
-  // Handle Keyboard Shortcuts for Diagnosis (1 - 7)
+  // Toggle Diagnosis selection: Click to select + pre-populate; click again to unselect + clear
+  const handleToggleDiagnosis = (protocolKey) => {
+    const proto = CLINICAL_PROTOCOLS[protocolKey]
+    if (!proto) return
+
+    if (selectedDiagnosis === proto.label) {
+      // Unselect & clear
+      setSelectedDiagnosis('')
+      setCustomDiagnosis('')
+      setDiagnosisSearchInput('')
+      setPrescribedMedicines([])
+      setSelectedFollowUp('No schedule needed')
+      setSelectedBedRest('No Bed Rest Advised')
+      setStepError(null)
+    } else {
+      // Select & pre-populate medicines without overriding Step 3 defaults
+      setSelectedDiagnosis(proto.label)
+      setCustomDiagnosis('')
+      setDiagnosisSearchInput(proto.label)
+      setPrescribedMedicines(proto.medications)
+      setSelectedFollowUp('No schedule needed')
+      setSelectedBedRest('No Bed Rest Advised')
+      setStepError(null)
+    }
+  }
+
+  // Keyboard Shortcuts for Diagnosis (1 - 7)
   useEffect(() => {
     if (!isOpen) return
     const handleKeyDown = (e) => {
-      // Ignore shortcut if user is typing in an input or textarea
       if (['INPUT', 'TEXTAREA'].includes(e.target.tagName)) return
-
       if (currentStep === 1) {
         const protocols = Object.keys(CLINICAL_PROTOCOLS)
         const num = parseInt(e.key, 10)
         if (num >= 1 && num <= protocols.length) {
-          applyProtocol(protocols[num - 1])
+          handleToggleDiagnosis(protocols[num - 1])
         }
       }
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [isOpen, currentStep])
+  }, [isOpen, currentStep, selectedDiagnosis])
 
-  // Allergy safety check
   const patientAllergies = patient?.allergies || []
 
   // Add Formulary Drug Handler
   const handleAddFormularyDrug = (drug) => {
-    const isAlreadyAdded = prescribedMedicines.some((m) => m.name.toLowerCase() === drug.name.toLowerCase())
+    const isAlreadyAdded = prescribedMedicines.some(
+      (m) => m.name.toLowerCase() === drug.name.toLowerCase()
+    )
     if (isAlreadyAdded) {
       setStepError(`"${drug.name}" is already in the prescription.`)
       return
@@ -460,6 +659,22 @@ export default function PrescriptionQuestionnaireModal({
     setStepError(null)
   }
 
+  // Accept Custom Drug Autocomplete match
+  const acceptCustomGhostMatch = (match) => {
+    if (!match) return
+    setCustomDrugName(match.name)
+    setCustomDuration(match.defaultDuration || '3 days')
+    setCustomInstruction(match.defaultTiming || 'After food')
+
+    const dosage = match.defaultDosage || '1-0-1'
+    const parts = dosage.split('-')
+    if (parts.length === 3) {
+      setCustomMorning(parts[0] === '1')
+      setCustomAfternoon(parts[1] === '1')
+      setCustomNight(parts[2] === '1')
+    }
+  }
+
   // Add Custom Drug Handler
   const handleAddCustomDrug = (e) => {
     e?.preventDefault()
@@ -468,48 +683,43 @@ export default function PrescriptionQuestionnaireModal({
       return
     }
 
-    // Build dosage code
     const m = customMorning ? '1' : '0'
     const a = customAfternoon ? '1' : '0'
     const n = customNight ? '1' : '0'
     const dosageCode = `${m}-${a}-${n}`
 
     if (dosageCode === '0-0-0') {
-      setStepError('Select at least one frequency schedule (Morning, Afternoon, or Night).')
+      setStepError('Select at least one schedule slot (Morning, Afternoon, or Night).')
       return
     }
 
-    const calculatedQty = customManualQty
-      ? parseInt(customManualQty, 10)
-      : calculatePrescriptionQuantity(dosageCode, customDuration)
-
+    const qty = calculatePrescriptionQuantity(dosageCode, customDuration)
     const newItem = {
+      id: `custom-${Date.now()}`,
       name: customDrugName.trim(),
       dosage: dosageCode,
       duration: customDuration,
       instruction: customInstruction,
-      qty: calculatedQty || 1,
-      unit: 'units',
+      qty: qty || 3,
+      unit: 'tabs',
+      genericName: 'Custom Entry',
     }
 
     setPrescribedMedicines((prev) => [...prev, newItem])
     setCustomDrugName('')
-    setCustomManualQty('')
     setStepError(null)
   }
 
-  // Remove drug from draft
   const handleRemoveMedicine = (index) => {
     setPrescribedMedicines((prev) => prev.filter((_, i) => i !== index))
   }
 
-  // Step Validation & Forward Navigation
   const handleProceedStep = () => {
     setStepError(null)
 
     if (currentStep === 1) {
       if (!effectiveDiagnosis.trim()) {
-        setStepError('Select or enter a clinical diagnosis to proceed.')
+        setStepError('Select or enter a patient diagnosis to proceed.')
         return
       }
       setCurrentStep(2)
@@ -517,64 +727,43 @@ export default function PrescriptionQuestionnaireModal({
     }
 
     if (currentStep === 2) {
+      if (prescribedMedicines.length === 0) {
+        setStepError('Prescribe at least one medication to proceed.')
+        return
+      }
       setCurrentStep(3)
       return
     }
 
     if (currentStep === 3) {
-      if (prescribedMedicines.length === 0) {
-        setStepError('Prescribe at least one medication or apply the recommended protocol.')
-        return
-      }
       setCurrentStep(4)
-      return
-    }
-
-    if (currentStep === 4) {
-      setCurrentStep(5)
       return
     }
   }
 
-  // Final Dispatch
   const handleDispatch = () => {
-    const combinedAdvice = [
-      ...selectedAdvice,
-      customAdvice.trim() ? customAdvice.trim() : null,
-    ]
-      .filter(Boolean)
-      .join('; ')
-
-    const combinedNotes = [
-      ...selectedFindings,
-      customClinicalNotes.trim() ? customClinicalNotes.trim() : null,
-    ]
-      .filter(Boolean)
-      .join('. ')
-
     const payload = {
       diagnosis: effectiveDiagnosis,
-      clinicalNotes: combinedNotes,
+      clinicalNotes: `Patient presented with complaints; evaluated.`,
       medicines: prescribedMedicines,
-      dietAdvice: combinedAdvice,
+      dietAdvice: 'Follow prescribed medication schedule. Hydrate well.',
       followUp: selectedFollowUp,
+      bedRest: effectiveBedRestString,
     }
-
     onFinalizePrescription(payload)
   }
 
   if (!isOpen || !patient) return null
-
-  // Active protocol recommendation for Step 3 banner
-  const matchedProtocol = Object.values(CLINICAL_PROTOCOLS).find(
-    (p) => p.label.toLowerCase() === effectiveDiagnosis.toLowerCase()
-  )
 
   const currentDateStr = new Date().toLocaleDateString('en-GB', {
     day: '2-digit',
     month: 'short',
     year: 'numeric',
   })
+
+  const currentCustomScheduleMAN = formatDosageMAN(
+    `${customMorning ? '1' : '0'}-${customAfternoon ? '1' : '0'}-${customNight ? '1' : '0'}`
+  )
 
   return (
     <AnimatePresence>
@@ -588,7 +777,7 @@ export default function PrescriptionQuestionnaireModal({
             className="w-full max-w-4xl max-h-[92vh] bg-white border border-slate-200 rounded-3xl shadow-2xl flex flex-col overflow-hidden text-slate-900"
           >
             
-            {/* ── TOP HEADER & PATIENT BANNER (PURE WHITE LIGHT THEME) ── */}
+            {/* ── TOP HEADER & PATIENT BANNER ── */}
             <div className="px-5 py-4 border-b border-slate-200 bg-white flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shrink-0">
               <div className="flex items-center gap-3 min-w-0">
                 <div className="h-10 w-10 rounded-2xl bg-teal-700 text-white flex items-center justify-center font-mono font-bold text-sm shrink-0 shadow-xs">
@@ -607,12 +796,8 @@ export default function PrescriptionQuestionnaireModal({
                     </span>
                   </div>
                   <div className="flex items-center gap-2.5 text-xs text-slate-600 mt-1 flex-wrap">
-                    <span>Age: <strong className="text-slate-800">{patient.age}</strong></span>
+                    <span>Age: <strong className="text-slate-800">{patient.age} yrs</strong></span>
                     <span>Blood: <strong className="text-slate-800">{patient.bloodGroup}</strong></span>
-                    <span>BP: <strong className="text-slate-800">{patient.vitals?.bp || 'N/A'}</strong></span>
-                    <span>Pulse: <strong className="text-slate-800">{patient.vitals?.pulse || 'N/A'} bpm</strong></span>
-                    <span>SpO2: <strong className="text-slate-800">{patient.vitals?.spo2 || 'N/A'}%</strong></span>
-                    <span>Temp: <strong className="text-slate-800">{patient.vitals?.temp || 'N/A'}</strong></span>
                     
                     {patientAllergies.some((a) => a !== 'None declared') ? (
                       <span className="inline-flex items-center gap-1 text-[11px] font-bold text-rose-700 bg-rose-50 px-2 py-0.5 rounded border border-rose-200">
@@ -622,7 +807,7 @@ export default function PrescriptionQuestionnaireModal({
                     ) : (
                       <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
                         <ShieldCheck className="w-3.5 h-3.5 text-emerald-700" />
-                        NKDA
+                        No Known Drug Allergies
                       </span>
                     )}
                   </div>
@@ -631,7 +816,7 @@ export default function PrescriptionQuestionnaireModal({
 
               <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
                 <QuestionnaireProgress className="bg-slate-100 text-slate-700 px-3 py-1 rounded-lg border border-slate-200">
-                  {currentStep <= 4 ? `Step ${currentStep} of 4 • ${currentStep * 25}%` : 'Formal Review'}
+                  {currentStep <= 3 ? `Step ${currentStep} of 3 • ${Math.round((currentStep / 3) * 100)}%` : 'Formal Review'}
                 </QuestionnaireProgress>
 
                 <button
@@ -667,67 +852,118 @@ export default function PrescriptionQuestionnaireModal({
               <Questionnaire>
                 
                 {/* ═══════════════════════════════════════════════════════════
-                    QUESTION 1: PRIMARY CLINICAL DIAGNOSIS
+                    STEP 1: PRIMARY CLINICAL DIAGNOSIS
                    ═══════════════════════════════════════════════════════════ */}
                 {currentStep === 1 && (
                   <QuestionnaireItem>
                     <div className="p-3.5 rounded-xl bg-slate-50 border border-slate-200 mb-2">
                       <span className="text-[10px] font-bold uppercase tracking-wider text-teal-800 block mb-0.5">
-                        Triage Chief Complaint
+                        PATIENT COMPLAINT
                       </span>
                       <p className="text-slate-900 text-sm font-medium">
-                        "{patient.complaint || 'No complaint recorded at intake.'}"
+                        "{patient.complaint || 'General Consultation'}"
                       </p>
                     </div>
 
                     <QuestionnaireTitle>
                       Primary Clinical Diagnosis
                     </QuestionnaireTitle>
-                    <QuestionnaireDescription>
-                      Select an evidence-based clinical presentation or enter a specific diagnosis for this student. Press 1 through 7 on your keyboard for rapid selection.
-                    </QuestionnaireDescription>
 
-                    <QuestionnaireChoices className="grid-cols-1 sm:grid-cols-2 pt-2">
-                      {Object.entries(CLINICAL_PROTOCOLS).map(([key, proto]) => {
-                        const isSelected = selectedDiagnosis === proto.label
+                    {/* ── INPUT 1: SEARCH & GHOST AUTOCOMPLETE FOR DIAGNOSIS ── */}
+                    <div className="pt-1 pb-2">
+                      <div className="relative flex items-center bg-white border border-slate-300 rounded-xl overflow-hidden focus-within:border-teal-600 focus-within:ring-2 focus-within:ring-teal-600/20">
+                        <Search className="w-4 h-4 text-slate-400 absolute left-3 pointer-events-none" />
+
+                        {/* Ghost Overlay */}
+                        {diagnosisGhostSuffix && (
+                          <div className="absolute inset-0 pl-9 pr-24 py-2 text-xs sm:text-sm pointer-events-none flex items-center overflow-hidden font-sans select-none">
+                            <span className="invisible whitespace-pre">{diagnosisSearchInput}</span>
+                            <span className="text-slate-400 font-normal whitespace-pre">
+                              {diagnosisGhostSuffix}
+                            </span>
+                          </div>
+                        )}
+
+                        <input
+                          type="text"
+                          value={diagnosisSearchInput}
+                          onChange={(e) => {
+                            setDiagnosisSearchInput(e.target.value)
+                            setCustomDiagnosis(e.target.value)
+                            if (e.target.value.trim()) setSelectedDiagnosis('')
+                          }}
+                          onKeyDown={(e) => {
+                            if ((e.key === 'Tab' || e.key === 'ArrowRight' || e.key === 'Enter') && topDiagnosisMatch) {
+                              e.preventDefault()
+                              handleSelectDiagnosisByName(topDiagnosisMatch)
+                            }
+                          }}
+                          placeholder="Search or enter diagnosis (e.g. Tonsillitis, Gastritis, Migraine, Cough, Eye)..."
+                          className="w-full pl-9 pr-24 py-2 text-xs sm:text-sm bg-transparent outline-none relative z-10 text-slate-900"
+                        />
+
+                        {/* Quick Tab chip */}
+                        {topDiagnosisMatch && diagnosisSearchInput.trim() && diagnosisSearchInput.toLowerCase() !== topDiagnosisMatch.toLowerCase() && (
+                          <button
+                            type="button"
+                            onClick={() => handleSelectDiagnosisByName(topDiagnosisMatch)}
+                            className="absolute right-2.5 z-20 text-[10px] font-semibold bg-slate-100 hover:bg-teal-50 text-teal-800 px-2 py-0.5 rounded border border-slate-200 cursor-pointer"
+                          >
+                            Tab ⇥ {topDiagnosisMatch.split(' ')[0]}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* ── DIAGNOSIS OPTIONS: PURE MAIN TEXT ONLY, ZERO SUBTEXT ── */}
+                    <QuestionnaireChoices className="grid-cols-1 sm:grid-cols-2 pt-1 max-h-56 overflow-y-auto pr-1">
+                      {searchDiagnosisResults.map((item) => {
+                        const isSelected = effectiveDiagnosis.toLowerCase() === item.label.toLowerCase()
                         return (
                           <QuestionnaireChoice
-                            key={key}
+                            key={item.id}
                             checked={isSelected}
-                            shortcut={proto.shortcut}
-                            onClick={() => applyProtocol(key)}
+                            shortcut={item.shortcut}
+                            onClick={() => {
+                              if (item.isProtocol) {
+                                handleToggleDiagnosis(item.protocolKey)
+                              } else {
+                                handleSelectDiagnosisByName(item.label)
+                              }
+                            }}
                           >
-                            <span className="font-bold text-slate-900 text-sm">
-                              {proto.label}
-                            </span>
-                            <QuestionnaireChoiceDescription>
-                              Pre-configured protocol: {proto.medications.map((m) => m.name.split(' ')[0]).join(' + ')}
-                            </QuestionnaireChoiceDescription>
+                            <div className="flex items-center justify-between w-full gap-2">
+                              <span className="font-bold text-slate-900 text-sm truncate">
+                                {item.isCustom ? `Use "${item.label}"` : item.label}
+                              </span>
+                              {item.isProtocol && (
+                                <span className="text-[10px] font-semibold text-teal-800 bg-teal-50 px-2 py-0.5 rounded border border-teal-200 shrink-0">
+                                  Protocol
+                                </span>
+                              )}
+                              {item.isCustom && (
+                                <span className="text-[10px] font-semibold text-amber-800 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 shrink-0">
+                                  Custom
+                                </span>
+                              )}
+                            </div>
                           </QuestionnaireChoice>
                         )
                       })}
                     </QuestionnaireChoices>
 
-                    <div className="pt-2">
-                      <label className="text-xs font-bold text-slate-800 block mb-1.5">
-                        Or Enter Custom Diagnosis:
-                      </label>
-                      <QuestionnaireInput
-                        value={customDiagnosis}
-                        onChange={(e) => {
-                          setCustomDiagnosis(e.target.value)
-                          if (e.target.value.trim()) setSelectedDiagnosis('')
-                        }}
-                        placeholder="Enter diagnosis..."
-                      />
-                    </div>
-
                     <QuestionnaireActions>
                       <span className="text-xs text-slate-500">
-                        Selected: <strong className="text-slate-900">{effectiveDiagnosis || 'None selected'}</strong>
+                        Selected: <strong className="text-slate-900">{effectiveDiagnosis || 'None (select at least one)'}</strong>
                       </span>
-                      <QuestionnaireNext onClick={handleProceedStep}>
-                        <span>Continue to Examination</span>
+                      <QuestionnaireNext
+                        onClick={handleProceedStep}
+                        disabled={!effectiveDiagnosis.trim()}
+                        className={cn(
+                          !effectiveDiagnosis.trim() && 'opacity-40 cursor-not-allowed pointer-events-none'
+                        )}
+                      >
+                        <span>Continue to Medications</span>
                         <ArrowRight className="w-4 h-4 ms-1.5" />
                       </QuestionnaireNext>
                     </QuestionnaireActions>
@@ -735,95 +971,13 @@ export default function PrescriptionQuestionnaireModal({
                 )}
 
                 {/* ═══════════════════════════════════════════════════════════
-                    QUESTION 2: CLINICAL EXAMINATION & OBSERVATIONS
+                    STEP 2: PRESCRIBE MEDICATIONS & DISPENSARY SCHEDULE
                    ═══════════════════════════════════════════════════════════ */}
                 {currentStep === 2 && (
-                  <QuestionnaireItem multiple>
-                    <div className="flex items-center justify-between pb-2 border-b border-slate-200">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs text-slate-500">Diagnosis:</span>
-                        <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-teal-50 text-teal-800 border border-teal-200">
-                          {effectiveDiagnosis}
-                        </span>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setCurrentStep(1)}
-                        className="text-xs font-semibold text-teal-700 hover:underline cursor-pointer"
-                      >
-                        Edit Diagnosis
-                      </button>
-                    </div>
-
-                    <QuestionnaireTitle>
-                      Objective Clinical Findings & Physical Examination
-                    </QuestionnaireTitle>
-                    <QuestionnaireDescription>
-                      Select any observed clinical signs during your physical check-up. You may select multiple items or add custom examination notes.
-                    </QuestionnaireDescription>
-
-                    <QuestionnaireChoices className="grid-cols-1 sm:grid-cols-2 pt-2">
-                      {CLINICAL_OBSERVATION_PRESETS.map((finding) => {
-                        const isChecked = selectedFindings.includes(finding)
-                        return (
-                          <QuestionnaireChoice
-                            key={finding}
-                            checked={isChecked}
-                            onClick={() => {
-                              setSelectedFindings((prev) =>
-                                prev.includes(finding)
-                                  ? prev.filter((f) => f !== finding)
-                                  : [...prev, finding]
-                              )
-                            }}
-                          >
-                            <span className="font-semibold text-slate-800 text-xs sm:text-sm">
-                              {finding}
-                            </span>
-                          </QuestionnaireChoice>
-                        )
-                      })}
-                    </QuestionnaireChoices>
-
-                    <div className="pt-2">
-                      <label className="text-xs font-bold text-slate-800 block mb-1.5">
-                        Additional Clinical Examination Notes (Optional):
-                      </label>
-                      <textarea
-                        rows={2}
-                        value={customClinicalNotes}
-                        onChange={(e) => setCustomClinicalNotes(e.target.value)}
-                        placeholder="Enter clinical examination notes..."
-                        className="w-full text-xs sm:text-sm text-slate-900 bg-white border border-slate-300 rounded-xl p-3 outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-600/20"
-                      />
-                    </div>
-
-                    <QuestionnaireActions>
-                      <QuestionnairePrevious onClick={() => setCurrentStep(1)}>
-                        <ArrowLeft className="w-4 h-4 me-1.5" />
-                        <span>Back</span>
-                      </QuestionnairePrevious>
-                      <div className="flex items-center gap-2">
-                        <QuestionnaireSkip onClick={() => setCurrentStep(3)}>
-                          Skip Observations
-                        </QuestionnaireSkip>
-                        <QuestionnaireNext onClick={handleProceedStep}>
-                          <span>Continue to Medications</span>
-                          <ArrowRight className="w-4 h-4 ms-1.5" />
-                        </QuestionnaireNext>
-                      </div>
-                    </QuestionnaireActions>
-                  </QuestionnaireItem>
-                )}
-
-                {/* ═══════════════════════════════════════════════════════════
-                    QUESTION 3: PRESCRIBE MEDICATIONS & DOSAGE
-                   ═══════════════════════════════════════════════════════════ */}
-                {currentStep === 3 && (
                   <QuestionnaireItem>
                     <div className="flex items-center justify-between pb-2 border-b border-slate-200">
                       <div className="flex items-center gap-2">
-                        <span className="text-xs text-slate-500">Active Consultation:</span>
+                        <span className="text-xs text-slate-500">Active Diagnosis:</span>
                         <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-teal-50 text-teal-800 border border-teal-200">
                           {effectiveDiagnosis}
                         </span>
@@ -836,52 +990,53 @@ export default function PrescriptionQuestionnaireModal({
                     <QuestionnaireTitle>
                       Prescribe Medications & Dispensary Schedule
                     </QuestionnaireTitle>
-                    <QuestionnaireDescription>
-                      Apply the recommended clinical evidence bundle or search university formulary inventory. Dosages and total quantities are calculated automatically.
-                    </QuestionnaireDescription>
 
-                    {/* ── FAST TRACK RECOMMENDATION BANNER ── */}
-                    {matchedProtocol && (
-                      <div className="p-4 rounded-2xl bg-teal-50/70 border border-teal-200 space-y-3">
-                        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                          <div>
-                            <span className="text-[10px] font-bold uppercase tracking-wider text-teal-800 block">
-                              Fast-Track Treatment Bundle for {matchedProtocol.label}
-                            </span>
-                            <p className="text-xs text-slate-700 mt-0.5">
-                              {matchedProtocol.medications.map((m) => `${m.name} (${m.dosage})`).join(' + ')}
-                            </p>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setPrescribedMedicines(matchedProtocol.medications)
-                              setStepError(null)
-                            }}
-                            className="px-3.5 py-1.5 rounded-xl bg-teal-800 hover:bg-teal-900 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-xs shrink-0"
-                          >
-                            <Sparkles className="w-3.5 h-3.5 text-teal-200" />
-                            <span>Apply Protocol Bundle</span>
-                          </button>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* ── FORMULARY SEARCH & CATALOG ── */}
+                    {/* ── INPUT 2: FORMULARY SEARCH BAR WITH WORKING GHOST TYPING ── */}
                     <div className="space-y-3 pt-1">
                       <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
-                        <div className="relative flex-1">
-                          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                        
+                        <div className="relative flex-1 flex items-center bg-white border border-slate-300 rounded-xl overflow-hidden focus-within:border-teal-600 focus-within:ring-2 focus-within:ring-teal-600/20">
+                          <Search className="w-4 h-4 text-slate-400 absolute left-3 pointer-events-none" />
+                          
+                          {/* Ghost Completion Overlay */}
+                          {formularyGhostSuffix && (
+                            <div className="absolute inset-0 pl-9 pr-24 py-2 text-xs sm:text-sm pointer-events-none flex items-center overflow-hidden font-sans select-none">
+                              <span className="invisible whitespace-pre">{drugSearchQuery}</span>
+                              <span className="text-slate-400 font-normal whitespace-pre">
+                                {formularyGhostSuffix}
+                              </span>
+                            </div>
+                          )}
+
                           <input
                             type="text"
                             value={drugSearchQuery}
                             onChange={(e) => setDrugSearchQuery(e.target.value)}
-                            placeholder="Search medicines by trade or salt name..."
-                            className="w-full pl-9 pr-3 py-2 text-xs sm:text-sm bg-white border border-slate-300 rounded-xl outline-none focus:border-teal-600"
+                            onKeyDown={(e) => {
+                              if ((e.key === 'Tab' || e.key === 'ArrowRight' || e.key === 'Enter') && formularyGhostMatch) {
+                                e.preventDefault()
+                                setDrugSearchQuery(formularyGhostMatch)
+                              }
+                            }}
+                            placeholder="Search formulary (e.g. Dolo, Paracetamol, Cetirizine, Azithromycin)..."
+                            className="w-full pl-9 pr-24 py-2 text-xs sm:text-sm bg-transparent outline-none relative z-10 text-slate-900"
                           />
+
+                          {/* Quick Tab suggestion chip */}
+                          {formularyGhostMatch && drugSearchQuery.trim() && drugSearchQuery.toLowerCase() !== formularyGhostMatch.toLowerCase() && (
+                            <button
+                              type="button"
+                              onClick={() => setDrugSearchQuery(formularyGhostMatch)}
+                              className="absolute right-2.5 z-20 text-[10px] font-semibold bg-slate-100 hover:bg-teal-50 text-teal-800 px-2 py-0.5 rounded border border-slate-200 cursor-pointer"
+                            >
+                              Tab ⇥ {formularyGhostMatch.split(' ')[0]}
+                            </button>
+                          )}
                         </div>
+
+                        {/* Deduplicated Category Filter Pills (Only ONE 'All') */}
                         <div className="flex items-center gap-1 overflow-x-auto pb-1 sm:pb-0">
-                          {['All', ...FORMULARY_CATEGORIES.slice(0, 4)].map((cat) => (
+                          {FORMULARY_CATEGORIES.slice(0, 4).map((cat) => (
                             <button
                               key={cat}
                               type="button"
@@ -899,11 +1054,15 @@ export default function PrescriptionQuestionnaireModal({
                         </div>
                       </div>
 
-                      {/* Filtered Drug Chips */}
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-44 overflow-y-auto pr-1">
+                      {/* Filtered Drug Chips with Dynamic M-A-N Dosage */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1">
                         {filteredDrugs.map((drug) => {
                           const allergyConflict = checkDrugAllergyConflict(drug, patientAllergies)
-                          const alreadyAdded = prescribedMedicines.some((m) => m.name.toLowerCase() === drug.name.toLowerCase())
+                          const alreadyAdded = prescribedMedicines.some(
+                            (m) => m.name.toLowerCase() === drug.name.toLowerCase()
+                          )
+                          const dosageMAN = formatDosageMAN(drug.defaultDosage)
+
                           return (
                             <div
                               key={drug.id}
@@ -919,7 +1078,7 @@ export default function PrescriptionQuestionnaireModal({
                                   {drug.name}
                                 </span>
                                 <span className="text-[11px] text-slate-500 block truncate">
-                                  {drug.defaultDosage} • {drug.defaultDuration} • {drug.defaultTiming}
+                                  <strong className="text-teal-900 font-mono">{dosageMAN}</strong> • {drug.defaultDuration} • {drug.defaultTiming}
                                 </span>
                                 {allergyConflict.hasConflict && (
                                   <span className="text-[10px] font-bold text-rose-600 block mt-0.5">
@@ -950,27 +1109,89 @@ export default function PrescriptionQuestionnaireModal({
                             </div>
                           )
                         })}
+
+                        {filteredDrugs.length === 0 && drugSearchQuery.trim() && (
+                          <div className="col-span-full p-3 rounded-xl border border-dashed border-teal-300 bg-teal-50/60 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                            <div>
+                              <span className="text-xs font-bold text-slate-800 block">
+                                "{drugSearchQuery}" not in formulary list
+                              </span>
+                              <span className="text-[11px] text-slate-500 block">
+                                Prescribe as a custom medication with custom schedule and dosage
+                              </span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setCustomDrugName(drugSearchQuery.trim())
+                                setDrugSearchQuery('')
+                              }}
+                              className="px-3 py-1.5 rounded-lg bg-teal-800 hover:bg-teal-900 text-white text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer shrink-0 transition-colors shadow-2xs"
+                            >
+                              <Plus className="w-3.5 h-3.5" />
+                              <span>Prescribe Custom</span>
+                            </button>
+                          </div>
+                        )}
                       </div>
                     </div>
 
-                    {/* ── CUSTOM DRUG ADDER ── */}
+                    {/* ── INPUT 3: CUSTOM DRUG ADDER WITH WORKING GHOST TYPING ── */}
                     <div className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/70 space-y-2.5">
-                      <span className="text-[11px] font-bold uppercase tracking-wider text-slate-600 block">
-                        Or Prescribe Custom Medication
-                      </span>
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-bold uppercase tracking-wider text-slate-600 block">
+                          Or Prescribe Custom Medication
+                        </span>
+                        <span className="text-[11px] font-semibold text-teal-800">
+                          Schedule: <strong className="font-mono bg-teal-100/70 px-1.5 py-0.5 rounded">{currentCustomScheduleMAN}</strong>
+                        </span>
+                      </div>
+
                       <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-end">
-                        <div className="sm:col-span-5">
+                        
+                        <div className="sm:col-span-5 relative">
                           <label className="text-[11px] font-semibold text-slate-600 block mb-1">
                             Drug Name & Strength
                           </label>
-                          <input
-                            type="text"
-                            value={customDrugName}
-                            onChange={(e) => setCustomDrugName(e.target.value)}
-                            placeholder="Enter medicine name..."
-                            className="w-full px-3 py-1.5 text-xs bg-white border border-slate-300 rounded-lg outline-none focus:border-teal-600"
-                          />
+                          
+                          <div className="relative flex items-center bg-white border border-slate-300 rounded-lg overflow-hidden focus-within:border-teal-600 focus-within:ring-2 focus-within:ring-teal-600/20">
+                            {customGhostSuffix && (
+                              <div className="absolute inset-0 px-3 py-1.5 text-xs pointer-events-none flex items-center overflow-hidden font-sans select-none">
+                                <span className="invisible whitespace-pre">{customDrugName}</span>
+                                <span className="text-slate-400 font-normal whitespace-pre">
+                                  {customGhostSuffix}
+                                </span>
+                              </div>
+                            )}
+
+                            <input
+                              type="text"
+                              value={customDrugName}
+                              onChange={(e) => setCustomDrugName(e.target.value)}
+                              onKeyDown={(e) => {
+                                if ((e.key === 'Tab' || e.key === 'ArrowRight' || e.key === 'Enter') && customGhostMatch) {
+                                  e.preventDefault()
+                                  acceptCustomGhostMatch(customGhostMatch)
+                                }
+                              }}
+                              placeholder="Enter medicine name..."
+                              className="w-full px-3 pr-24 py-1.5 text-xs bg-transparent outline-none relative z-10 text-slate-900"
+                            />
+
+                            {/* Quick Tab suggestion chip */}
+                            {customGhostMatch && customDrugName.trim() && customDrugName.toLowerCase() !== customGhostMatch.name.toLowerCase() && (
+                              <button
+                                type="button"
+                                onClick={() => acceptCustomGhostMatch(customGhostMatch)}
+                                className="absolute right-2 z-20 text-[10px] font-semibold bg-slate-100 hover:bg-teal-50 text-teal-800 px-2 py-0.5 rounded border border-slate-200 cursor-pointer"
+                              >
+                                Tab ⇥ {customGhostMatch.name.split(' ')[0]}
+                              </button>
+                            )}
+                          </div>
                         </div>
+
+                        {/* Frequency (M - A - N) Toggles */}
                         <div className="sm:col-span-3">
                           <label className="text-[11px] font-semibold text-slate-600 block mb-1">
                             Frequency (M - A - N)
@@ -980,9 +1201,10 @@ export default function PrescriptionQuestionnaireModal({
                               type="button"
                               onClick={() => setCustomMorning((p) => !p)}
                               className={cn(
-                                'flex-1 py-1 rounded text-xs font-bold border cursor-pointer',
+                                'flex-1 py-1 rounded text-xs font-bold border cursor-pointer transition-colors',
                                 customMorning ? 'bg-teal-700 text-white border-teal-700' : 'bg-white text-slate-500 border-slate-200'
                               )}
+                              title="Morning Dose"
                             >
                               M
                             </button>
@@ -990,9 +1212,10 @@ export default function PrescriptionQuestionnaireModal({
                               type="button"
                               onClick={() => setCustomAfternoon((p) => !p)}
                               className={cn(
-                                'flex-1 py-1 rounded text-xs font-bold border cursor-pointer',
+                                'flex-1 py-1 rounded text-xs font-bold border cursor-pointer transition-colors',
                                 customAfternoon ? 'bg-teal-700 text-white border-teal-700' : 'bg-white text-slate-500 border-slate-200'
                               )}
+                              title="Afternoon Dose"
                             >
                               A
                             </button>
@@ -1000,14 +1223,17 @@ export default function PrescriptionQuestionnaireModal({
                               type="button"
                               onClick={() => setCustomNight((p) => !p)}
                               className={cn(
-                                'flex-1 py-1 rounded text-xs font-bold border cursor-pointer',
+                                'flex-1 py-1 rounded text-xs font-bold border cursor-pointer transition-colors',
                                 customNight ? 'bg-teal-700 text-white border-teal-700' : 'bg-white text-slate-500 border-slate-200'
                               )}
+                              title="Night Dose"
                             >
                               N
                             </button>
                           </div>
                         </div>
+
+                        {/* Duration Selector */}
                         <div className="sm:col-span-2">
                           <label className="text-[11px] font-semibold text-slate-600 block mb-1">
                             Duration
@@ -1024,6 +1250,8 @@ export default function PrescriptionQuestionnaireModal({
                             <option value="10 days">10 days</option>
                           </select>
                         </div>
+
+                        {/* Add Button */}
                         <div className="sm:col-span-2">
                           <button
                             type="button"
@@ -1061,7 +1289,7 @@ export default function PrescriptionQuestionnaireModal({
                             No medications scheduled yet.
                           </p>
                           <p className="text-[11px] text-slate-400">
-                            Click "Apply Protocol Bundle" above or add items from the catalog.
+                            Search formulary items above or type custom drug details.
                           </p>
                         </div>
                       ) : (
@@ -1077,7 +1305,7 @@ export default function PrescriptionQuestionnaireModal({
                                     {med.name}
                                   </span>
                                   <span className="px-2 py-0.5 rounded bg-teal-50 text-teal-800 font-mono font-bold text-[10px]">
-                                    {med.dosage}
+                                    {formatDosageMAN(med.dosage)}
                                   </span>
                                 </div>
                                 <span className="text-[11px] text-slate-500 block mt-0.5">
@@ -1099,12 +1327,18 @@ export default function PrescriptionQuestionnaireModal({
                     </div>
 
                     <QuestionnaireActions>
-                      <QuestionnairePrevious onClick={() => setCurrentStep(2)}>
+                      <QuestionnairePrevious onClick={() => setCurrentStep(1)}>
                         <ArrowLeft className="w-4 h-4 me-1.5" />
-                        <span>Back</span>
+                        <span>Back to Diagnosis</span>
                       </QuestionnairePrevious>
-                      <QuestionnaireNext onClick={handleProceedStep}>
-                        <span>Continue to Advice & Review</span>
+                      <QuestionnaireNext
+                        onClick={handleProceedStep}
+                        disabled={prescribedMedicines.length === 0}
+                        className={cn(
+                          prescribedMedicines.length === 0 && 'opacity-40 cursor-not-allowed pointer-events-none'
+                        )}
+                      >
+                        <span>Continue to Follow-Up & Bed Rest</span>
                         <ArrowRight className="w-4 h-4 ms-1.5" />
                       </QuestionnaireNext>
                     </QuestionnaireActions>
@@ -1112,17 +1346,17 @@ export default function PrescriptionQuestionnaireModal({
                 )}
 
                 {/* ═══════════════════════════════════════════════════════════
-                    QUESTION 4: DIET ADVICE & FOLLOW-UP SCHEDULE
+                    STEP 3: FOLLOW-UP & SEPARATE BED REST DIRECTIVE (NO SUBTEXT)
                    ═══════════════════════════════════════════════════════════ */}
-                {currentStep === 4 && (
-                  <QuestionnaireItem multiple>
+                {currentStep === 3 && (
+                  <QuestionnaireItem>
                     <div className="flex items-center justify-between pb-2 border-b border-slate-200">
                       <span className="text-xs text-slate-500">
-                        Prescribed Items: <strong className="text-slate-800">{prescribedMedicines.length} scheduled</strong>
+                        Prescribed Medications: <strong className="text-slate-800">{prescribedMedicines.length} scheduled</strong>
                       </span>
                       <button
                         type="button"
-                        onClick={() => setCurrentStep(3)}
+                        onClick={() => setCurrentStep(2)}
                         className="text-xs font-semibold text-teal-700 hover:underline cursor-pointer"
                       >
                         Edit Medicines
@@ -1130,72 +1364,100 @@ export default function PrescriptionQuestionnaireModal({
                     </div>
 
                     <QuestionnaireTitle>
-                      Dietary & Lifestyle Advice
+                      Follow-Up & Academic Leave Certification
                     </QuestionnaireTitle>
-                    <QuestionnaireDescription>
-                      Select recommended patient counseling instructions. Multi-select all that apply.
-                    </QuestionnaireDescription>
 
-                    <QuestionnaireChoices className="grid-cols-1 sm:grid-cols-2 pt-2">
-                      {DIET_ADVICE_PRESETS.map((advice) => {
-                        const isChecked = selectedAdvice.includes(advice)
-                        return (
-                          <QuestionnaireChoice
-                            key={advice}
-                            checked={isChecked}
-                            onClick={() => {
-                              setSelectedAdvice((prev) =>
-                                prev.includes(advice)
-                                  ? prev.filter((a) => a !== advice)
-                                  : [...prev, advice]
-                              )
-                            }}
-                          >
-                            <span className="font-semibold text-slate-800 text-xs sm:text-sm">
-                              {advice}
-                            </span>
-                          </QuestionnaireChoice>
-                        )
-                      })}
-                    </QuestionnaireChoices>
-
-                    <div className="pt-2">
-                      <label className="text-xs font-bold text-slate-800 block mb-1.5">
-                        Custom Dietary / Lifestyle Instructions:
-                      </label>
-                      <QuestionnaireInput
-                        value={customAdvice}
-                        onChange={(e) => setCustomAdvice(e.target.value)}
-                        placeholder="Enter advice..."
-                      />
-                    </div>
-
-                    <div className="pt-3">
-                      <label className="text-xs font-bold text-slate-800 block mb-1.5">
-                        Follow-Up / Review Schedule:
-                      </label>
-                      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
-                        {FOLLOW_UP_OPTIONS.map((f) => (
-                          <button
-                            key={f.label}
-                            type="button"
-                            onClick={() => setSelectedFollowUp(f.label)}
-                            className={cn(
-                              'p-2.5 rounded-xl border text-xs text-left cursor-pointer transition-all',
-                              selectedFollowUp === f.label
-                                ? 'bg-teal-50 border-teal-700 font-bold text-teal-900 shadow-2xs'
-                                : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
-                            )}
-                          >
-                            <span className="block font-bold">{f.label}</span>
-                            <span className="text-[10px] text-slate-400 block mt-0.5 leading-tight">{f.desc}</span>
-                          </button>
-                        ))}
+                    {/* ── SECTION 1: FOLLOW-UP (MAIN TEXT ONLY, ZERO SUBTEXT) ── */}
+                    <div className="space-y-2 pt-1">
+                      <span className="text-xs font-bold text-slate-800 uppercase tracking-wide block">
+                        Clinical Follow-Up / Review Schedule
+                      </span>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+                        {FOLLOW_UP_OPTIONS.map((opt) => {
+                          const isSelected = selectedFollowUp === opt
+                          return (
+                            <button
+                              key={opt}
+                              type="button"
+                              onClick={() => setSelectedFollowUp(opt)}
+                              className={cn(
+                                'px-3.5 py-3 rounded-xl border text-left cursor-pointer transition-all flex items-center justify-between',
+                                isSelected
+                                  ? 'bg-teal-50/80 border-teal-700 text-teal-950 font-bold shadow-2xs ring-2 ring-teal-700/20'
+                                  : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50 hover:border-slate-300'
+                              )}
+                            >
+                              <span className="font-bold text-xs sm:text-sm text-slate-900">{opt}</span>
+                              {isSelected && <Check className="w-4 h-4 text-teal-700 shrink-0" />}
+                            </button>
+                          )
+                        })}
                       </div>
                     </div>
 
+                    {/* ── SECTION 2: DEDICATED BED REST (MAIN TEXT ONLY, ZERO SUBTEXT) ── */}
+                    <div className="pt-4 border-t border-slate-200 space-y-2">
+                      <div className="flex items-center gap-2">
+                        <div className="p-1 rounded bg-amber-50 text-amber-800 border border-amber-200 shrink-0">
+                          <Bed className="w-4 h-4" />
+                        </div>
+                        <span className="text-xs font-bold uppercase tracking-wide text-slate-900 block">
+                          Bed Rest Requirement and Note
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 pt-1">
+                        {BED_REST_OPTIONS.map((opt) => {
+                          const isSelected = selectedBedRest === opt
+                          return (
+                            <button
+                              key={opt}
+                              type="button"
+                              onClick={() => setSelectedBedRest(opt)}
+                              className={cn(
+                                'px-3.5 py-3 rounded-xl border text-left cursor-pointer transition-all flex items-center justify-between',
+                                isSelected
+                                  ? 'bg-amber-50/70 border-amber-600 text-amber-950 font-bold shadow-2xs ring-2 ring-amber-600/20'
+                                  : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                              )}
+                            >
+                              <span className="font-bold text-xs sm:text-sm text-slate-900">{opt}</span>
+                              {isSelected && <Check className="w-4 h-4 text-amber-700 shrink-0" />}
+                            </button>
+                          )
+                        })}
+                      </div>
+
+                      {/* Custom Days Input for Bed Rest */}
+                      {selectedBedRest === 'Custom Days' && (
+                        <div className="mt-2.5 p-3 rounded-xl bg-amber-50/50 border border-amber-200 flex flex-col sm:flex-row items-center gap-3">
+                          <div className="w-full sm:w-32">
+                            <label className="text-[10px] font-bold text-slate-700 block mb-1">Days of Rest:</label>
+                            <input
+                              type="number"
+                              min="1"
+                              max="30"
+                              value={customBedRestDays}
+                              onChange={(e) => setCustomBedRestDays(e.target.value)}
+                              className="w-full px-2.5 py-1 text-xs bg-white border border-slate-300 rounded-lg outline-none"
+                            />
+                          </div>
+                          <div className="flex-1 w-full">
+                            <label className="text-[10px] font-bold text-slate-700 block mb-1">Quarantine / Medical Note (Optional):</label>
+                            <input
+                              type="text"
+                              value={customBedRestReason}
+                              onChange={(e) => setCustomBedRestReason(e.target.value)}
+                              placeholder="e.g. High fever quarantine, contagious infection..."
+                              className="w-full px-2.5 py-1 text-xs bg-white border border-slate-300 rounded-lg outline-none"
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
                     <QuestionnaireActions>
-                      <QuestionnairePrevious onClick={() => setCurrentStep(3)}>
+                      <QuestionnairePrevious onClick={() => setCurrentStep(2)}>
                         <ArrowLeft className="w-4 h-4 me-1.5" />
                         <span>Back</span>
                       </QuestionnairePrevious>
@@ -1208,9 +1470,9 @@ export default function PrescriptionQuestionnaireModal({
                 )}
 
                 {/* ═══════════════════════════════════════════════════════════
-                    STAGE 5: FORMAL BLACK & WHITE E-PRESCRIPTION REVIEW
+                    STAGE 4: FORMAL BLACK & WHITE E-PRESCRIPTION REVIEW
                    ═══════════════════════════════════════════════════════════ */}
-                {currentStep === 5 && (
+                {currentStep === 4 && (
                   <div className="space-y-5 animate-fadeIn">
                     <div className="flex items-center justify-between pb-3 border-b border-slate-200">
                       <div className="flex items-center gap-2">
@@ -1228,7 +1490,7 @@ export default function PrescriptionQuestionnaireModal({
                       </button>
                     </div>
 
-                    {/* ── AUTHENTIC CLINICAL BLACK & WHITE PRESCRIPTION SHEET (Matching Image 3) ── */}
+                    {/* ── AUTHENTIC CLINICAL BLACK & WHITE PRESCRIPTION SHEET ── */}
                     <div className="p-6 sm:p-8 bg-white border border-slate-300 rounded-2xl shadow-sm text-black space-y-5 font-sans">
                       
                       {/* Clinic & Doctor Header */}
@@ -1281,7 +1543,7 @@ export default function PrescriptionQuestionnaireModal({
                         <div>
                           <p className="font-bold text-black uppercase">Chief Complaints:</p>
                           <p className="text-slate-800 mt-0.5">
-                            - {(patient.complaint || 'Eye Irritation').toUpperCase()}
+                            - {(patient.complaint || 'General Consultation').toUpperCase()}
                           </p>
                         </div>
 
@@ -1291,15 +1553,6 @@ export default function PrescriptionQuestionnaireModal({
                             - {effectiveDiagnosis.toUpperCase()}
                           </p>
                         </div>
-
-                        {(selectedFindings.length > 0 || customClinicalNotes.trim()) && (
-                          <div>
-                            <p className="font-bold text-black uppercase">Investigations / Clinical Notes:</p>
-                            <p className="text-slate-800 mt-0.5">
-                              - {[...selectedFindings, customClinicalNotes.trim()].filter(Boolean).join('. ').toUpperCase()}
-                            </p>
-                          </div>
-                        )}
                       </div>
 
                       {/* Rx Symbol */}
@@ -1308,13 +1561,13 @@ export default function PrescriptionQuestionnaireModal({
                           R
                         </span>
 
-                        {/* Prescribed Medicines Table (Black & White Rules) */}
+                        {/* Prescribed Medicines Table */}
                         <div className="border-y border-black py-1">
                           <table className="w-full text-left text-xs">
                             <thead className="border-b border-black text-black uppercase font-bold text-[11px]">
                               <tr>
                                 <th className="py-2 px-1">Medicine Name</th>
-                                <th className="py-2 px-1 text-center">Dosage</th>
+                                <th className="py-2 px-1 text-center">Dosage (M-A-N)</th>
                                 <th className="py-2 px-1 text-center">Duration</th>
                                 <th className="py-2 px-1 text-right">Qty</th>
                               </tr>
@@ -1330,8 +1583,8 @@ export default function PrescriptionQuestionnaireModal({
                                       ({m.instruction || 'After Food'})
                                     </span>
                                   </td>
-                                  <td className="py-2 px-1 text-center font-mono font-semibold text-black">
-                                    {m.dosage}
+                                  <td className="py-2 px-1 text-center font-mono font-bold text-black">
+                                    {formatDosageMAN(m.dosage)}
                                   </td>
                                   <td className="py-2 px-1 text-center text-slate-800">
                                     {m.duration}
@@ -1350,22 +1603,39 @@ export default function PrescriptionQuestionnaireModal({
                       <div className="space-y-3 pt-1 text-xs">
                         <div>
                           <p className="font-bold text-black uppercase">Advice Given:</p>
-                          <div className="mt-0.5 space-y-0.5 text-slate-800">
-                            {[...selectedAdvice, customAdvice.trim()].filter(Boolean).map((adv, i) => (
-                              <p key={i}>- {adv.toUpperCase()}</p>
-                            ))}
-                            {selectedAdvice.length === 0 && !customAdvice.trim() && (
-                              <p>- ADEQUATE HYDRATION AND REST.</p>
-                            )}
-                          </div>
+                          <p className="text-slate-800 mt-0.5">
+                            - Follow prescribed medication schedule. Return if symptoms worsen.
+                          </p>
                         </div>
 
                         <div>
                           <p className="font-bold text-black">
-                            Follow Up: <span className="font-semibold">{selectedFollowUp}</span>
+                            Follow Up:{' '}
+                            <span className="font-semibold">
+                              {selectedFollowUp === 'No schedule needed'
+                                ? 'No schedule needed (SOS if symptoms persist)'
+                                : selectedFollowUp}
+                            </span>
                           </p>
                         </div>
                       </div>
+
+                      {/* ── ACADEMIC BED REST CERTIFICATE (MAKE-UP EXAM PROOF) ── */}
+                      {selectedBedRest !== 'No Bed Rest Advised' && (
+                        <div className="p-3.5 border-2 border-black rounded-lg bg-slate-50/50 space-y-1.5 text-xs">
+                          <div className="flex items-center justify-between border-b border-black pb-1">
+                            <span className="font-bold text-black uppercase tracking-wider text-[11px]">
+                              OFFICIAL MEDICAL CERTIFICATE / ACADEMIC EXCUSE DIRECTIVE
+                            </span>
+                            <span className="font-mono text-[9px] font-bold text-black border border-black px-1.5 py-0.5 rounded">
+                              PROOF FOR MAKE-UP EXAM
+                            </span>
+                          </div>
+                          <p className="text-black leading-relaxed">
+                            This is to certify that <strong>{patient.name}</strong> (Roll No: <strong className="font-mono">{patient.rollNo}</strong>) has been clinically evaluated at the TIET Health Centre and diagnosed with <strong>{effectiveDiagnosis}</strong>. The patient is advised strict bed rest and medical quarantine for <strong>{effectiveBedRestString}</strong> with effect from <strong>{currentDateStr}</strong>. The student is medically unfit to attend academic lectures, laboratory sessions, or examinations during this period.
+                          </p>
+                        </div>
+                      )}
 
                       {/* Doctor Signature Block (Bottom Right) */}
                       <div className="pt-8 flex flex-col items-end text-right text-xs">
@@ -1392,7 +1662,7 @@ export default function PrescriptionQuestionnaireModal({
                       <div className="flex items-center gap-2 w-full sm:w-auto">
                         <button
                           type="button"
-                          onClick={() => setCurrentStep(4)}
+                          onClick={() => setCurrentStep(3)}
                           className="px-4 py-2.5 rounded-xl border border-slate-300 hover:bg-slate-100 text-slate-700 text-xs font-semibold cursor-pointer"
                         >
                           Back to Edit
@@ -1404,9 +1674,10 @@ export default function PrescriptionQuestionnaireModal({
                               prescription: {
                                 diagnosis: effectiveDiagnosis || 'OPD Consultation',
                                 reason_for_visit: patient.complaint,
-                                clinical_notes: [...selectedFindings, customClinicalNotes.trim()].filter(Boolean).join('. '),
-                                dietAdvice: [...selectedAdvice, customAdvice.trim()].filter(Boolean).join('; '),
+                                clinical_notes: 'Patient evaluated.',
+                                dietAdvice: 'Take medications as prescribed.',
                                 followUp: selectedFollowUp,
+                                bedRest: effectiveBedRestString,
                               },
                               doctor: doctor || {},
                               patient: patient,
