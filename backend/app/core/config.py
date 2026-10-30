@@ -46,3 +46,13 @@ raw_cors = os.getenv(
     "http://localhost:5173,https://localhost:5173,http://localhost:5174,https://localhost:5174,http://127.0.0.1:5173,https://127.0.0.1:5173,http://localhost:3000,https://localhost:3000",
 )
 CORS_ORIGINS = [orig.strip() for orig in raw_cors.split(",") if orig.strip()]
+
+# Automated Daily Analytics & Resend Configuration
+RESEND_API_KEY = os.getenv("RESEND_API_KEY", "")
+RESEND_FROM_EMAIL = os.getenv("RESEND_FROM_EMAIL", "CampusCare Analytics <onboarding@resend.dev>")
+ANALYTICS_REPORT_RECIPIENT = os.getenv("ANALYTICS_REPORT_RECIPIENT", "lavdeepsingh38160@gmail.com")
+ANALYTICS_SCHEDULE_HOUR = int(os.getenv("ANALYTICS_SCHEDULE_HOUR", "9"))
+ANALYTICS_SCHEDULE_MINUTE = int(os.getenv("ANALYTICS_SCHEDULE_MINUTE", "0"))
+ANALYTICS_TIMEZONE = os.getenv("ANALYTICS_TIMEZONE", "Asia/Kolkata")
+
+

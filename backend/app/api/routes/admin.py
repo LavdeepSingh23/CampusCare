@@ -1,10 +1,18 @@
 import logging
+import os
+from datetime import date, datetime, timedelta
 from typing import Optional
+import zoneinfo
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, EmailStr, Field
 
 from app.core.database import get_db_connection
 from app.core.deps import CurrentAdmin, get_current_admin
+from app.services.analytics_aggregator import aggregate_daily_analytics
+from app.services.daily_scheduler import REPORTS_DIR, run_daily_analytics_pipeline
+from app.services.pdf_report_generator import generate_analytics_html, render_html_to_pdf
+
 
 logger = logging.getLogger(__name__)
 
@@ -158,4 +166,103 @@ def update_faculty_directory_entry(
             }
     finally:
         connection.close()
+
+
+class TriggerAnalyticsReportRequest(BaseModel):
+    target_date: Optional[str] = None
+    recipient_email: Optional[EmailStr] = None
+    force: bool = False
+
+
+@router.post("/reports/analytics/trigger")
+def trigger_daily_analytics_report(
+    payload: TriggerAnalyticsReportRequest = TriggerAnalyticsReportRequest(),
+    current: CurrentAdmin = Depends(get_current_admin),
+):
+    """
+    On-demand execution of the automated daily analytics PDF report generation
+    and Resend email dispatch.
+    """
+    parsed_date = None
+    if payload.target_date:
+        try:
+            parsed_date = datetime.strptime(payload.target_date, "%Y-%m-%d").date()
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid target_date format. Must be YYYY-MM-DD.")
+
+    try:
+        result = run_daily_analytics_pipeline(
+            target_date=parsed_date,
+            recipient_email=payload.recipient_email,
+            force=payload.force,
+        )
+        return {"status": "success", "result": result}
+    except Exception as exc:
+        logger.error("Failed on-demand analytics report trigger: %s", exc, exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to generate and email analytics report: {exc}")
+
+
+@router.get("/reports/analytics/preview")
+def preview_daily_analytics_pdf(
+    target_date: Optional[str] = None,
+    current: CurrentAdmin = Depends(get_current_admin),
+):
+    """
+    Generates (if not cached) and streams the landscape analytics dashboard PDF
+    for browser preview or download.
+    """
+    parsed_date = None
+    if target_date:
+        try:
+            parsed_date = datetime.strptime(target_date, "%Y-%m-%d").date()
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid target_date format. Must be YYYY-MM-DD.")
+    else:
+        kolkata = zoneinfo.ZoneInfo("Asia/Kolkata")
+        parsed_date = (datetime.now(kolkata) - timedelta(days=1)).date()
+
+    rep_date_str = parsed_date.strftime("%Y-%m-%d")
+    pdf_path = str(REPORTS_DIR / f"CampusCare_Analytics_{rep_date_str}.pdf")
+
+    # If PDF does not exist, generate on the fly
+    if not os.path.exists(pdf_path):
+        data = aggregate_daily_analytics(parsed_date)
+        html = generate_analytics_html(data)
+        render_html_to_pdf(html, pdf_path)
+
+    return FileResponse(
+        path=pdf_path,
+        media_type="application/pdf",
+        filename=f"CampusCare_Analytics_{rep_date_str}.pdf",
+    )
+
+
+@router.get("/reports/analytics/logs")
+def get_analytics_report_logs(
+    limit: int = 30,
+    current: CurrentAdmin = Depends(get_current_admin),
+):
+    """
+    Fetches historical dispatch audit logs from DAILY_ANALYTICS_REPORT_LOG.
+    """
+    connection = get_db_connection()
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT report_id, reporting_date, recipient_email, status,
+                       resend_email_id, pdf_file_path, pdf_size_bytes,
+                       total_visits, total_consultations, total_prescriptions, total_emergencies,
+                       error_message, attempt_count, generated_at, sent_at, created_at, updated_at
+                FROM DAILY_ANALYTICS_REPORT_LOG
+                ORDER BY reporting_date DESC
+                LIMIT %s
+                """,
+                (limit,),
+            )
+            rows = cursor.fetchall()
+            return {"status": "success", "count": len(rows), "data": rows}
+    finally:
+        connection.close()
+
 

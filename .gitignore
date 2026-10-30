@@ -6,3 +6,6 @@ backend/.env
 node_modules/
 .vite/
 .care/
+backend/reports/
+backend/reports_out/
+

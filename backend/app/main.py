@@ -44,7 +44,19 @@ async def lifespan(app: FastAPI):
         if ENVIRONMENT == "production":
             raise RuntimeError(f"Refusing to start production backend without valid database connection: {exc}")
 
+    # Launch CampusCare Automated Daily Analytics Scheduler (09:00 AM IST)
+    try:
+        from app.services.daily_scheduler import start_scheduler, stop_scheduler
+        start_scheduler()
+    except Exception as sched_err:
+        logger.error("Failed to initialize daily analytics scheduler: %s", sched_err)
+
     yield
+    try:
+        from app.services.daily_scheduler import stop_scheduler
+        stop_scheduler()
+    except Exception:
+        pass
     logger.info("CampusCare API shutdown complete.")
 
 
