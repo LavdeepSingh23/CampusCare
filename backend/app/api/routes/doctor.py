@@ -405,7 +405,32 @@ def get_patient_profile(roll_number: str, current: CurrentUser = Depends(get_cur
             )
             row = cursor.fetchone()
             if not row:
-                raise HTTPException(status_code=404, detail="Student profile not found")
+                # Check COMMUNITY_PROFILE / PATIENT
+                cursor.execute(
+                    """
+                    SELECT cp.community_code AS roll_number, cp.full_name, p.date_of_birth, p.gender AS sex,
+                           p.phone_number, cp.blood_group, 'ACTIVE' AS status, NULL AS email, cp.category
+                    FROM COMMUNITY_PROFILE cp
+                    JOIN PATIENT p ON p.patient_id = cp.patient_id
+                    WHERE cp.community_code = %s
+                    """,
+                    (roll_number,),
+                )
+                comm_row = cursor.fetchone()
+                if comm_row:
+                    return {
+                        "name": comm_row["full_name"],
+                        "rollNumber": comm_row["roll_number"],
+                        "course": "Community",
+                        "branch": comm_row["category"] or "Campus Community",
+                        "bloodGroup": comm_row["blood_group"] or "Not recorded",
+                        "email": "community@thapar.edu",
+                        "contact": comm_row["phone_number"] or "Not on file",
+                        "dateOfBirth": str(comm_row["date_of_birth"]) if comm_row["date_of_birth"] else None,
+                        "sex": comm_row["sex"] or "Not specified",
+                        "status": "ACTIVE",
+                    }
+                raise HTTPException(status_code=404, detail="Patient profile not found")
 
             # Format course and branch
             course = "B.E."
@@ -440,9 +465,16 @@ def get_patient_summary(roll_number: str, current: CurrentUser = Depends(get_cur
     connection = get_db_connection()
     try:
         with connection.cursor() as cursor:
-            cursor.execute("SELECT 1 FROM STUDENT WHERE roll_number = %s", (roll_number,))
+            cursor.execute(
+                """
+                SELECT 1 FROM STUDENT WHERE roll_number = %s
+                UNION
+                SELECT 1 FROM COMMUNITY_PROFILE WHERE community_code = %s
+                """,
+                (roll_number, roll_number),
+            )
             if not cursor.fetchone():
-                raise HTTPException(status_code=404, detail="Patient not found")
+                return {"conditions": "None recorded", "allergies": "None recorded", "medication": "None recorded"}
             return _fetch_summary(cursor, roll_number)
     finally:
         connection.close()
@@ -461,10 +493,11 @@ def get_patient_history(roll_number: str, current: CurrentUser = Depends(get_cur
                 FROM VISIT v
                 JOIN CONSULTATION co ON co.visit_id = v.visit_id
                 LEFT JOIN PRESCRIPTION pr ON pr.consultation_id = co.consultation_id
-                WHERE v.roll_number = %s
+                LEFT JOIN COMMUNITY_PROFILE cp ON cp.patient_id = v.patient_id
+                WHERE v.roll_number = %s OR cp.community_code = %s
                 ORDER BY v.checked_in_at DESC
                 """,
-                (roll_number,),
+                (roll_number, roll_number),
             )
             visits = cursor.fetchall()
 

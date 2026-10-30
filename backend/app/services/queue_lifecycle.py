@@ -1267,9 +1267,11 @@ def complete_consultation(
         if visit_id is not None:
             cur.execute(
                 f"""
-                SELECT v.visit_id, v.roll_number, v.doctor_id AS visit_doctor_id, v.status AS visit_status,
-                       qe.queue_entry_id, qe.doctor_id AS qe_doctor_id, qe.status AS qe_status
+                SELECT v.visit_id, v.roll_number, v.patient_id, v.doctor_id AS visit_doctor_id, v.status AS visit_status,
+                       qe.queue_entry_id, qe.doctor_id AS qe_doctor_id, qe.status AS qe_status,
+                       cp.community_code
                 FROM VISIT v
+                LEFT JOIN COMMUNITY_PROFILE cp ON cp.patient_id = v.patient_id
                 LEFT JOIN QUEUE_ENTRY qe ON qe.visit_id = v.visit_id
                     AND qe.status IN ('IN_CONSULTATION', 'WAITING')
                 WHERE v.visit_id = %s{lock_clause}
@@ -1283,29 +1285,33 @@ def complete_consultation(
             clean_roll = roll_number.strip()
             cur.execute(
                 f"""
-                SELECT v.visit_id, v.roll_number, v.doctor_id AS visit_doctor_id, v.status AS visit_status,
-                       qe.queue_entry_id, qe.doctor_id AS qe_doctor_id, qe.status AS qe_status
+                SELECT v.visit_id, v.roll_number, v.patient_id, v.doctor_id AS visit_doctor_id, v.status AS visit_status,
+                       qe.queue_entry_id, qe.doctor_id AS qe_doctor_id, qe.status AS qe_status,
+                       cp.community_code
                 FROM VISIT v
                 JOIN QUEUE_ENTRY qe ON qe.visit_id = v.visit_id
-                WHERE qe.doctor_id = %s AND v.roll_number = %s
+                LEFT JOIN COMMUNITY_PROFILE cp ON cp.patient_id = v.patient_id
+                WHERE qe.doctor_id = %s AND (v.roll_number = %s OR cp.community_code = %s)
                   AND qe.status IN ('WAITING', 'IN_CONSULTATION')
                 ORDER BY qe.entered_at DESC
                 LIMIT 1{lock_clause}
                 """,
-                (doctor_id, clean_roll),
+                (doctor_id, clean_roll, clean_roll),
             )
             row = cur.fetchone()
             if not row:
                 raise ResourceNotFoundError(
-                    f"No active consultation found for student '{clean_roll}' under Doctor #{doctor_id}."
+                    f"No active consultation found for student or community member '{clean_roll}' under Doctor #{doctor_id}."
                 )
         else:
             cur.execute(
                 f"""
-                SELECT v.visit_id, v.roll_number, v.doctor_id AS visit_doctor_id, v.status AS visit_status,
-                       qe.queue_entry_id, qe.doctor_id AS qe_doctor_id, qe.status AS qe_status
+                SELECT v.visit_id, v.roll_number, v.patient_id, v.doctor_id AS visit_doctor_id, v.status AS visit_status,
+                       qe.queue_entry_id, qe.doctor_id AS qe_doctor_id, qe.status AS qe_status,
+                       cp.community_code
                 FROM QUEUE_ENTRY qe
                 JOIN VISIT v ON v.visit_id = qe.visit_id
+                LEFT JOIN COMMUNITY_PROFILE cp ON cp.patient_id = v.patient_id
                 WHERE qe.doctor_id = %s AND qe.status = 'IN_CONSULTATION'
                 ORDER BY qe.entered_at DESC
                 LIMIT 1{lock_clause}
@@ -1317,7 +1323,7 @@ def complete_consultation(
                 raise ResourceNotFoundError(f"No active consultation found for Doctor #{doctor_id}.")
 
         actual_visit_id = row["visit_id"]
-        actual_roll_number = row["roll_number"]
+        actual_roll_number = row["roll_number"] or row.get("community_code") or (f"PAT-{row['patient_id']}" if row.get("patient_id") else "COMMUNITY")
         queue_entry_id = row["queue_entry_id"]
         visit_doctor_id = row["visit_doctor_id"]
         qe_doctor_id = row["qe_doctor_id"]
