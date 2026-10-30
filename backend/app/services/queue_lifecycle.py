@@ -795,10 +795,14 @@ def start_consultation(
         # 2. Check if this doctor currently has ANY active consultation
         cur.execute(
             """
-            SELECT qe.queue_entry_id, qe.queue_sequence, v.visit_id, v.roll_number, st.full_name
+            SELECT qe.queue_entry_id, qe.queue_sequence, v.visit_id, v.roll_number, v.patient_id,
+                   COALESCE(st.full_name, p.full_name) AS full_name,
+                   cp.community_code
             FROM QUEUE_ENTRY qe
             JOIN VISIT v ON v.visit_id = qe.visit_id
-            JOIN STUDENT st ON st.roll_number = v.roll_number
+            LEFT JOIN PATIENT p ON p.patient_id = v.patient_id
+            LEFT JOIN STUDENT st ON st.roll_number = v.roll_number
+            LEFT JOIN COMMUNITY_PROFILE cp ON cp.patient_id = p.patient_id
             WHERE qe.doctor_id = %s AND qe.status = 'IN_CONSULTATION'
             LIMIT 1
             """,
@@ -808,14 +812,15 @@ def start_consultation(
         if active_consult:
             if active_consult["visit_id"] == visit_id:
                 # Idempotent call for the same consultation session
+                roll_disp = active_consult["roll_number"] or active_consult.get("community_code") or (f"PAT-{active_consult['patient_id']}" if active_consult.get("patient_id") else None)
                 return {
                     "status": "already_in_consultation",
                     "queueEntryId": active_consult["queue_entry_id"],
                     "queue_entry_id": active_consult["queue_entry_id"],
                     "visitId": active_consult["visit_id"],
                     "visit_id": active_consult["visit_id"],
-                    "rollNumber": active_consult["roll_number"],
-                    "roll_number": active_consult["roll_number"],
+                    "rollNumber": roll_disp,
+                    "roll_number": roll_disp,
                     "name": active_consult["full_name"],
                     "sequence": active_consult["queue_sequence"],
                     "queueNo": active_consult["queue_sequence"],
@@ -833,10 +838,14 @@ def start_consultation(
         lock_clause = " FOR UPDATE" if _is_mysql(conn) else ""
         cur.execute(
             f"""
-            SELECT v.visit_id, v.roll_number, v.doctor_id, v.status AS visit_status,
-                   qe.queue_entry_id, qe.queue_sequence, qe.status AS queue_status, st.full_name
+            SELECT v.visit_id, v.roll_number, v.patient_id, v.doctor_id, v.status AS visit_status,
+                   qe.queue_entry_id, qe.queue_sequence, qe.status AS queue_status,
+                   COALESCE(st.full_name, p.full_name) AS full_name,
+                   cp.community_code
             FROM VISIT v
-            JOIN STUDENT st ON st.roll_number = v.roll_number
+            LEFT JOIN PATIENT p ON p.patient_id = v.patient_id
+            LEFT JOIN STUDENT st ON st.roll_number = v.roll_number
+            LEFT JOIN COMMUNITY_PROFILE cp ON cp.patient_id = p.patient_id
             LEFT JOIN QUEUE_ENTRY qe ON qe.visit_id = v.visit_id AND qe.status IN ('WAITING', 'IN_CONSULTATION')
             WHERE v.visit_id = %s{lock_clause}
             """,
@@ -890,14 +899,15 @@ def start_consultation(
             (visit_id, performed_by_user_id, f"Consultation started by Doctor #{doctor_id}"),
         )
 
+    roll_disp = row["roll_number"] or row.get("community_code") or (f"PAT-{row['patient_id']}" if row.get("patient_id") else None)
     return {
         "status": "in_consultation",
         "queueEntryId": queue_entry_id,
         "queue_entry_id": queue_entry_id,
         "visitId": visit_id,
         "visit_id": visit_id,
-        "rollNumber": row["roll_number"],
-        "roll_number": row["roll_number"],
+        "rollNumber": roll_disp,
+        "roll_number": roll_disp,
         "name": row["full_name"],
         "sequence": row["queue_sequence"],
         "queueNo": row["queue_sequence"],
@@ -2065,13 +2075,15 @@ def get_prescriptions_awaiting_dispense(conn, doctor_id: Optional[int] = None) -
             SELECT
                 v.visit_id, v.roll_number, v.doctor_id, v.status AS visit_status,
                 v.checked_in_at, v.consultation_started_at, v.consultation_completed_at,
-                st.full_name AS student_name, st.blood_group,
+                COALESCE(st.full_name, pat.full_name, v.roll_number) AS student_name,
+                COALESCE(st.blood_group, pat.blood_group) AS blood_group,
                 ua.email AS doctor_email,
                 sp.name AS specialty,
                 c.consultation_id, c.reason_for_visit, c.diagnosis, c.clinical_notes,
                 p.prescription_id, p.general_instructions, p.finalized_at
             FROM VISIT v
-            JOIN STUDENT st ON st.roll_number = v.roll_number
+            LEFT JOIN STUDENT st ON st.roll_number = v.roll_number
+            LEFT JOIN PATIENT pat ON pat.patient_id = v.patient_id
             JOIN DOCTOR d ON d.doctor_id = v.doctor_id
             JOIN STAFF s ON s.staff_id = d.staff_id
             JOIN USER_ACCOUNT ua ON ua.user_id = s.user_id
@@ -2244,13 +2256,15 @@ def get_visit_prescription_detail(conn, visit_id: int) -> Dict[str, Any]:
             SELECT
                 v.visit_id, v.roll_number, v.doctor_id, v.status AS visit_status,
                 v.checked_in_at, v.consultation_started_at, v.consultation_completed_at, v.completed_at,
-                st.full_name AS student_name, st.blood_group,
+                COALESCE(st.full_name, pat.full_name, v.roll_number) AS student_name,
+                COALESCE(st.blood_group, pat.blood_group) AS blood_group,
                 ua.email AS doctor_email,
                 sp.name AS specialty,
                 c.consultation_id, c.reason_for_visit, c.diagnosis, c.clinical_notes,
                 p.prescription_id, p.general_instructions, p.finalized_at
             FROM VISIT v
-            JOIN STUDENT st ON st.roll_number = v.roll_number
+            LEFT JOIN STUDENT st ON st.roll_number = v.roll_number
+            LEFT JOIN PATIENT pat ON pat.patient_id = v.patient_id
             JOIN DOCTOR d ON d.doctor_id = v.doctor_id
             JOIN STAFF s ON s.staff_id = d.staff_id
             JOIN USER_ACCOUNT ua ON ua.user_id = s.user_id

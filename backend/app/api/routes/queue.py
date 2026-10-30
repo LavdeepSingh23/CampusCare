@@ -408,14 +408,15 @@ def get_live_queue(
                     qe.called_at,
                     v.visit_id,
                     v.roll_number,
-                    st.full_name,
-                    st.blood_group,
+                    COALESCE(st.full_name, pat.full_name, v.roll_number) AS full_name,
+                    COALESCE(st.blood_group, pat.blood_group) AS blood_group,
                     d.doctor_id,
                     sp.name AS specialty_name,
                     ua.email AS doctor_email
                 FROM QUEUE_ENTRY qe
                 JOIN VISIT v ON v.visit_id = qe.visit_id
-                JOIN STUDENT st ON st.roll_number = v.roll_number
+                LEFT JOIN STUDENT st ON st.roll_number = v.roll_number
+                LEFT JOIN PATIENT pat ON pat.patient_id = v.patient_id
                 JOIN DOCTOR d ON d.doctor_id = qe.doctor_id
                 JOIN STAFF s ON s.staff_id = d.staff_id
                 JOIN USER_ACCOUNT ua ON ua.user_id = s.user_id

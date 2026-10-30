@@ -307,10 +307,17 @@ def get_active_consultation(
             cursor.execute(
                 """
                 SELECT qe.queue_entry_id, qe.called_at, qe.queue_sequence,
-                       v.visit_id, v.roll_number, st.full_name, st.date_of_birth, st.blood_group
+                       v.visit_id, v.roll_number, v.patient_id,
+                       COALESCE(st.full_name, p.full_name) AS full_name,
+                       st.date_of_birth,
+                       COALESCE(st.blood_group, p.blood_group) AS blood_group,
+                       p.age AS patient_age,
+                       cp.community_code
                 FROM QUEUE_ENTRY qe
                 JOIN VISIT v ON v.visit_id = qe.visit_id
-                JOIN STUDENT st ON st.roll_number = v.roll_number
+                LEFT JOIN PATIENT p ON p.patient_id = v.patient_id
+                LEFT JOIN STUDENT st ON st.roll_number = v.roll_number
+                LEFT JOIN COMMUNITY_PROFILE cp ON cp.patient_id = p.patient_id
                 WHERE qe.doctor_id = %s AND qe.status = 'IN_CONSULTATION'
                 LIMIT 1
                 """,
@@ -320,16 +327,18 @@ def get_active_consultation(
             if not row:
                 return {"active": False, "patient": None}
 
+            roll_disp = row["roll_number"] or row.get("community_code") or (f"PAT-{row['patient_id']}" if row.get("patient_id") else None)
+            age = _calculate_age(row["date_of_birth"]) if row.get("date_of_birth") else row.get("patient_age")
             return {
                 "active": True,
                 "patient": {
                     "queueEntryId": row["queue_entry_id"],
                     "visitId": row["visit_id"],
-                    "rollNumber": row["roll_number"],
+                    "rollNumber": roll_disp,
                     "name": row["full_name"],
                     "queueNo": row["queue_sequence"],
                     "calledAt": row["called_at"].strftime("%I:%M %p") if row.get("called_at") else None,
-                    "age": _calculate_age(row["date_of_birth"]),
+                    "age": age,
                     "bloodGroup": row["blood_group"],
                 },
             }
