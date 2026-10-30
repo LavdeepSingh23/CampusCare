@@ -134,6 +134,40 @@ class CommunityCheckInRequest(BaseModel):
         return did
 
 
+class DirectOtherCheckInRequest(BaseModel):
+    full_name: Optional[str] = None
+    fullName: Optional[str] = None
+    name: Optional[str] = None
+    category: Optional[str] = "OTHER"
+    category_other: Optional[str] = None
+    categoryOther: Optional[str] = None
+    affiliation_details: Optional[str] = None
+    affiliationDetails: Optional[str] = None
+    affiliation: Optional[str] = None
+    age: Optional[int] = None
+    gender: Optional[str] = "OTHER"
+    blood_group: Optional[str] = None
+    bloodGroup: Optional[str] = None
+    doctor_id: Optional[int] = None
+    doctorId: Optional[int] = None
+    complaint: Optional[str] = "General Consultation"
+
+    def get_full_name(self) -> str:
+        name = self.full_name or self.fullName or self.name or ""
+        if not name.strip() or len(name.strip()) < 2:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Full name is required (minimum 2 characters)",
+            )
+        return name.strip()
+
+    def get_doctor_id(self) -> int:
+        did = self.doctor_id if self.doctor_id is not None else self.doctorId
+        if not did:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Doctor ID is required")
+        return did
+
+
 def _active_visit(cursor, roll_number: str):
     placeholders = ",".join(["%s"] * len(ACTIVE_VISIT_STATES))
     cursor.execute(
@@ -492,6 +526,79 @@ def check_in_community(
     except Exception as exc:
         conn.rollback()
         logger.error("Error checking in community member: %s", exc, exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Check-in error: {exc}")
+    finally:
+        conn.close()
+
+
+@router.post("/other/checkin", status_code=status.HTTP_201_CREATED)
+@router.post("/community/direct-checkin", status_code=status.HTTP_201_CREATED)
+def direct_other_checkin(
+    body: DirectOtherCheckInRequest,
+    me: CurrentReceptionist = Depends(get_current_receptionist),
+):
+    """
+    Direct One-Step Check-In for Other / Non-Student / Community Members:
+    Fills details and pushes them directly into the doctor's live queue without
+    storing persistent community member directory profiles or requiring profile search.
+    """
+    name = body.get_full_name()
+    did = body.get_doctor_id()
+    cat = (body.category or "OTHER").strip().upper()
+    if cat not in ql.VALID_COMMUNITY_CATEGORIES:
+        cat = "OTHER"
+
+    cat_other = body.category_other or body.categoryOther
+    affil = body.affiliation_details or body.affiliationDetails or body.affiliation or "Campus Guest / Affiliate"
+
+    conn = get_db_connection()
+    try:
+        # Register temporary patient record with allow_duplicate=True
+        profile = ql.register_community_member(
+            conn=conn,
+            full_name=name,
+            category=cat,
+            affiliation_details=affil,
+            age=body.age,
+            gender=body.gender or "OTHER",
+            blood_group=(body.blood_group or body.bloodGroup or "").strip().upper() or None,
+            category_other=cat_other,
+            registered_by_user_id=me.user_id,
+            allow_duplicate=True,
+        )
+        pid = profile["patientId"]
+
+        # Automatic verification for direct queue check-in
+        ql.record_manual_verification(
+            conn=conn,
+            patient_id=pid,
+            receptionist_user_id=me.user_id,
+            outcome="VERIFIED",
+            notes="Direct Live Queue Check-In",
+        )
+
+        # Check-in atomically into doctor queue
+        result = ql.check_in_community_member(
+            conn=conn,
+            patient_id=pid,
+            doctor_id=did,
+            performed_by_user_id=me.user_id,
+            complaint=body.complaint or "General Consultation",
+        )
+        conn.commit()
+        return result
+    except ql.ResourceNotFoundError as exc:
+        conn.rollback()
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+    except ql.ActiveVisitConflictError as exc:
+        conn.rollback()
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
+    except ql.DoctorUnavailableError as exc:
+        conn.rollback()
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
+    except Exception as exc:
+        conn.rollback()
+        logger.error("Error in direct other check-in: %s", exc, exc_info=True)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Check-in error: {exc}")
     finally:
         conn.close()

@@ -458,6 +458,14 @@ export function checkInCommunityMember(payload) {
   })
 }
 
+export function directOtherCheckIn(payload) {
+  return request('/api/reception/other/checkin', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+
 export function queueCheckIn({
   rollNumber,
   roll_number,
