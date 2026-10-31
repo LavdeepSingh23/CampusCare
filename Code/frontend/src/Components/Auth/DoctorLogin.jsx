@@ -10,7 +10,6 @@ import {
   Loader2,
 } from 'lucide-react'
 import tiMark from '../../assets/ti-mark.png'
-import PortalSelectorModal from './PortalSelectorModal'
 
 const GlassInputWrapper = ({ children }) => (
   <div className="rounded-2xl border border-slate-200 bg-slate-50/70 transition-all focus-within:border-teal-600 focus-within:bg-white focus-within:ring-2 focus-within:ring-teal-600/20">
@@ -25,7 +24,6 @@ export default function DoctorLogin() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
-  const [isPortalModalOpen, setIsPortalModalOpen] = useState(false)
   const [localError, setLocalError] = useState('')
 
   const handleSubmit = async (e) => {
@@ -92,10 +90,10 @@ export default function DoctorLogin() {
                 </span>
                 <button
                   type="button"
-                  onClick={() => setIsPortalModalOpen(true)}
+                  onClick={() => navigate('/signin/receptionist')}
                   className="text-xs font-medium text-slate-500 hover:text-teal-800 transition-colors cursor-pointer"
                 >
-                  Switch role
+                  Receptionist Desk &rarr;
                 </button>
               </div>
 
@@ -244,12 +242,6 @@ export default function DoctorLogin() {
           </div>
         </div>
       </section>
-
-      {/* Portal Switcher Modal */}
-      <PortalSelectorModal
-        isOpen={isPortalModalOpen}
-        onClose={() => setIsPortalModalOpen(false)}
-      />
     </div>
   )
 }
