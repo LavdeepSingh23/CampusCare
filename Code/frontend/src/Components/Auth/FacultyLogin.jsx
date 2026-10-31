@@ -208,7 +208,7 @@ export default function FacultyLogin() {
               <div className="flex items-center justify-between mb-3">
                 <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full bg-amber-50 text-amber-900 border border-amber-200">
                   <BookOpen className="w-3.5 h-3.5 text-amber-600" />
-                  Faculty Portal
+                  Faculty
                 </span>
                 <button
                   type="button"

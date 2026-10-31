@@ -14,15 +14,13 @@ export default function PortalSelectorPage() {
   const portals = [
     {
       id: 'student',
-      title: 'Student Portal',
-      desc: 'Digital OPD tokens, prescriptions & medical file',
+      title: 'Student',
       icon: GraduationCap,
       route: '/signin/student',
     },
     {
       id: 'faculty',
-      title: 'Faculty Portal',
-      desc: 'Personal OPD consultations & verified family care',
+      title: 'Faculty',
       icon: BookOpen,
       route: '/signin/faculty',
     },
@@ -75,9 +73,6 @@ export default function PortalSelectorPage() {
                   <div className="min-w-0 flex-1 pr-2">
                     <span className="text-sm sm:text-base font-bold text-slate-900 group-hover:text-teal-950 transition-colors block leading-snug">
                       {p.title}
-                    </span>
-                    <span className="text-xs text-slate-500 font-normal leading-snug block line-clamp-1">
-                      {p.desc}
                     </span>
                   </div>
                 </div>

@@ -204,7 +204,7 @@ export default function StudentLogin() {
               <div className="flex items-center justify-between mb-3">
                 <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full bg-indigo-50 text-indigo-900 border border-indigo-200">
                   <GraduationCap className="w-3.5 h-3.5 text-indigo-700" />
-                  Student Portal
+                  Student
                 </span>
                 <button
                   type="button"

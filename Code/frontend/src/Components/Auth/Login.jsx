@@ -353,8 +353,8 @@ export default function Login({ defaultMode }) {
                   : mode === 'receptionist'
                   ? 'Sign in to the Receptionist Portal'
                   : mode === 'faculty'
-                  ? 'Sign in to the Faculty Portal'
-                  : 'Sign in to the Student Portal'}
+                  ? 'Sign in as Faculty'
+                  : 'Sign in as Student'}
               </p>
             </div>
 
