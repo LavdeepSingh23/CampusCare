@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { ShieldCheck, Eye, EyeOff, Loader2, AlertCircle, ArrowLeft } from 'lucide-react'
 import tiMark from '../../assets/ti-mark.png'
@@ -7,6 +7,7 @@ import tiMark from '../../assets/ti-mark.png'
 export default function AdminLogin() {
   const { loginAdmin, error, setError, loading } = useAuth()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
@@ -19,7 +20,8 @@ export default function AdminLogin() {
     }
     const success = await loginAdmin(email, password)
     if (success) {
-      navigate('/admin/directory')
+      const redirectUrl = searchParams.get('redirect') || '/admin/analytics'
+      navigate(redirectUrl)
     }
   }
 

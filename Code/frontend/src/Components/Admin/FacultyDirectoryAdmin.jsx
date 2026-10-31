@@ -22,6 +22,7 @@ import {
   BookOpen,
   ArrowLeft,
   RefreshCw,
+  BarChart3,
 } from 'lucide-react'
 import tiMark from '../../assets/ti-mark.png'
 
@@ -146,7 +147,14 @@ export default function FacultyDirectoryAdmin() {
           </div>
 
           <div className="flex items-center gap-3">
-            <span className="text-xs text-slate-400 hidden sm:inline">
+            <button
+              onClick={() => navigate('/admin/analytics')}
+              className="p-2 sm:px-3 sm:py-1.5 rounded-xl bg-teal-600 hover:bg-teal-500 text-white text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-colors shadow-sm"
+            >
+              <BarChart3 className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Analytics Dashboard</span>
+            </button>
+            <span className="text-xs text-slate-400 hidden lg:inline">
               Logged in as <strong className="text-white">{admin?.email || 'Administrator'}</strong>
             </span>
             <button

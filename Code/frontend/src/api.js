@@ -1353,3 +1353,9 @@ export async function updateAdminFacultyDirectoryEntry(directoryId, payload) {
     body: JSON.stringify(payload),
   })
 }
+
+
+export async function fetchAdminAnalytics(dateStr = '') {
+  const qs = dateStr ? `?date=${encodeURIComponent(dateStr)}` : ''
+  return await request(`/api/admin/analytics${qs}`)
+}

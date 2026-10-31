@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import LandingPage from './Components/Landing/landing_page';
 import PortalSelectorPage from './Components/Auth/PortalSelectorPage';
@@ -13,16 +13,23 @@ import StudentProfileOnboarding from './Components/Students/StudentProfileOnboar
 import ReceptionDashboard from './Components/Receptionist/receptionist';
 import FacultyDashboard from './Components/Faculty/FacultyDashboard';
 import FacultyDirectoryAdmin from './Components/Admin/FacultyDirectoryAdmin';
+import AdminAnalyticsDashboard from './Components/Admin/AdminAnalyticsDashboard';
 
 function ProtectedRoute({ children, allowedRoles }) {
   const { isAuthenticated, userRole } = useAuth();
-  if (!isAuthenticated) return <Navigate to="/user_login" replace />;
+  const location = useLocation();
+  if (!isAuthenticated) {
+    if (allowedRoles && allowedRoles.includes('ADMIN')) {
+      return <Navigate to={`/admin/login?redirect=${encodeURIComponent(location.pathname + location.search)}`} replace />;
+    }
+    return <Navigate to="/user_login" replace />;
+  }
   if (allowedRoles && !allowedRoles.includes(userRole)) {
     if (userRole === 'DOCTOR') return <Navigate to="/doctor_dashboard" replace />;
     if (userRole === 'RECEPTIONIST') return <Navigate to="/reception_dashboard" replace />;
     if (userRole === 'STUDENT') return <Navigate to="/student_dashboard" replace />;
     if (userRole === 'FACULTY') return <Navigate to="/faculty_dashboard" replace />;
-    if (userRole === 'ADMIN') return <Navigate to="/admin/directory" replace />;
+    if (userRole === 'ADMIN') return <Navigate to="/admin/analytics" replace />;
     return <Navigate to="/user_login" replace />;
   }
   return children;
@@ -122,6 +129,17 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
+
+      {/* Admin Analytics Console */}
+      <Route
+        path="/admin/analytics"
+        element={
+          <ProtectedRoute allowedRoles={['ADMIN']}>
+            <AdminAnalyticsDashboard />
+          </ProtectedRoute>
+        }
+      />
+      <Route path="/admin" element={<Navigate to="/admin/analytics" replace />} />
 
       {/* Admin Faculty Directory Console */}
       <Route

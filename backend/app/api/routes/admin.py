@@ -266,3 +266,143 @@ def get_analytics_report_logs(
         connection.close()
 
 
+
+
+@router.get("/analytics")
+def get_admin_analytics_dashboard(
+    date: Optional[str] = None,
+    current: CurrentAdmin = Depends(get_current_admin),
+):
+    """
+    Returns comprehensive analytics telemetry for the CampusCare Admin Analytics Dashboard:
+    - Authoritative single-day aggregated data (shifts, categories, diagnoses, comparisons)
+    - 7-day volume trend for the interactive chart
+    - Recent consultation log for the operations table
+    """
+    parsed_date = None
+    if date:
+        try:
+            parsed_date = datetime.strptime(date, "%Y-%m-%d").date()
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid date format. Must be YYYY-MM-DD.")
+    else:
+        kolkata = zoneinfo.ZoneInfo("Asia/Kolkata")
+        parsed_date = (datetime.now(kolkata) - timedelta(days=1)).date()
+
+    analytics_data = aggregate_daily_analytics(parsed_date)
+
+    trend_7d = []
+    recent_consultations = []
+
+    connection = get_db_connection()
+    try:
+        with connection.cursor() as cursor:
+            from app.services.analytics_aggregator import get_reporting_window
+            from datetime import time
+
+            seven_days_ago = parsed_date - timedelta(days=6)
+            s_start, _, _, _ = get_reporting_window(seven_days_ago)
+            _, _, _, s_end = get_reporting_window(parsed_date)
+
+            cursor.execute(
+                """
+                SELECT checked_in_at
+                FROM VISIT
+                WHERE checked_in_at >= %s AND checked_in_at < %s
+                """,
+                (s_start, s_end),
+            )
+            v_rows = cursor.fetchall() or []
+
+            cursor.execute(
+                """
+                SELECT occurred_at
+                FROM EMERGENCY_LOG
+                WHERE occurred_at >= %s AND occurred_at < %s
+                """,
+                (s_start, s_end),
+            )
+            em_rows = cursor.fetchall() or []
+
+            def get_shift_date(dt: datetime) -> date:
+                if dt.time() < time(6, 0, 0):
+                    return (dt - timedelta(days=1)).date()
+                return dt.date()
+
+            v_counts = {}
+            for row in v_rows:
+                dt_val = row["checked_in_at"]
+                if isinstance(dt_val, datetime):
+                    d_val = get_shift_date(dt_val)
+                    v_counts[d_val] = v_counts.get(d_val, 0) + 1
+
+            em_counts = {}
+            for row in em_rows:
+                dt_val = row["occurred_at"]
+                if isinstance(dt_val, datetime):
+                    d_val = get_shift_date(dt_val)
+                    em_counts[d_val] = em_counts.get(d_val, 0) + 1
+
+            for i in range(6, -1, -1):
+                day = parsed_date - timedelta(days=i)
+                trend_7d.append({
+                    "date": day.isoformat(),
+                    "label": day.strftime("%b %d"),
+                    "day_name": day.strftime("%a"),
+                    "visits": v_counts.get(day, 0),
+                    "emergencies": em_counts.get(day, 0),
+                    "is_selected": day == parsed_date,
+                })
+
+            s1_cur, _, _, ed_cur = get_reporting_window(parsed_date)
+            cursor.execute(
+                """
+                SELECT 
+                    v.visit_id,
+                    v.checked_in_at,
+                    v.status,
+                    p.patient_type,
+                    COALESCE(NULLIF(TRIM(c.diagnosis), ''), 'General OPD Evaluation') as diagnosis,
+                    COALESCE(NULLIF(TRIM(c.case_category), ''), 'UNSPECIFIED') as category,
+                    COALESCE(ua.email, 'Medical Officer') as doctor_email
+                FROM VISIT v
+                LEFT JOIN PATIENT p ON p.patient_id = v.patient_id
+                LEFT JOIN CONSULTATION c ON c.visit_id = v.visit_id
+                LEFT JOIN DOCTOR d ON d.doctor_id = c.doctor_id
+                LEFT JOIN STAFF s ON s.staff_id = d.staff_id
+                LEFT JOIN USER_ACCOUNT ua ON ua.user_id = s.user_id
+                WHERE v.checked_in_at >= %s AND v.checked_in_at < %s
+                ORDER BY v.checked_in_at DESC
+                LIMIT 15
+                """,
+                (s1_cur, ed_cur),
+            )
+            raw_consults = cursor.fetchall() or []
+            for r in raw_consults:
+                chk_dt = r["checked_in_at"]
+                time_str = chk_dt.strftime("%I:%M %p") if isinstance(chk_dt, datetime) else str(chk_dt)
+                date_str = chk_dt.strftime("%d %b %Y") if isinstance(chk_dt, datetime) else ""
+                doc_name = r["doctor_email"].split("@")[0].replace(".", " ").title()
+                if "Dr" not in doc_name:
+                    doc_name = f"Dr. {doc_name}"
+                recent_consultations.append({
+                    "visit_id": r["visit_id"],
+                    "diagnosis": r["diagnosis"],
+                    "category": r["category"].replace("_", " ").title(),
+                    "patient_type": (r["patient_type"] or "STUDENT").replace("_", " ").title(),
+                    "status": r["status"] or "COMPLETED",
+                    "time": time_str,
+                    "date": date_str,
+                    "doctor": doc_name,
+                })
+    finally:
+        connection.close()
+
+    return {
+        "status": "success",
+        "data": {
+            "analytics": analytics_data,
+            "trend_7d": trend_7d,
+            "recent_consultations": recent_consultations,
+        },
+    }
