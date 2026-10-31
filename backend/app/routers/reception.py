@@ -236,6 +236,97 @@ def lookup_student(roll_number: str, _: CurrentReceptionist = Depends(get_curren
     }
 
 
+# ── 1B. Unified Identifier Lookup (Student Roll No OR Faculty Employee Code) ──
+class NewFamilyMemberPayload(BaseModel):
+    full_name: str = Field(..., min_length=2, max_length=150)
+    relationship: str = Field(..., min_length=2, max_length=50)
+    relationship_type: Optional[str] = None
+    age: Optional[int] = Field(None, ge=0, le=125)
+    blood_group: Optional[str] = Field(None, max_length=10)
+
+
+class FacultyCheckInRequest(BaseModel):
+    faculty_id: int
+    doctor_id: int
+    check_in_for: Literal["SELF", "FAMILY_MEMBER"] = "SELF"
+    family_member_patient_id: Optional[int] = None
+    new_family_member: Optional[NewFamilyMemberPayload] = None
+    complaint: Optional[str] = Field(default="General Consultation", max_length=300)
+
+
+@router.get("/lookup-identifier/{identifier}")
+def lookup_identifier(identifier: str, _: CurrentReceptionist = Depends(get_current_receptionist)):
+    """
+    Unified manual check-in lookup for both Students (by roll number)
+    and Faculty (by unique employee code, e.g. 260111, or institutional email).
+    """
+    clean_id = identifier.strip()
+    if not clean_id:
+        raise HTTPException(status_code=400, detail="Identifier is required")
+
+    # 1. Attempt Student match
+    try:
+        student_data = lookup_student(clean_id, _)
+        return {
+            "type": "STUDENT",
+            "student": student_data,
+        }
+    except HTTPException as e:
+        if e.status_code != 404:
+            raise
+
+    # 2. Attempt Faculty match by employee code or institutional email
+    from app.services.faculty_service import lookup_faculty_by_code_or_email
+    try:
+        faculty_data = lookup_faculty_by_code_or_email(clean_id)
+        if faculty_data:
+            return {
+                "type": "FACULTY",
+                "faculty": faculty_data,
+            }
+    except Exception as exc:
+        logger.error("Error looking up faculty by identifier %s: %s", clean_id, exc, exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Faculty lookup failed: {exc}")
+
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail=f"No student record (roll number '{clean_id}') or faculty member (employee code '{clean_id}') found in university records.",
+    )
+
+
+@router.post("/check-in/faculty", status_code=status.HTTP_201_CREATED)
+def check_in_faculty(
+    body: FacultyCheckInRequest,
+    me: CurrentReceptionist = Depends(get_current_receptionist),
+):
+    """
+    Queues a faculty member or their family dependent for doctor OPD consultation.
+    """
+    from app.services.faculty_service import check_in_faculty_patient
+    try:
+        new_fam_dict = body.new_family_member.dict() if body.new_family_member else None
+        result = check_in_faculty_patient(
+            faculty_id=body.faculty_id,
+            doctor_id=body.doctor_id,
+            performed_by_user_id=me.user_id,
+            check_in_for=body.check_in_for,
+            family_member_patient_id=body.family_member_patient_id,
+            new_family_member=new_fam_dict,
+            complaint=body.complaint,
+        )
+        return result
+    except ValueError as ve:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(ve))
+    except Exception as exc:
+        err_str = str(exc)
+        if "active visit" in err_str.lower():
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=err_str)
+        if "unavailable" in err_str.lower():
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=err_str)
+        logger.error("Faculty check-in error: %s", exc, exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Check-in failed: {exc}")
+
+
 # ── 2. doctors the receptionist can pick from ──────────────────────────
 @router.get("/doctors")
 def list_doctors(_: CurrentReceptionist = Depends(get_current_receptionist)):

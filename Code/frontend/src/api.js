@@ -518,6 +518,17 @@ export function lookupStudent(rollNumber) {
   return request(`/api/reception/students/${encodeURIComponent(rollNumber.trim())}`)
 }
 
+export function lookupIdentifier(identifier) {
+  return request(`/api/reception/lookup-identifier/${encodeURIComponent(identifier.trim())}`)
+}
+
+export function checkInFaculty(payload) {
+  return request('/api/reception/check-in/faculty', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
 export function fetchReceptionDoctors() {
   return request('/api/reception/doctors')
 }

@@ -31,8 +31,10 @@ import {
 } from "lucide-react";
 import {
   lookupStudent,
+  lookupIdentifier,
   fetchReceptionDoctors,
   receptionCheckIn,
+  checkInFaculty,
   resolveRfidCard,
   searchCommunityProfiles,
   registerCommunityMember,
@@ -61,6 +63,35 @@ const QUICK_SYMPTOMS = [
   "Eye Irritation",
 ];
 
+const RELATIONSHIP_OPTIONS = [
+  "Wife",
+  "Husband",
+  "Son",
+  "Daughter",
+  "Father",
+  "Mother",
+  "Brother",
+  "Sister",
+  "Other",
+];
+
+function deduceGender(relationship) {
+  const r = (relationship || "").trim().toLowerCase();
+  const female = [
+    "wife", "mother", "daughter", "sister", "mom", "didi", "sister-in-law",
+    "bhabhi", "grandmother", "niece", "aunt", "maternal aunt", "paternal aunt",
+    "chachi", "taiji", "mami", "bua", "masi", "saas", "mother-in-law", "daughter-in-law", "bahu"
+  ];
+  const male = [
+    "husband", "father", "son", "brother", "dad", "bhaiya", "bhai",
+    "brother-in-law", "jiju", "devar", "jeth", "grandfather", "nephew", "uncle",
+    "chacha", "tauji", "mama", "fufa", "mausa", "sasur", "father-in-law", "son-in-law", "damad"
+  ];
+  if (female.includes(r)) return "Female";
+  if (male.includes(r)) return "Male";
+  return "Other";
+}
+
 const pad = (n) => String(n).padStart(2, "0");
 
 /**
@@ -81,8 +112,22 @@ export default function NfcCheckInDesk({ flash, setPage }) {
   // Mode: "CHOICE" | "NFC" | "MANUAL"
   const [mode, setMode] = useState("CHOICE");
 
-  // Active student identity matched from backend
+  // Active student / faculty identity matched from backend
+  const [matchedType, setMatchedType] = useState(null); // "STUDENT" | "FACULTY" | null
   const [student, setStudent] = useState(null);
+  const [faculty, setFaculty] = useState(null);
+
+  // Faculty check-in configuration: "SELF" | "FAMILY_MEMBER"
+  const [facultyTarget, setFacultyTarget] = useState("SELF");
+  const [selectedFamilyPatientId, setSelectedFamilyPatientId] = useState(null);
+  const [isNewFamilyMember, setIsNewFamilyMember] = useState(false);
+
+  // New family member inputs
+  const [newFamName, setNewFamName] = useState("");
+  const [newFamRel, setNewFamRel] = useState("Wife");
+  const [newFamAge, setNewFamAge] = useState("");
+  const [newFamBlood, setNewFamBlood] = useState("");
+  const [famFormError, setFamFormError] = useState(null);
 
   // Doctors directory & assignment
   const [doctors, setDoctors] = useState([]);
@@ -269,6 +314,8 @@ export default function NfcCheckInDesk({ flash, setPage }) {
 
       if (res.matched && res.student) {
         setCardUidTransient(clean); // keep transient UID strictly in memory until confirmed or cancelled
+        setMatchedType("STUDENT");
+        setFaculty(null);
         setStudent({
           rollNumber: res.student.roll_number || res.student.rollNumber,
           name: res.student.name || res.student.full_name,
@@ -421,7 +468,7 @@ export default function NfcCheckInDesk({ flash, setPage }) {
     }
   }, [mode, uiState, triggerWebNfcScan]);
 
-  // Manual Roll Number Search
+  // Manual Roll Number or Faculty Employee Code Search
   const handleManualSearch = async (e) => {
     e?.preventDefault();
     const clean = rollInput.trim();
@@ -431,29 +478,53 @@ export default function NfcCheckInDesk({ flash, setPage }) {
     setErrorDetails(null);
 
     try {
-      const s = await lookupStudent(clean);
-      setStudent({
-        rollNumber: s.rollNumber,
-        name: s.name,
-        bloodGroup: s.bloodGroup || s.blood,
-        program: s.program || "B.Tech",
-        allergies: s.allergies || "None recorded",
-      });
-      setViaMethod("MANUAL");
-      setUiState("matched");
-      flash?.(`Student verified: ${s.name} (${s.rollNumber})`);
+      const res = await lookupIdentifier(clean);
+      if (res.type === "STUDENT") {
+        setMatchedType("STUDENT");
+        setFaculty(null);
+        setStudent({
+          rollNumber: res.student.rollNumber,
+          name: res.student.name,
+          bloodGroup: res.student.bloodGroup || res.student.blood,
+          program: res.student.program || "B.Tech",
+          allergies: res.student.allergies || "None recorded",
+        });
+        setViaMethod("MANUAL");
+        setUiState("matched");
+        flash?.(`Student verified: ${res.student.name} (${res.student.rollNumber})`);
+      } else if (res.type === "FACULTY") {
+        setMatchedType("FACULTY");
+        setStudent(null);
+        setFaculty(res.faculty);
+        setFacultyTarget("SELF");
+        if (res.faculty.familyMembers && res.faculty.familyMembers.length > 0) {
+          setSelectedFamilyPatientId(res.faculty.familyMembers[0].patientId);
+          setIsNewFamilyMember(false);
+        } else {
+          setSelectedFamilyPatientId(null);
+          setIsNewFamilyMember(true);
+        }
+        setNewFamName("");
+        setNewFamRel("Wife");
+        setNewFamAge("");
+        setNewFamBlood("");
+        setFamFormError(null);
+        setViaMethod("MANUAL");
+        setUiState("matched");
+        flash?.(`Faculty verified: ${res.faculty.name} (EMP: ${res.faculty.employeeId || "N/A"})`);
+      }
     } catch (err) {
       if (err.status === 404 || String(err.message).includes("404")) {
         setErrorDetails({
-          title: "Student Not Found",
+          title: "Record Not Found",
           type: "NOT_FOUND",
-          message: `No student with roll number '${clean}' found in university records.`,
+          message: `No student or faculty record found for identifier '${clean}'. Please check the student roll number or 6-digit employee code.`,
         });
       } else {
         setErrorDetails({
           title: "Lookup Error",
           type: "SERVER",
-          message: err.detail || err.message || "Failed to retrieve student profile.",
+          message: err.detail || err.message || "Failed to retrieve university records.",
         });
       }
       setUiState("error");
@@ -462,28 +533,95 @@ export default function NfcCheckInDesk({ flash, setPage }) {
 
   // Confirm Check-in & Issue Token (State 4 -> State 5 or State 6)
   const confirmCheckIn = async () => {
-    if (isSubmitting || !student || !doctorId) return;
+    if (isSubmitting || !doctorId) return;
+    if (matchedType === "STUDENT" && !student) return;
+    if (matchedType === "FACULTY" && !faculty) return;
+
+    if (matchedType === "FACULTY" && facultyTarget === "FAMILY_MEMBER" && isNewFamilyMember) {
+      if (!newFamName.trim() || newFamName.trim().length < 2) {
+        setFamFormError("Please enter family member's full name (minimum 2 characters).");
+        return;
+      }
+      if (!newFamRel.trim()) {
+        setFamFormError("Please select relationship.");
+        return;
+      }
+      setFamFormError(null);
+    }
 
     setIsSubmitting(true);
     setUiState("resolving");
     setErrorDetails(null);
 
     try {
-      const result = await receptionCheckIn({
-        roll_number: student.rollNumber,
-        doctor_id: doctorId,
-        complaint: reason.trim() || "General Consultation",
-        via: viaMethod,
-        card_identifier: viaMethod === "RFID" && cardUidTransient ? cardUidTransient : undefined,
-      });
+      if (matchedType === "STUDENT") {
+        const result = await receptionCheckIn({
+          roll_number: student.rollNumber,
+          doctor_id: doctorId,
+          complaint: reason.trim() || "General Consultation",
+          via: viaMethod,
+          card_identifier: viaMethod === "RFID" && cardUidTransient ? cardUidTransient : undefined,
+        });
 
-      // Clear transient card UID immediately after successful check-in
-      setCardUidTransient("");
-      setCheckInResult(result);
-      setUiState("confirmed");
-      flash?.(`Token #${result.queueNo || result.sequence || "01"} issued for ${student.name}`);
+        setCardUidTransient("");
+        setCheckInResult({
+          ...result,
+          patientName: student.name,
+          patientSubtitle: student.rollNumber,
+          patientType: "STUDENT",
+        });
+        setUiState("confirmed");
+        flash?.(`Token #${result.queueNo || result.sequence || "01"} issued for ${student.name}`);
+      } else if (matchedType === "FACULTY") {
+        let payload = {
+          faculty_id: faculty.facultyId,
+          doctor_id: doctorId,
+          complaint: reason.trim() || "General Consultation",
+          via: "MANUAL",
+          check_in_for: facultyTarget,
+        };
+
+        let displayName = faculty.name;
+        let displaySubtitle = `Faculty • ${faculty.department || "Thapar Institute"}`;
+        let relDisplay = null;
+
+        if (facultyTarget === "FAMILY_MEMBER") {
+          if (isNewFamilyMember) {
+            payload.new_family_member = {
+              full_name: newFamName.trim(),
+              relationship: newFamRel,
+              age: newFamAge ? parseInt(newFamAge, 10) : null,
+              blood_group: newFamBlood.trim() || null,
+            };
+            displayName = newFamName.trim();
+            relDisplay = `${newFamRel} of ${faculty.name}`;
+            displaySubtitle = `Dependent • ${relDisplay}`;
+          } else {
+            payload.existing_dependent_id = selectedFamilyPatientId;
+            const existingMember = (faculty.familyMembers || []).find(
+              (m) => m.patientId === selectedFamilyPatientId
+            );
+            if (existingMember) {
+              displayName = existingMember.fullName;
+              const rel = existingMember.relationshipType || existingMember.relationship || "Family Member";
+              relDisplay = `${rel} of ${faculty.name}`;
+              displaySubtitle = `Dependent • ${relDisplay}`;
+            }
+          }
+        }
+
+        const result = await checkInFaculty(payload);
+        setCheckInResult({
+          ...result,
+          patientName: result.patientName || displayName,
+          patientSubtitle: displaySubtitle,
+          patientType: facultyTarget === "SELF" ? "FACULTY" : "FACULTY_DEPENDENT",
+          relationship: relDisplay || result.relationship,
+        });
+        setUiState("confirmed");
+        flash?.(`Token #${result.queueNo || result.queue_number || "01"} issued for ${displayName}`);
+      }
     } catch (err) {
-      // Clear transient card UID on failure so it cannot be reused
       setCardUidTransient("");
       const msg = err.detail || err.message || "Failed to complete check-in";
       const status = err.status;
@@ -492,7 +630,7 @@ export default function NfcCheckInDesk({ flash, setPage }) {
         setErrorDetails({
           title: "Duplicate Active Visit (409)",
           type: "DUPLICATE",
-          message: "Student already has an active visit in progress. Duplicate check-ins are not permitted.",
+          message: "Patient already has an active visit in progress. Duplicate check-ins are not permitted.",
         });
       } else if (status === 409 || msg.toLowerCase().includes("unavailable")) {
         setErrorDetails({
@@ -526,6 +664,16 @@ export default function NfcCheckInDesk({ flash, setPage }) {
       nfcSessionRef.current = null;
     }
     setStudent(null);
+    setFaculty(null);
+    setMatchedType(null);
+    setFacultyTarget("SELF");
+    setSelectedFamilyPatientId(null);
+    setIsNewFamilyMember(false);
+    setNewFamName("");
+    setNewFamRel("Wife");
+    setNewFamAge("");
+    setNewFamBlood("");
+    setFamFormError(null);
     setReason("");
     setRollInput("");
     setCardUidTransient("");
@@ -546,9 +694,9 @@ export default function NfcCheckInDesk({ flash, setPage }) {
           {/* ── HEADER ── */}
           <div className="flex items-center justify-between pb-4 border-b border-slate-100">
             <div>
-              <h2 className="text-base sm:text-xl font-bold text-slate-900 tracking-tight">Student Express Check-in</h2>
+              <h2 className="text-base sm:text-xl font-bold text-slate-900 tracking-tight">Faculty & Student Check-in Desk</h2>
               <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5">
-                Scan student ID card or enter roll number.
+                Scan student ID card or enter student roll number / faculty employee code.
               </p>
             </div>
 
@@ -661,7 +809,7 @@ export default function NfcCheckInDesk({ flash, setPage }) {
                       </div>
                     </button>
 
-                    {/* Option 2: Manual Roll Number */}
+                    {/* Option 2: Manual Roll Number or Faculty Employee Code */}
                     <button
                       type="button"
                       onClick={() => setMode("MANUAL")}
@@ -672,18 +820,18 @@ export default function NfcCheckInDesk({ flash, setPage }) {
                           <UserCheck className="w-4 h-4 sm:w-6 sm:h-6 text-slate-700" />
                         </div>
                         <span className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5 sm:mb-1">
-                          Roll Number
+                          Roll No. / Employee Code
                         </span>
                         <h4 className="text-xs sm:text-base font-bold text-slate-900 group-hover:text-slate-950 transition-colors">
-                          Manual Roll Number
+                          Faculty & Student Check-in
                         </h4>
                         <p className="text-[10px] sm:text-xs text-slate-500 mt-0.5 sm:mt-1 leading-snug sm:leading-relaxed">
-                          Search student database by university roll number.
+                          Enter student roll number or faculty employee code (e.g. 260111).
                         </p>
                       </div>
 
                       <div className="mt-3 sm:mt-5 pt-2 sm:pt-3 border-t border-slate-100 flex items-center justify-between text-[10px] sm:text-xs font-bold text-slate-700 group-hover:text-slate-900">
-                        <span>Enter Roll Number</span>
+                        <span>Enter Roll No. or Employee Code</span>
                         <ArrowRight className="w-3.5 h-3.5 sm:w-4 sm:h-4 group-hover:translate-x-1 transition-transform" />
                       </div>
                     </button>
@@ -844,7 +992,7 @@ export default function NfcCheckInDesk({ flash, setPage }) {
                 </div>
               )}
 
-              {/* ── STEP 2B: MANUAL ROLL NUMBER MODE ── */}
+              {/* ── STEP 2B: MANUAL ROLL NO. / FACULTY EMPLOYEE CODE MODE ── */}
               {mode === "MANUAL" && (
                 <div className="space-y-6 py-2">
                   <div className="flex items-center justify-between pb-3 border-b border-slate-100">
@@ -856,7 +1004,7 @@ export default function NfcCheckInDesk({ flash, setPage }) {
                       <span>← Back to Options</span>
                     </button>
                     <span className="text-[11px] font-bold text-slate-700 bg-slate-100 px-2.5 py-0.5 rounded-full border border-slate-200">
-                      Manual Roll Number
+                      Roll No. / Employee Code
                     </span>
                   </div>
 
@@ -864,9 +1012,9 @@ export default function NfcCheckInDesk({ flash, setPage }) {
                     <div className="h-16 w-16 rounded-full bg-slate-100 border-2 border-dashed border-slate-300 flex items-center justify-center text-slate-700 shadow-sm mx-auto mb-3">
                       <UserCheck className="w-7 h-7" />
                     </div>
-                    <h3 className="text-base font-bold text-slate-900">Enter University Roll Number</h3>
+                    <h3 className="text-base font-bold text-slate-900">Enter Roll No. or Faculty Employee Code</h3>
                     <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
-                      Enter roll number to allocate an OPD consultation token.
+                      Enter student roll number (e.g. 102203001) or faculty employee code (e.g. 260111) to allocate an OPD token.
                     </p>
                   </div>
 
@@ -877,7 +1025,7 @@ export default function NfcCheckInDesk({ flash, setPage }) {
                         type="text"
                         value={rollInput}
                         onChange={(e) => setRollInput(e.target.value)}
-                        placeholder="Enter roll number..."
+                        placeholder="Enter Roll No. or Faculty Employee Code (e.g. 260111)..."
                         autoFocus
                         className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 bg-slate-50/70 text-sm font-mono text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-teal-500 focus:bg-white transition-all"
                       />
@@ -888,7 +1036,7 @@ export default function NfcCheckInDesk({ flash, setPage }) {
                       disabled={!rollInput.trim()}
                       className="w-full py-2.5 rounded-xl bg-teal-700 hover:bg-teal-800 disabled:bg-slate-200 disabled:text-slate-400 text-white text-xs font-bold transition-colors cursor-pointer flex items-center justify-center gap-1.5"
                     >
-                      <span>Find Student Record</span>
+                      <span>Find Record</span>
                       <ArrowRight className="w-3.5 h-3.5" />
                     </button>
                   </form>
@@ -1309,7 +1457,415 @@ export default function NfcCheckInDesk({ flash, setPage }) {
           )}
 
           {/* ══════════════════════════════════════════════════════════════
-              STATE 4: MATCHED (Student profile verified; request confirmation)
+              STATE 4A: MATCHED FACULTY (Self or Family Member Check-in)
+             ══════════════════════════════════════════════════════════════ */}
+          {uiState === "matched" && faculty && (
+            <motion.div
+              key="state-matched-faculty"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.35, ease: EASE_SPRING }}
+              className="space-y-6"
+            >
+              {/* Verified Identity Banner */}
+              <div className="flex items-center justify-between p-3.5 rounded-2xl bg-teal-50/80 border border-teal-200/80">
+                <div className="flex items-center gap-2.5">
+                  <div className="h-6 w-6 rounded-full bg-teal-700 text-white flex items-center justify-center shadow-xs">
+                    <Check className="w-3.5 h-3.5" />
+                  </div>
+                  <span className="text-xs font-bold text-teal-950">Faculty Identity Verified</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-teal-100 text-teal-800 font-mono">
+                    EMP: {faculty.employeeId || "VERIFIED"}
+                  </span>
+                </div>
+              </div>
+
+              {/* Faculty Summary Card */}
+              <div className="p-4 rounded-2xl border border-slate-200 bg-slate-50/60 space-y-3">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <h3 className="text-lg font-bold text-slate-900">{faculty.name}</h3>
+                    <p className="text-xs text-slate-600 mt-0.5">
+                      {faculty.designation || "Faculty Member"} • {faculty.department || "Thapar Institute"}
+                    </p>
+                  </div>
+                  <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-teal-50 text-teal-700 border border-teal-200">
+                    Blood: {faculty.bloodGroup || "—"}
+                  </span>
+                </div>
+
+                <div className="border-t border-slate-200/60 pt-2.5 text-xs text-slate-600 flex justify-between items-center">
+                  <div>
+                    <span className="font-semibold text-slate-700">Email: </span>
+                    <span className="text-slate-500 font-mono text-[11px]">{faculty.institutionalEmail || faculty.email}</span>
+                  </div>
+                  <span className="text-[11px] text-slate-500">
+                    Registered Family: {faculty.familyMembers?.length || 0}
+                  </span>
+                </div>
+              </div>
+
+              {/* ── RECIPIENT TOGGLE: FOR SELF vs FOR FAMILY MEMBER ── */}
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-slate-800 block">
+                  Select Check-in Recipient <span className="text-rose-500">*</span>
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFacultyTarget("SELF");
+                      setFamFormError(null);
+                    }}
+                    className={`p-3.5 rounded-2xl border text-left transition-all cursor-pointer flex items-start gap-3 ${
+                      facultyTarget === "SELF"
+                        ? "border-teal-600 bg-teal-50/70 ring-2 ring-teal-500/20 shadow-xs"
+                        : "border-slate-200 bg-white hover:border-slate-300"
+                    }`}
+                  >
+                    <div className={`h-8 w-8 rounded-xl flex items-center justify-center shrink-0 mt-0.5 ${
+                      facultyTarget === "SELF" ? "bg-teal-700 text-white" : "bg-slate-100 text-slate-700"
+                    }`}>
+                      <User className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xs font-bold text-slate-900">For Self</span>
+                        {facultyTarget === "SELF" && <Check className="w-3.5 h-3.5 text-teal-700" />}
+                      </div>
+                      <p className="text-[11px] text-slate-500 mt-0.5">
+                        Consultation token for {faculty.name}
+                      </p>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFacultyTarget("FAMILY_MEMBER");
+                      setFamFormError(null);
+                    }}
+                    className={`p-3.5 rounded-2xl border text-left transition-all cursor-pointer flex items-start gap-3 ${
+                      facultyTarget === "FAMILY_MEMBER"
+                        ? "border-teal-600 bg-teal-50/70 ring-2 ring-teal-500/20 shadow-xs"
+                        : "border-slate-200 bg-white hover:border-slate-300"
+                    }`}
+                  >
+                    <div className={`h-8 w-8 rounded-xl flex items-center justify-center shrink-0 mt-0.5 ${
+                      facultyTarget === "FAMILY_MEMBER" ? "bg-teal-700 text-white" : "bg-slate-100 text-slate-700"
+                    }`}>
+                      <Users className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xs font-bold text-slate-900">For Family Member</span>
+                        {facultyTarget === "FAMILY_MEMBER" && <Check className="w-3.5 h-3.5 text-teal-700" />}
+                      </div>
+                      <p className="text-[11px] text-slate-500 mt-0.5">
+                        Wife, husband, child, parent or dependent
+                      </p>
+                    </div>
+                  </button>
+                </div>
+              </div>
+
+              {/* ── FAMILY MEMBER SUB-FORM (When "For Family Member" is active) ── */}
+              {facultyTarget === "FAMILY_MEMBER" && (
+                <div className="p-4 rounded-2xl bg-slate-50/80 border border-slate-200 space-y-4">
+                  {/* If faculty has registered family members, show choice to select existing or new */}
+                  {faculty.familyMembers && faculty.familyMembers.length > 0 && (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs font-bold text-slate-700">
+                          Registered Family Members:
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsNewFamilyMember(!isNewFamilyMember);
+                            setFamFormError(null);
+                          }}
+                          className="text-[11px] font-bold text-teal-700 hover:text-teal-800 cursor-pointer flex items-center gap-1"
+                        >
+                          <Plus className="w-3 h-3" />
+                          <span>{isNewFamilyMember ? "Select Registered Member" : "+ Add New Member"}</span>
+                        </button>
+                      </div>
+
+                      {!isNewFamilyMember && (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          {faculty.familyMembers.map((m) => {
+                            const isSelected = selectedFamilyPatientId === m.patientId;
+                            return (
+                              <button
+                                key={m.patientId}
+                                type="button"
+                                disabled={Boolean(m.alreadyInQueue || m.inQueue)}
+                                onClick={() => {
+                                  setSelectedFamilyPatientId(m.patientId);
+                                  setFamFormError(null);
+                                }}
+                                className={`p-3 rounded-xl border text-left transition-all cursor-pointer flex items-start justify-between ${
+                                  (m.alreadyInQueue || m.inQueue)
+                                    ? "opacity-50 cursor-not-allowed bg-slate-100 border-slate-200"
+                                    : isSelected
+                                    ? "border-teal-600 bg-teal-50 ring-1 ring-teal-500/20"
+                                    : "border-slate-200 bg-white hover:bg-slate-50"
+                                }`}
+                              >
+                                <div>
+                                  <div className="text-xs font-bold text-slate-900">{m.fullName}</div>
+                                  <div className="text-[11px] text-slate-500 mt-0.5">
+                                    {(m.relationshipType || m.relationship || "Dependent")} • {m.gender || "—"} • Age {m.age || "—"} • {m.bloodGroup || "—"}
+                                  </div>
+                                </div>
+                                <div className="shrink-0 pt-0.5">
+                                  {(m.alreadyInQueue || m.inQueue) ? (
+                                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800">
+                                      In Queue
+                                    </span>
+                                  ) : isSelected ? (
+                                    <Check className="w-4 h-4 text-teal-700" />
+                                  ) : null}
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Form for New Family Member */}
+                  {(isNewFamilyMember || !faculty.familyMembers?.length) && (
+                    <div className="space-y-3 pt-1">
+                      <div className="flex items-center justify-between pb-1">
+                        <span className="text-xs font-bold text-slate-800">
+                          New Family Member Details
+                        </span>
+                        {faculty.familyMembers && faculty.familyMembers.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => setIsNewFamilyMember(false)}
+                            className="text-[11px] font-semibold text-slate-600 hover:text-slate-900 cursor-pointer"
+                          >
+                            ← Back to Registered
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {/* Name */}
+                        <div className="space-y-1">
+                          <label className="text-xs font-semibold text-slate-700 block">
+                            Full Name <span className="text-rose-500">*</span>
+                          </label>
+                          <input
+                            type="text"
+                            value={newFamName}
+                            onChange={(e) => {
+                              setNewFamName(e.target.value);
+                              if (famFormError) setFamFormError(null);
+                            }}
+                            placeholder="e.g. Priya Sharma"
+                            className="w-full px-3 py-2 text-xs bg-white border border-slate-300 rounded-xl outline-none focus:border-teal-600"
+                          />
+                        </div>
+
+                        {/* Relationship */}
+                        <div className="space-y-1">
+                          <label className="text-xs font-semibold text-slate-700 block">
+                            Relationship <span className="text-rose-500">*</span>
+                          </label>
+                          <select
+                            value={newFamRel}
+                            onChange={(e) => setNewFamRel(e.target.value)}
+                            className="w-full px-3 py-2 text-xs bg-white border border-slate-300 rounded-xl outline-none focus:border-teal-600 font-medium text-slate-800"
+                          >
+                            {RELATIONSHIP_OPTIONS.map((rel) => (
+                              <option key={rel} value={rel}>
+                                {rel}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        {/* Gender: AUTO-DEDUCED (Read-only, NOT filled by receptionist) */}
+                        <div className="space-y-1">
+                          <label className="text-xs font-semibold text-slate-700 block">
+                            Gender (Auto-deduced)
+                          </label>
+                          <div className="px-3 py-2 text-xs bg-slate-100/80 border border-slate-200 rounded-xl text-slate-800 font-medium flex items-center justify-between">
+                            <span>{deduceGender(newFamRel)}</span>
+                            <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-teal-100 text-teal-800 font-bold">
+                              Auto-deduced
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Age & Blood Group */}
+                        <div className="grid grid-cols-2 gap-2">
+                          <div className="space-y-1">
+                            <label className="text-xs font-semibold text-slate-700 block">
+                              Age
+                            </label>
+                            <input
+                              type="number"
+                              min="1"
+                              max="120"
+                              value={newFamAge}
+                              onChange={(e) => setNewFamAge(e.target.value)}
+                              placeholder="e.g. 36"
+                              className="w-full px-3 py-2 text-xs bg-white border border-slate-300 rounded-xl outline-none focus:border-teal-600"
+                            />
+                          </div>
+
+                          <div className="space-y-1">
+                            <label className="text-xs font-semibold text-slate-700 block">
+                              Blood Group
+                            </label>
+                            <select
+                              value={newFamBlood}
+                              onChange={(e) => setNewFamBlood(e.target.value)}
+                              className="w-full px-3 py-2 text-xs bg-white border border-slate-300 rounded-xl outline-none focus:border-teal-600 font-medium text-slate-800"
+                            >
+                              <option value="">Select</option>
+                              <option value="A+">A+</option>
+                              <option value="A-">A-</option>
+                              <option value="B+">B+</option>
+                              <option value="B-">B-</option>
+                              <option value="AB+">AB+</option>
+                              <option value="AB-">AB-</option>
+                              <option value="O+">O+</option>
+                              <option value="O-">O-</option>
+                              <option value="Unknown">Unknown</option>
+                            </select>
+                          </div>
+                        </div>
+                      </div>
+
+                      {famFormError && (
+                        <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-xs text-rose-800 font-medium flex items-center gap-2">
+                          <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                          <span>{famFormError}</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Doctor Cabin Selection */}
+              <div className="space-y-3">
+                <label className="text-xs font-bold text-slate-800 block">
+                  Assign Doctor Cabin <span className="text-rose-500">*</span>
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  {doctors.map((d) => {
+                    const isSelected = doctorId === d.doctorId;
+                    return (
+                      <button
+                        key={d.doctorId}
+                        type="button"
+                        disabled={!d.available}
+                        onClick={() => setDoctorId(d.doctorId)}
+                        className={`p-3 rounded-2xl border text-left transition-all cursor-pointer ${
+                          !d.available
+                            ? "opacity-40 cursor-not-allowed bg-slate-50 border-slate-200"
+                            : isSelected
+                            ? "border-teal-600 bg-teal-50/50 ring-2 ring-teal-500/20"
+                            : "border-slate-200 bg-white hover:border-slate-300"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <p className="text-xs font-bold text-slate-900">{d.name}</p>
+                          <span
+                            className={`h-2 w-2 rounded-full ${
+                              d.available ? "bg-emerald-500" : "bg-slate-300"
+                            }`}
+                          />
+                        </div>
+                        <p className="text-[11px] text-slate-500 mt-0.5">{d.specialty || "General OPD"}</p>
+                        <p className="text-[10px] text-slate-400 mt-1 font-mono">{d.waiting ?? 0} in queue</p>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Chief Complaint / Symptoms */}
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-slate-800 block">
+                  Chief Complaint / Symptoms
+                </label>
+                <div className="flex flex-wrap gap-1.5 mb-2">
+                  {QUICK_SYMPTOMS.map((s) => (
+                    <button
+                      key={s}
+                      type="button"
+                      onClick={() => setReason(s)}
+                      className={`text-[11px] px-2.5 py-1 rounded-lg border transition-colors cursor-pointer ${
+                        reason === s
+                          ? "bg-teal-700 text-white border-teal-700 font-semibold"
+                          : "bg-slate-50 hover:bg-slate-100 text-slate-600 border-slate-200"
+                      }`}
+                    >
+                      {s}
+                    </button>
+                  ))}
+                </div>
+                <input
+                  type="text"
+                  value={reason}
+                  onChange={(e) => setReason(e.target.value)}
+                  placeholder="Or enter custom reason for visit..."
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:border-teal-500"
+                />
+              </div>
+
+              {/* Actions */}
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-3 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  disabled={isSubmitting}
+                  onClick={resetToReady}
+                  className="px-4 py-2.5 rounded-xl border border-slate-200 hover:bg-slate-50 disabled:opacity-50 text-slate-700 text-xs font-bold transition-colors cursor-pointer flex items-center justify-center gap-1.5"
+                >
+                  <X className="w-3.5 h-3.5" />
+                  <span>Cancel & Return to Options</span>
+                </button>
+                <button
+                  type="button"
+                  disabled={!doctorId || isSubmitting}
+                  onClick={confirmCheckIn}
+                  className="px-6 py-2.5 rounded-xl bg-teal-700 hover:bg-teal-800 disabled:bg-slate-300 disabled:cursor-not-allowed text-white text-xs font-bold transition-all shadow-xs cursor-pointer flex items-center justify-center gap-2"
+                >
+                  {isSubmitting ? (
+                    <>
+                      <RotateCw className="w-4 h-4 animate-spin" />
+                      <span>Confirming & Issuing Token...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>
+                        Confirm Check-in for{" "}
+                        {facultyTarget === "SELF"
+                          ? faculty.name
+                          : (isNewFamilyMember ? (newFamName.trim() || "Family Member") : (faculty.familyMembers?.find(m => m.patientId === selectedFamilyPatientId)?.fullName || "Family Member"))}
+                      </span>
+                      <ArrowRight className="w-4 h-4" />
+                    </>
+                  )}
+                </button>
+              </div>
+            </motion.div>
+          )}
+
+          {/* ══════════════════════════════════════════════════════════════
+              STATE 4B: MATCHED STUDENT (Student profile verified)
              ══════════════════════════════════════════════════════════════ */}
           {uiState === "matched" && student && (
             <motion.div
@@ -1465,7 +2021,7 @@ export default function NfcCheckInDesk({ flash, setPage }) {
           {/* ══════════════════════════════════════════════════════════════
               STATE 5: CHECK-IN CONFIRMED (Success with queue sequence)
              ══════════════════════════════════════════════════════════════ */}
-          {uiState === "confirmed" && checkInResult && student && (
+          {uiState === "confirmed" && checkInResult && (student || faculty) && (
             <motion.div
               key="state-confirmed"
               initial={{ opacity: 0, scale: 0.95 }}
@@ -1482,8 +2038,12 @@ export default function NfcCheckInDesk({ flash, setPage }) {
                 <span className="text-[10px] uppercase font-bold tracking-wider px-3 py-1 rounded-full bg-emerald-100 text-emerald-800 font-mono">
                   OPD Token Issued
                 </span>
-                <h3 className="text-xl font-bold text-slate-900 mt-3">{student.name}</h3>
-                <p className="text-xs text-slate-500 font-mono mt-0.5">{student.rollNumber}</p>
+                <h3 className="text-xl font-bold text-slate-900 mt-3">
+                  {checkInResult.patientName || student?.name || faculty?.name}
+                </h3>
+                <p className="text-xs text-slate-500 font-mono mt-0.5">
+                  {checkInResult.patientSubtitle || student?.rollNumber || `Faculty • ${faculty?.department || "Campus Care"}`}
+                </p>
               </div>
 
               <div className="p-5 rounded-2xl border border-teal-200 bg-teal-50/60 max-w-sm mx-auto space-y-3">
@@ -1504,9 +2064,21 @@ export default function NfcCheckInDesk({ flash, setPage }) {
                     <span className="font-semibold text-slate-800">{selectedDoctor?.room || "General OPD"}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-slate-500">Check-in Mode:</span>
-                    <span className="font-semibold text-teal-900 font-mono">{viaMethod}</span>
+                    <span className="text-slate-500">Patient Type:</span>
+                    <span className="font-semibold text-teal-900 font-mono">
+                      {checkInResult.patientType === "FACULTY_DEPENDENT"
+                        ? "Faculty Dependent"
+                        : checkInResult.patientType === "FACULTY"
+                        ? "Faculty"
+                        : "Student"}
+                    </span>
                   </div>
+                  {checkInResult.relationship && (
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">Affiliation:</span>
+                      <span className="font-semibold text-slate-800">{checkInResult.relationship}</span>
+                    </div>
+                  )}
                   {checkInResult.position != null && (
                     <div className="flex justify-between">
                       <span className="text-slate-500">Live Position:</span>
@@ -1522,7 +2094,7 @@ export default function NfcCheckInDesk({ flash, setPage }) {
                   onClick={resetToReady}
                   className="px-5 py-2.5 rounded-xl bg-teal-700 hover:bg-teal-800 text-white text-xs font-bold transition-all shadow-xs cursor-pointer"
                 >
-                  Check in Next Student
+                  Check in Next Patient
                 </button>
                 <button
                   type="button"

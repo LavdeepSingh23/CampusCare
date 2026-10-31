@@ -54,7 +54,8 @@ export function AuthProvider({ children }) {
     if (getToken()) {
       fetchCurrentUser()
         .then((user) => {
-          if (user.account_status !== 'ACTIVE') {
+          const statusVal = user?.status || user?.account_status
+          if (statusVal && statusVal !== 'ACTIVE') {
             clearSession()
             setDoctor(null)
             setStudent(null)

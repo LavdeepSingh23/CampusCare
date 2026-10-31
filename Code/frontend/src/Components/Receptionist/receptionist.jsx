@@ -80,7 +80,7 @@ const Icon = ({ name, size = 18 }) => (
  
 const NAV = [
   { id: "reception", label: "Reception", icon: "reception" },
-  { id: "checkin", label: "Student Check-in", icon: "checkin" },
+  { id: "checkin", label: "Faculty & Student Check-in", icon: "checkin" },
   { id: "queue", label: "Live OPD Queue", icon: "queue" },
   { id: "students", label: "Students", icon: "students" },
   { id: "rfid", label: "Smart Card Desk", icon: "rfid" },
@@ -392,7 +392,7 @@ function Home({
             className="flex items-center justify-center gap-2 px-3.5 py-2 sm:px-4 sm:py-2.5 rounded-xl bg-teal-700 hover:bg-teal-800 text-white font-semibold text-xs shadow-xs hover:shadow-sm transition-all cursor-pointer"
           >
             <UserCheck className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-            <span>+ Student Check-in</span>
+            <span>+ Faculty & Student Check-in</span>
           </button>
           <button
             onClick={() => setPage("dispensing")}
@@ -794,8 +794,8 @@ function CheckIn({ flash, setPage }) {
   return (
     <div className="max-w-xl mx-auto py-2">
       <PageHead
-        title="Student Check-in"
-        sub="Identify student and assign to real-time doctor consultation queue"
+        title="Faculty & Student Check-in"
+        sub="Identify student or faculty and assign to real-time doctor consultation queue"
       />
 
       {/* ── STEP 1: CARD SCAN OR ROLL NUMBER SEARCH ── */}
