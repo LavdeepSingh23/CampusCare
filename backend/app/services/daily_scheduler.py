@@ -235,7 +235,7 @@ def run_daily_analytics_pipeline(
             pdf_path=pdf_path,
             reporting_date_str=rep_date_str,
             gen_timestamp=analytics_data.get("generation_timestamp", ""),
-            metrics=metrics,
+            metrics=analytics_data,
             recipient_email=target_recipient,
         )
 
@@ -247,7 +247,7 @@ def run_daily_analytics_pipeline(
             resend_email_id=resend_id,
             pdf_path=pdf_path,
             pdf_size=pdf_size,
-            metrics=metrics,
+            metrics=analytics_data,
         )
 
         return {

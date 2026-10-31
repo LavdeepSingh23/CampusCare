@@ -56,3 +56,4 @@ ANALYTICS_SCHEDULE_MINUTE = int(os.getenv("ANALYTICS_SCHEDULE_MINUTE", "0"))
 ANALYTICS_TIMEZONE = os.getenv("ANALYTICS_TIMEZONE", "Asia/Kolkata")
 
 
+CAMPUSCARE_WEB_URL = os.getenv("CAMPUSCARE_WEB_URL", "https://alarm-diagnoses-lash.ngrok-free.dev")

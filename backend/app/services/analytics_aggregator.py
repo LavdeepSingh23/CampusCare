@@ -12,6 +12,7 @@ from datetime import date, datetime, time, timedelta
 from typing import Any, Dict, List, Optional
 import zoneinfo
 
+from app.core.config import CAMPUSCARE_WEB_URL
 from app.core.database import get_db_connection
 
 logger = logging.getLogger(__name__)
@@ -45,9 +46,12 @@ def aggregate_daily_analytics(target_date: Optional[date] = None) -> Dict[str, A
 
     start_dt, s1_end, s2_end, end_dt = get_reporting_window(target_date)
 
-    # Previous week equivalent window for WoW comparison
-    prev_week_date = target_date - timedelta(days=7)
-    pw_start_dt, _, _, pw_end_dt = get_reporting_window(prev_week_date)
+    # Previous day window
+    prev_date = target_date - timedelta(days=1)
+    p_s1, _, _, p_ed = get_reporting_window(prev_date)
+
+    # 7 days prior window
+    seven_days_start, _, _, _ = get_reporting_window(target_date - timedelta(days=7))
 
     connection = get_db_connection()
     try:
@@ -61,7 +65,8 @@ def aggregate_daily_analytics(target_date: Optional[date] = None) -> Dict[str, A
                     SUM(CASE WHEN checked_in_at >= %s AND checked_in_at < %s THEN 1 ELSE 0 END) as shift_2_visits,
                     SUM(CASE WHEN checked_in_at >= %s AND checked_in_at < %s THEN 1 ELSE 0 END) as shift_3_visits,
                     SUM(CASE WHEN status = 'COMPLETED' THEN 1 ELSE 0 END) as completed_visits,
-                    SUM(CASE WHEN status IN ('CANCELLED', 'NO_SHOW') THEN 1 ELSE 0 END) as cancelled_visits
+                    SUM(CASE WHEN status IN ('CANCELLED', 'NO_SHOW') THEN 1 ELSE 0 END) as cancelled_visits,
+                    SUM(CASE WHEN status NOT IN ('COMPLETED', 'CANCELLED', 'NO_SHOW') THEN 1 ELSE 0 END) as pending_visits
                 FROM VISIT
                 WHERE checked_in_at >= %s AND checked_in_at < %s
                 """,
@@ -74,27 +79,64 @@ def aggregate_daily_analytics(target_date: Optional[date] = None) -> Dict[str, A
             s3_count = int(visit_stats.get("shift_3_visits") or 0)
             completed_visits = int(visit_stats.get("completed_visits") or 0)
             cancelled_visits = int(visit_stats.get("cancelled_visits") or 0)
+            pending_visits = int(visit_stats.get("pending_visits") or 0)
 
-            # Previous week comparison
+            # 2. VISITOR DEMOGRAPHICS
             cursor.execute(
-                "SELECT COUNT(*) as pw_total FROM VISIT WHERE checked_in_at >= %s AND checked_in_at < %s",
-                (pw_start_dt, pw_end_dt),
+                """
+                SELECT 
+                    SUM(CASE WHEN p.patient_type = 'STUDENT' OR (p.patient_type IS NULL AND v.roll_number IS NOT NULL) THEN 1 ELSE 0 END) as student_count,
+                    SUM(CASE WHEN p.patient_type IN ('FACULTY', 'FACULTY_DEPENDENT') THEN 1 ELSE 0 END) as faculty_count,
+                    SUM(CASE WHEN p.patient_type = 'COMMUNITY' AND cp.category IN ('CARETAKER', 'CAMPUS_WORKER', 'GUARD', 'STAFF') THEN 1 ELSE 0 END) as staff_count,
+                    SUM(CASE 
+                        WHEN p.patient_type = 'COMMUNITY' AND (cp.category = 'OTHER' OR cp.category IS NULL) THEN 1
+                        WHEN p.patient_type IS NULL AND v.roll_number IS NULL THEN 1
+                        ELSE 0 
+                    END) as other_count
+                FROM VISIT v
+                LEFT JOIN PATIENT p ON p.patient_id = v.patient_id
+                LEFT JOIN COMMUNITY_PROFILE cp ON cp.patient_id = p.patient_id
+                WHERE v.checked_in_at >= %s AND v.checked_in_at < %s
+                """,
+                (start_dt, end_dt),
             )
-            pw_row = cursor.fetchone() or {}
-            pw_total = int(pw_row.get("pw_total") or 0)
-            if pw_total > 0:
-                wow_pct = round(((total_visits - pw_total) / pw_total) * 100, 1)
-            else:
-                wow_pct = 0.0 if total_visits == 0 else 100.0
+            cat_row = cursor.fetchone() or {}
+            student_visits = int(cat_row.get("student_count") or 0)
+            faculty_visits = int(cat_row.get("faculty_count") or 0)
+            staff_visits = int(cat_row.get("staff_count") or 0)
+            other_visits = int(cat_row.get("other_count") or 0)
+
+            total_for_pct = total_visits if total_visits > 0 else 1
+            student_pct = round((student_visits / total_for_pct) * 100, 1) if total_visits > 0 else 0.0
+            faculty_pct = round((faculty_visits / total_for_pct) * 100, 1) if total_visits > 0 else 0.0
+            staff_pct = round((staff_visits / total_for_pct) * 100, 1) if total_visits > 0 else 0.0
+            other_pct = round((other_visits / total_for_pct) * 100, 1) if total_visits > 0 else 0.0
+
+            visitor_distribution = [
+                {"category": "Students", "count": student_visits, "percentage": student_pct},
+                {"category": "Faculty & Dependents", "count": faculty_visits, "percentage": faculty_pct},
+                {"category": "Support Staff (Caretakers, Guards, Support)", "count": staff_visits, "percentage": staff_pct},
+                {"category": "Other Community / General", "count": other_visits, "percentage": other_pct},
+            ]
 
             # Determine Peak Shift
-            shift_counts = [("Shift 1 (Morning)", s1_count), ("Shift 2 (Afternoon)", s2_count), ("Shift 3 (Night)", s3_count)]
+            shift_counts = [("Shift 1 (Morning)", s1_count), ("Shift 2 (Evening)", s2_count), ("Shift 3 (Night)", s3_count)]
             shift_counts.sort(key=lambda x: x[1], reverse=True)
             peak_shift_name = shift_counts[0][0]
             peak_shift_val = shift_counts[0][1]
-            peak_shift_pct = round((peak_shift_val / total_visits * 100) if total_visits > 0 else 0, 1)
+            peak_shift_pct = round((peak_shift_val / total_visits * 100) if total_visits > 0 else 0.0, 1)
 
-            # 2. DOCTOR CONSULTATIONS DISTRIBUTION
+            s1_pct = round((s1_count / total_for_pct) * 100, 1) if total_visits > 0 else 0.0
+            s2_pct = round((s2_count / total_for_pct) * 100, 1) if total_visits > 0 else 0.0
+            s3_pct = round((s3_count / total_for_pct) * 100, 1) if total_visits > 0 else 0.0
+
+            shift_activity = [
+                {"name": "Morning (Shift 1)", "hours": "06:00 – 14:00", "count": s1_count, "percentage": s1_pct},
+                {"name": "Evening (Shift 2)", "hours": "14:00 – 20:00", "count": s2_count, "percentage": s2_pct},
+                {"name": "Night (Shift 3)", "hours": "20:00 – 06:00 (+1d)", "count": s3_count, "percentage": s3_pct},
+            ]
+
+            # 3. DOCTOR CONSULTATIONS DISTRIBUTION
             cursor.execute(
                 """
                 SELECT
@@ -119,7 +161,7 @@ def aggregate_daily_analytics(target_date: Optional[date] = None) -> Dict[str, A
             doctor_distribution = []
             for r in doc_rows:
                 cnt = int(r["consultation_count"])
-                pct = round((cnt / total_consultations * 100) if total_consultations > 0 else 0, 1)
+                pct = round((cnt / total_consultations * 100) if total_consultations > 0 else 0.0, 1)
                 clean_name = r["doctor_identifier"].split("@")[0].replace(".", " ").title()
                 doctor_distribution.append({
                     "name": clean_name if "Doctor" in clean_name else f"Dr. {clean_name}",
@@ -128,9 +170,7 @@ def aggregate_daily_analytics(target_date: Optional[date] = None) -> Dict[str, A
                     "percentage": pct,
                 })
 
-            # 3. CLINICAL CASE CATEGORIES
-            # Uses structured column case_category added via Migration 30.
-            # Strictly preserves actual DB values; unclassified are categorized as UNSPECIFIED.
+            # 4. CLINICAL CASE CATEGORIES
             cursor.execute(
                 """
                 SELECT
@@ -165,7 +205,7 @@ def aggregate_daily_analytics(target_date: Optional[date] = None) -> Dict[str, A
             for r in cat_rows:
                 code = str(r["category_code"]).upper()
                 cnt = int(r["category_count"])
-                pct = round((cnt / total_categorized * 100) if total_categorized > 0 else 0, 1)
+                pct = round((cnt / total_categorized * 100) if total_categorized > 0 else 0.0, 1)
                 case_categories.append({
                     "code": code,
                     "label": category_labels.get(code, code.replace("_", " ").title()),
@@ -173,7 +213,6 @@ def aggregate_daily_analytics(target_date: Optional[date] = None) -> Dict[str, A
                     "percentage": pct,
                 })
 
-            # Fallback if no consultations recorded in window
             if not case_categories:
                 case_categories = [{
                     "code": "UNSPECIFIED",
@@ -185,7 +224,47 @@ def aggregate_daily_analytics(target_date: Optional[date] = None) -> Dict[str, A
             top_category_name = case_categories[0]["label"] if case_categories else "None"
             top_category_pct = case_categories[0]["percentage"] if case_categories else 0.0
 
-            # 4. PRESCRIPTIONS STATISTICS
+            # 5. TOP 10 DIAGNOSED CONDITIONS (from CONSULTATION.diagnosis)
+            cursor.execute(
+                """
+                SELECT 
+                    COALESCE(NULLIF(TRIM(c.diagnosis), ''), 'General OPD Evaluation') as diagnosis_name,
+                    COUNT(*) as case_count
+                FROM CONSULTATION c
+                JOIN VISIT v ON v.visit_id = c.visit_id
+                WHERE v.checked_in_at >= %s AND v.checked_in_at < %s
+                GROUP BY diagnosis_name
+                ORDER BY case_count DESC
+                """,
+                (start_dt, end_dt),
+            )
+            diag_rows = cursor.fetchall() or []
+            total_diagnoses = sum(int(r["case_count"]) for r in diag_rows)
+
+            top_diagnoses = []
+            other_diag_count = 0
+            for idx, r in enumerate(diag_rows):
+                cnt = int(r["case_count"])
+                pct = round((cnt / total_diagnoses * 100) if total_diagnoses > 0 else 0.0, 1)
+                if idx < 10:
+                    top_diagnoses.append({
+                        "rank": idx + 1,
+                        "name": r["diagnosis_name"],
+                        "count": cnt,
+                        "percentage": pct,
+                    })
+                else:
+                    other_diag_count += cnt
+
+            if other_diag_count > 0:
+                top_diagnoses.append({
+                    "rank": 11,
+                    "name": "Other Diagnoses",
+                    "count": other_diag_count,
+                    "percentage": round((other_diag_count / total_diagnoses * 100) if total_diagnoses > 0 else 0.0, 1),
+                })
+
+            # 6. PRESCRIPTIONS STATISTICS
             cursor.execute(
                 """
                 SELECT
@@ -203,7 +282,7 @@ def aggregate_daily_analytics(target_date: Optional[date] = None) -> Dict[str, A
             total_prescriptions = int(presc_stats.get("total_prescriptions") or 0)
             total_med_items = int(presc_stats.get("total_med_items") or 0)
 
-            # Top prescribed medicines (aggregate only)
+            # Top prescribed medicines
             cursor.execute(
                 """
                 SELECT
@@ -223,13 +302,15 @@ def aggregate_daily_analytics(target_date: Optional[date] = None) -> Dict[str, A
             top_meds_rows = cursor.fetchall() or []
             top_medicines = [{"name": r["medicine_name"], "frequency": int(r["freq"])} for r in top_meds_rows]
 
-            # 5. EMERGENCY CASES
+            # 7. EMERGENCY CASES (separate from routine visits)
             cursor.execute(
                 """
                 SELECT
                     COUNT(*) as total_emergencies,
                     SUM(CASE WHEN severity = 'CRITICAL' THEN 1 ELSE 0 END) as critical_count,
                     SUM(CASE WHEN severity = 'HIGH' THEN 1 ELSE 0 END) as high_count,
+                    SUM(CASE WHEN severity = 'MEDIUM' THEN 1 ELSE 0 END) as medium_count,
+                    SUM(CASE WHEN severity = 'LOW' THEN 1 ELSE 0 END) as low_count,
                     SUM(CASE WHEN ambulance_required = 1 THEN 1 ELSE 0 END) as ambulance_count
                 FROM EMERGENCY_LOG
                 WHERE occurred_at >= %s AND occurred_at < %s
@@ -239,14 +320,67 @@ def aggregate_daily_analytics(target_date: Optional[date] = None) -> Dict[str, A
             em_row = cursor.fetchone() or {}
             total_emergencies = int(em_row.get("total_emergencies") or 0)
             critical_emergencies = int(em_row.get("critical_count") or 0)
+            high_emergencies = int(em_row.get("high_count") or 0)
+            medium_emergencies = int(em_row.get("medium_count") or 0)
+            low_emergencies = int(em_row.get("low_count") or 0)
             ambulance_dispatches = int(em_row.get("ambulance_count") or 0)
 
-            # 6. DOCTOR ROSTER & AVAILABILITY
+            # 8. DAILY COMPARISONS (Previous Day & 7-Day Average)
+            cursor.execute(
+                "SELECT COUNT(*) as prev_visits FROM VISIT WHERE checked_in_at >= %s AND checked_in_at < %s",
+                (p_s1, p_ed),
+            )
+            prev_row = cursor.fetchone() or {}
+            prev_day_visits = int(prev_row.get("prev_visits") or 0)
+
+            if prev_day_visits > 0:
+                dod_pct = round(((total_visits - prev_day_visits) / prev_day_visits) * 100, 1)
+            else:
+                dod_pct = 0.0 if total_visits == 0 else 100.0
+
+            # 7-day average visits
+            cursor.execute(
+                "SELECT COUNT(*) as total_7d FROM VISIT WHERE checked_in_at >= %s AND checked_in_at < %s",
+                (seven_days_start, start_dt),
+            )
+            seven_d_row = cursor.fetchone() or {}
+            tot_7d = int(seven_d_row.get("total_7d") or 0)
+            avg_7d = round(tot_7d / 7.0, 1)
+
+            if avg_7d > 0:
+                wow_pct = round(((total_visits - avg_7d) / avg_7d) * 100, 1)
+            else:
+                wow_pct = 0.0 if total_visits == 0 else 100.0
+
+            # Previous day emergencies
+            cursor.execute(
+                "SELECT COUNT(*) as prev_em FROM EMERGENCY_LOG WHERE occurred_at >= %s AND occurred_at < %s",
+                (p_s1, p_ed),
+            )
+            prev_em_row = cursor.fetchone() or {}
+            prev_day_emergencies = int(prev_em_row.get("prev_em") or 0)
+            emergency_diff = total_emergencies - prev_day_emergencies
+
+            # 9. DATA QUALITY METRICS
+            # Reconciles database records, offline imports, duplicate prevention, and records needing review
+            records_requiring_review = cancelled_visits + pending_visits
+            cursor.execute(
+                """
+                SELECT COUNT(*) as unmatched_cnt
+                FROM VISIT
+                WHERE checked_in_at >= %s AND checked_in_at < %s
+                  AND patient_id IS NULL AND roll_number IS NULL
+                """,
+                (start_dt, end_dt),
+            )
+            unmatched_row = cursor.fetchone() or {}
+            unmatched_records = int(unmatched_row.get("unmatched_cnt") or 0)
+
+            # 10. DOCTOR ROSTER & AVAILABILITY
             cursor.execute("SELECT COUNT(*) as roster_count FROM DOCTOR")
             roster_row = cursor.fetchone() or {}
             total_roster_doctors = int(roster_row.get("roster_count") or 4)
 
-            # Current doctor availability from DOCTOR_AVAILABILITY
             cursor.execute(
                 """
                 SELECT COUNT(DISTINCT doctor_id) as available_today
@@ -263,18 +397,156 @@ def aggregate_daily_analytics(target_date: Optional[date] = None) -> Dict[str, A
     finally:
         connection.close()
 
-    formatted_target_date = target_date.strftime("%d %b, %Y")
+    formatted_target_date = target_date.strftime("%d %B %Y")
+    formatted_target_date_short = target_date.strftime("%d %b, %Y")
     now_formatted = now_kolkata.strftime("%d %b %Y, %I:%M %p IST")
+
+    # Format signed percentages
+    dod_sign = "+" if dod_pct > 0 else ""
+    dod_str = f"{dod_sign}{dod_pct}%"
+    wow_sign = "+" if wow_pct > 0 else ""
+    wow_str = f"{wow_sign}{wow_pct}%"
+
+    # 11. DYNAMIC EXECUTIVE SUMMARY (3-5 Data-Backed Observations)
+    observations: List[str] = []
+
+    # Observation 1: Volume & Trends
+    if total_visits > 0:
+        observations.append(
+            f"Routine patient footfall totaled {total_visits} across all three shifts. "
+            f"This represents a {dod_str} change compared to the previous day ({prev_day_visits} visits) "
+            f"and is {wow_str} relative to the 7-day trailing average of {avg_7d} visits/day."
+        )
+    else:
+        observations.append(
+            f"Zero routine patient visits were recorded during this 24-hour cycle across completed Shifts 1, 2, and 3."
+        )
+
+    # Observation 2: Visitor Demographics
+    if total_visits > 0:
+        demo_sorted = sorted(
+            [("Students", student_visits, student_pct),
+             ("Staff (Caretakers/Security/Workers)", staff_visits, staff_pct),
+             ("Faculty & Dependents", faculty_visits, faculty_pct),
+             ("Other Community", other_visits, other_pct)],
+            key=lambda x: x[1],
+            reverse=True,
+        )
+        top_cohort = demo_sorted[0]
+        second_cohort = demo_sorted[1]
+        if second_cohort[1] > 0:
+            observations.append(
+                f"The primary visitor cohort was {top_cohort[0]}, comprising {top_cohort[2]}% of total footfall "
+                f"({top_cohort[1]} visits), followed by {second_cohort[0]} at {second_cohort[2]}% ({second_cohort[1]} visits)."
+            )
+        else:
+            observations.append(
+                f"{top_cohort[0]} represented 100.0% of routine health centre visits ({top_cohort[1]} visits) on this date."
+            )
+    else:
+        observations.append(
+            "Demographic audit confirmed zero attendance across student, faculty, staff, and general community categories."
+        )
+
+    # Observation 3: Shift Load Distribution
+    if total_visits > 0:
+        observations.append(
+            f"Operational peak occurred during {peak_shift_name} with {peak_shift_val} visits "
+            f"({peak_shift_pct}% of total daily volume)."
+        )
+    else:
+        observations.append(
+            "Full medical readiness was maintained across Morning, Evening, and Night shifts with zero queuing recorded."
+        )
+
+    # Observation 4: Diagnostic Distribution
+    if top_diagnoses and total_diagnoses > 0:
+        top_diag = top_diagnoses[0]
+        observations.append(
+            f"Leading clinical presentation was {top_diag['name']} accounting for {top_diag['count']} case(s) "
+            f"({top_diag['percentage']}% of diagnosed consultations)."
+        )
+    else:
+        observations.append(
+            "No formal clinical diagnoses were recorded in the outpatient consultation queue during this period."
+        )
+
+    # Observation 5: Emergency Readiness
+    if total_emergencies > 0:
+        observations.append(
+            f"The emergency triage desk managed {total_emergencies} emergency presentation(s), including "
+            f"{critical_emergencies} critical case(s) and {ambulance_dispatches} ambulance dispatch(es)."
+        )
+    else:
+        observations.append(
+            "Zero emergency presentations or campus ambulance dispatches were logged during this 24-hour reporting cycle."
+        )
+
+    admin_dashboard_url = f"{CAMPUSCARE_WEB_URL}/admin/analytics?date={target_date.isoformat()}"
 
     return {
         "reporting_date": target_date.isoformat(),
-        "reporting_date_formatted": formatted_target_date,
+        "reporting_date_formatted": formatted_target_date_short,
+        "reporting_date_formal": formatted_target_date,
         "generation_timestamp": now_formatted,
         "timezone": "Asia/Kolkata",
+        "admin_dashboard_url": admin_dashboard_url,
         "window": {
             "start": start_dt.strftime("%Y-%m-%d %H:%M:%S"),
             "end": end_dt.strftime("%Y-%m-%d %H:%M:%S"),
         },
+        "executive_summary": observations,
+        "visitor_overview": {
+            "total_routine": total_visits,
+            "student_visits": student_visits,
+            "student_percentage": student_pct,
+            "faculty_visits": faculty_visits,
+            "faculty_percentage": faculty_pct,
+            "staff_visits": staff_visits,
+            "staff_percentage": staff_pct,
+            "other_visits": other_visits,
+            "other_percentage": other_pct,
+        },
+        "visitor_distribution": visitor_distribution,
+        "shift_activity": shift_activity,
+        "top_diagnoses": top_diagnoses,
+        "total_diagnoses": total_diagnoses,
+        "daily_comparison": {
+            "previous_day_date": prev_date.isoformat(),
+            "previous_day_visits": prev_day_visits,
+            "dod_diff": total_visits - prev_day_visits,
+            "dod_change_pct": dod_pct,
+            "dod_str": dod_str,
+            "seven_day_avg_visits": avg_7d,
+            "wow_diff": round(total_visits - avg_7d, 1),
+            "wow_change_pct": wow_pct,
+            "wow_str": wow_str,
+            "previous_day_emergencies": prev_day_emergencies,
+            "emergency_diff": emergency_diff,
+        },
+        "emergency_summary": {
+            "total": total_emergencies,
+            "critical": critical_emergencies,
+            "high": high_emergencies,
+            "medium": medium_emergencies,
+            "low": low_emergencies,
+            "ambulance_dispatches": ambulance_dispatches,
+        },
+        "data_quality": {
+            "database_records": total_visits,
+            "excel_records": 0,
+            "duplicates_removed": 0,
+            "unmatched_records": unmatched_records,
+            "records_requiring_review": records_requiring_review,
+        },
+        "total_visits": total_visits,
+        "total_consultations": total_consultations,
+        "total_prescriptions": total_prescriptions,
+        "total_emergencies": total_emergencies,
+        "shift_1_visits": s1_count,
+        "shift_2_visits": s2_count,
+        "shift_3_visits": s3_count,
+        # Backward compatibility for existing PDF generator
         "visits": {
             "total": total_visits,
             "completed": completed_visits,
