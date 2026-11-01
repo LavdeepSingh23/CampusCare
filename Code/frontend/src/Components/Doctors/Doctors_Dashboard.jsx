@@ -1123,7 +1123,7 @@ export default function Doctors_Dashboard() {
           doctor: doctorProfile,
           patient: selectedPatient,
           medicines: medicines,
-          autoDownload: true,
+          autoDownload: false,
         })
       } catch (pdfErr) {
         console.warn('PDF generation error:', pdfErr)
