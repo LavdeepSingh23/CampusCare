@@ -20,6 +20,7 @@ from app.schemas.doctor import (
     UpdateValueRequest,
 )
 from app.services import queue_lifecycle as ql
+from app.services.queue_ws_manager import safe_broadcast_event
 
 router = APIRouter(tags=["doctor"])
 
@@ -674,6 +675,7 @@ def call_next_student(
             performed_by_user_id=current.user_id,
         )
         connection.commit()
+        safe_broadcast_event(doctor_id, "PATIENT_CALLED", res)
         return res
     except ql.ResourceNotFoundError as exc:
         connection.rollback()
@@ -745,6 +747,7 @@ def complete_consultation(
             performed_by_user_id=current.user_id,
         )
         connection.commit()
+        safe_broadcast_event(doctor_id, "CONSULTATION_COMPLETED", res)
         return res
     except ql.ResourceNotFoundError as exc:
         connection.rollback()
@@ -780,6 +783,7 @@ def mark_doctor_patient_no_show(
             performed_by_user_id=current.user_id,
         )
         connection.commit()
+        safe_broadcast_event(doctor_id, "PATIENT_NO_SHOW", res)
         return res
     except ql.ResourceNotFoundError as exc:
         connection.rollback()

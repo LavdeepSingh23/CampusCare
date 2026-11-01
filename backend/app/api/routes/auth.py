@@ -13,6 +13,7 @@ from app.core.database import get_db_connection
 from app.core.deps import CurrentUser, get_current_user
 from app.core.security import create_access_token, verify_password
 from app.core.util import display_name_from_email
+from app.core.rate_limiter import limit_auth_requests
 from app.services.student_service import resolve_or_create_student_account
 from app.services.faculty_service import (
     resolve_or_create_faculty_account,
@@ -162,7 +163,7 @@ def _authenticate_staff_core(
 # 1. DOCTOR PORTAL AUTHENTICATION
 # =====================================================================
 
-@router.post("/doctor/login", response_model=DoctorLoginResponse)
+@router.post("/doctor/login", response_model=DoctorLoginResponse, dependencies=[Depends(limit_auth_requests)])
 def doctor_login(payload: LoginRequest):
     """
     Dedicated Doctor login endpoint:
@@ -188,7 +189,7 @@ def doctor_login(payload: LoginRequest):
 # 2. RECEPTIONIST PORTAL AUTHENTICATION
 # =====================================================================
 
-@router.post("/receptionist/login", response_model=ReceptionistLoginResponse)
+@router.post("/receptionist/login", response_model=ReceptionistLoginResponse, dependencies=[Depends(limit_auth_requests)])
 def receptionist_login(payload: LoginRequest):
     """
     Dedicated Receptionist login endpoint:
@@ -212,7 +213,7 @@ def receptionist_login(payload: LoginRequest):
 # 3. ADMIN AUTHENTICATION (PROTECTED / HIDDEN)
 # =====================================================================
 
-@router.post("/admin/login", response_model=AdminLoginResponse)
+@router.post("/admin/login", response_model=AdminLoginResponse, dependencies=[Depends(limit_auth_requests)])
 def admin_login(payload: LoginRequest):
     """
     Dedicated Administrator login endpoint:
@@ -235,7 +236,7 @@ def admin_login(payload: LoginRequest):
 # =====================================================================
 
 @router.post("/staff/login", response_model=LoginResponse)
-@router.post("/login", response_model=LoginResponse)
+@router.post("/login", response_model=LoginResponse, dependencies=[Depends(limit_auth_requests)])
 def staff_shared_login(payload: LoginRequest):
     """
     Shared/Legacy staff login endpoint for backward compatibility:

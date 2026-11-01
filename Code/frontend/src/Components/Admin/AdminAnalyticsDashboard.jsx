@@ -994,3 +994,4 @@ export default function AdminAnalyticsDashboard() {
 function roundPct(val) {
   return Math.round(val * 10) / 10
 }
+

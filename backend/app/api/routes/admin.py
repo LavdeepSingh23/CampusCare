@@ -9,7 +9,7 @@ from pydantic import BaseModel, EmailStr, Field
 
 from app.core.database import get_db_connection
 from app.core.deps import CurrentAdmin, get_current_admin
-from app.services.analytics_aggregator import aggregate_daily_analytics
+from app.services.analytics_aggregator import KOLKATA_TZ, aggregate_daily_analytics
 from app.services.daily_scheduler import REPORTS_DIR, run_daily_analytics_pipeline
 from app.services.pdf_report_generator import generate_analytics_html, render_html_to_pdf
 
@@ -218,8 +218,7 @@ def preview_daily_analytics_pdf(
         except ValueError:
             raise HTTPException(status_code=400, detail="Invalid target_date format. Must be YYYY-MM-DD.")
     else:
-        kolkata = zoneinfo.ZoneInfo("Asia/Kolkata")
-        parsed_date = (datetime.now(kolkata) - timedelta(days=1)).date()
+        parsed_date = (datetime.now(KOLKATA_TZ) - timedelta(days=1)).date()
 
     rep_date_str = parsed_date.strftime("%Y-%m-%d")
     pdf_path = str(REPORTS_DIR / f"CampusCare_Analytics_{rep_date_str}.pdf")
@@ -286,8 +285,7 @@ def get_admin_analytics_dashboard(
         except ValueError:
             raise HTTPException(status_code=400, detail="Invalid date format. Must be YYYY-MM-DD.")
     else:
-        kolkata = zoneinfo.ZoneInfo("Asia/Kolkata")
-        parsed_date = (datetime.now(kolkata) - timedelta(days=1)).date()
+        parsed_date = (datetime.now(KOLKATA_TZ) - timedelta(days=1)).date()
 
     analytics_data = aggregate_daily_analytics(parsed_date)
 

@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 
@@ -7,8 +8,9 @@ from fastapi.responses import JSONResponse
 
 from app.api.router import api_router
 from app.core.config import CORS_ORIGINS, DB_MODE, ENVIRONMENT
-from app.core.database import DatabaseConnectionError, DatabaseError, check_database_readiness
+from app.core.database import DatabaseConnectionError, DatabaseError, check_database_readiness, close_db_pool, init_db_pool
 from app.routers import health
+from app.services.queue_ws_manager import set_main_event_loop
 
 logging.basicConfig(
     level=logging.INFO,
@@ -20,12 +22,18 @@ logger = logging.getLogger("campuscare")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifecycle startup & shutdown events for FastAPI."""
+    try:
+        set_main_event_loop(asyncio.get_running_loop())
+    except Exception:
+        pass
+
     logger.info(
         "Starting CampusCare API [env=%s, db_mode=%s]...",
         ENVIRONMENT,
         DB_MODE,
     )
     try:
+        init_db_pool()
         diag = check_database_readiness()
         logger.info(
             "Database connectivity verified on startup: %s (%s) with %d tables via %s (latency: %sms)",
@@ -55,6 +63,10 @@ async def lifespan(app: FastAPI):
     try:
         from app.services.daily_scheduler import stop_scheduler
         stop_scheduler()
+    except Exception:
+        pass
+    try:
+        close_db_pool()
     except Exception:
         pass
     logger.info("CampusCare API shutdown complete.")

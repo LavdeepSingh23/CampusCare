@@ -22,6 +22,10 @@ DB_PASSWORD = os.getenv("DB_PASSWORD", "")
 DB_SSL_MODE = os.getenv("DB_SSL_MODE", "REQUIRED").upper()
 DB_SSL_CA = os.getenv("DB_SSL_CA", None)
 DB_CONNECT_TIMEOUT = int(os.getenv("DB_CONNECT_TIMEOUT", "10"))
+DB_POOL_MIN = int(os.getenv("DB_POOL_MIN", "5"))
+DB_POOL_MAX = int(os.getenv("DB_POOL_MAX", "20"))
+DB_POOL_TIMEOUT = float(os.getenv("DB_POOL_TIMEOUT", "5.0"))
+DB_POOL_RECYCLE = int(os.getenv("DB_POOL_RECYCLE", "300"))
 
 # Explicit Database Mode: "mysql" (default/production) or "sqlite" (isolated local/dev only)
 # Production MUST NOT use SQLite

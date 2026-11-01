@@ -13,6 +13,8 @@ from app.core.deps import (
     get_current_staff,
 )
 from app.services import queue_lifecycle as ql
+from app.services.queue_ws_manager import safe_broadcast_event
+from app.core.rate_limiter import limit_checkin_requests
 
 logger = logging.getLogger(__name__)
 
@@ -101,6 +103,27 @@ def check_in_student(
                 card_identifier=card_id,
             )
             connection.commit()
+            safe_broadcast_event(
+                doctor_id=doctor_id,
+                event_type="QUEUE_PATIENT_CHECKED_IN",
+                data={
+                    "visitId": result["visitId"],
+                    "visit_id": result["visitId"],
+                    "queueEntryId": result["queueEntryId"],
+                    "queue_entry_id": result["queueEntryId"],
+                    "queueNo": result["queueNo"],
+                    "queue_number": result["queueNo"],
+                    "name": result.get("name") or result.get("student_name"),
+                    "student_name": result.get("name") or result.get("student_name"),
+                    "rollNumber": result.get("rollNumber"),
+                    "roll_number": result.get("rollNumber"),
+                    "complaint": payload.complaint or "General Consultation",
+                    "status": "Waiting",
+                    "statusCode": "WAITING",
+                    "status_code": "WAITING",
+                    "patientType": "STUDENT",
+                },
+            )
             return {
                 **result,
                 "visit_id": result["visitId"],
@@ -230,6 +253,7 @@ def requeue_visit(
             reason=payload.reason or "Patient arrived after no-show",
         )
         connection.commit()
+        safe_broadcast_event(payload.target_doctor_id, "QUEUE_PATIENT_REQUEUED", result)
         return result
     except ql.ResourceNotFoundError as exc:
         connection.rollback()
@@ -306,6 +330,9 @@ def mark_no_show_queue(
             reason=reason,
         )
         connection.commit()
+        target_doc = result.get("doctor_id") or result.get("doctorId")
+        if target_doc:
+            safe_broadcast_event(target_doc, "PATIENT_NO_SHOW", result)
         return result
     except ql.ResourceNotFoundError as exc:
         connection.rollback()

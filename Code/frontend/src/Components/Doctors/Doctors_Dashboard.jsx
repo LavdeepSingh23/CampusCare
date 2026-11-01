@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import {
@@ -56,6 +56,7 @@ import {
   callNextPatient,
   startConsultation,
   completeConsultation,
+  getToken,
 } from '../../api'
 import { generatePrescriptionPdf } from '../../utils/prescriptionPdf'
 import { cn } from '../../lib/utils'
@@ -104,6 +105,14 @@ export default function Doctors_Dashboard() {
   // Patient Queue
   const [patients, setPatients] = useState([])
   const [selectedPatientId, setSelectedPatientId] = useState(null)
+  const summaryCacheRef = useRef({})
+  const [wsStatus, setWsStatus] = useState('disconnected')
+  const [realtimeNotification, setRealtimeNotification] = useState(null)
+  const seenEventsRef = useRef(new Set())
+  const reconnectTimeoutRef = useRef(null)
+  const backoffDelayRef = useRef(1000)
+  const pingIntervalRef = useRef(null)
+  const wsRef = useRef(null)
   const [queueLoading, setQueueLoading] = useState(true)
   const [queueError, setQueueError] = useState(null)
   const [isCallingNext, setIsCallingNext] = useState(false)
@@ -345,7 +354,7 @@ export default function Doctors_Dashboard() {
     })
   }, [draftDiagnosis, selectedPatient, draftClinicalNotes, draftMedicines])
 
-  // Load backend data
+  // Load backend data (Zero N+1 calls; uses summary cache)
   const loadBackendData = async (showLoading = true) => {
     if (!doctorId) {
       setQueueLoading(false)
@@ -395,89 +404,82 @@ export default function Doctors_Dashboard() {
           setSelectedPatientId(null)
           setQueueError(null)
         } else {
-          const mapped = await Promise.all(
-            queueData.map(async (item, idx) => {
-              let summary = { allergies: 'None recorded', conditions: 'None recorded' }
-              const roll = item.rollNumber || item.roll_number
-              if (roll) {
-                try {
-                  summary = await fetchPatientSummary(roll)
-                } catch {
-                  // fallback
-                }
-              }
+          // Zero N+1 requests: synchronous map utilizing memory cache
+          const mapped = queueData.map((item, idx) => {
+            const roll = item.rollNumber || item.roll_number
+            const cachedSummary = roll ? summaryCacheRef.current[roll] : null
+            const summary = cachedSummary || { allergies: 'None recorded', conditions: 'None recorded' }
 
-              const initials = item.name
-                ? item.name
-                    .split(' ')
-                    .map((w) => w[0])
-                    .join('')
-                    .slice(0, 2)
-                    .toUpperCase()
-                : 'ST'
+            const initials = item.name
+              ? item.name
+                  .split(' ')
+                  .map((w) => w[0])
+                  .join('')
+                  .slice(0, 2)
+                  .toUpperCase()
+              : 'ST'
 
-              const rawStatus = (item.statusCode || item.status || '').toUpperCase()
-              const isInConsultation =
-                rawStatus === 'IN_CONSULTATION' ||
-                (activeConsult?.active &&
-                  (activeConsult.patient?.visitId === (item.visitId || item.visit_id) ||
-                    activeConsult.patient?.rollNumber === roll))
+            const rawStatus = (item.statusCode || item.status || '').toUpperCase()
+            const isInConsultation =
+              rawStatus === 'IN_CONSULTATION' ||
+              (activeConsult?.active &&
+                (activeConsult.patient?.visitId === (item.visitId || item.visit_id) ||
+                  activeConsult.patient?.rollNumber === roll))
 
-              const status = isInConsultation
-                ? 'In Consultation'
-                : idx === 0 && !activeConsult?.active
-                ? 'Next in Line'
-                : 'Waiting'
+            const status = isInConsultation
+              ? 'In Consultation'
+              : idx === 0 && !activeConsult?.active
+              ? 'Next in Line'
+              : 'Waiting'
 
-              const statusBadge = isInConsultation
-                ? 'bg-teal-50 text-teal-800 border-teal-200'
-                : status === 'Next in Line'
-                ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                : 'bg-amber-50 text-amber-800 border-amber-200'
+            const statusBadge = isInConsultation
+              ? 'bg-teal-50 text-teal-800 border-teal-200'
+              : status === 'Next in Line'
+              ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+              : 'bg-amber-50 text-amber-800 border-amber-200'
 
-              const allergiesList =
-                summary.allergies && summary.allergies !== 'None recorded'
-                  ? summary.allergies.split(',').map((s) => s.trim())
-                  : ['None declared']
+            const allergiesList =
+              summary.allergies && summary.allergies !== 'None recorded'
+                ? summary.allergies.split(',').map((s) => s.trim())
+                : ['None declared']
 
-              return {
-                id: item.queueEntryId || item.visitId || idx + 10,
-                visitId: item.visitId || item.visit_id,
-                queueEntryId: item.queueEntryId || item.queue_entry_id,
-                queueNo: item.queueNo ?? item.queue_number ?? item.sequence ?? idx + 1,
-                name: item.name || item.student_name,
-                initials,
-                rollNo: roll,
-                communityCode: item.communityCode || item.community_code || null,
-                category: item.category || null,
-                patientType: item.patientType || item.patient_type || (item.communityCode ? 'COMMUNITY' : 'STUDENT'),
-                age: item.age || 20,
-                gender: item.gender || (item.communityCode ? (item.category || 'Community') : 'Student'),
-                bloodGroup: item.bloodGroup || item.blood_group || 'B+',
-                waitTime: item.waitingSince ? `${item.waitingSince}` : `${(idx + 1) * 6} min`,
-                status,
-                statusCode: isInConsultation ? 'IN_CONSULTATION' : 'WAITING',
-                statusBadge,
-                avatarBg: isInConsultation
-                  ? 'bg-teal-700 text-white'
-                  : idx === 1
-                  ? 'bg-slate-700 text-white'
-                  : idx === 2
-                  ? 'bg-amber-700 text-white'
-                  : 'bg-indigo-700 text-white',
-                complaint:
-                  item.complaint ||
-                  (summary.conditions && summary.conditions !== 'None recorded'
-                    ? summary.conditions
-                    : 'OPD Health Evaluation'),
-                history: item.communityCode
-                  ? `Campus Community (${item.category || 'Member'}). Code: ${roll}. Blood: ${item.bloodGroup || 'B+'}, Age: ${item.age || 20}.`
-                  : `TIET Student. Roll: ${roll}. Blood Group: ${item.bloodGroup || 'B+'}, Age: ${item.age || 20}.`,
-                allergies: allergiesList,
-                prescriptions: [],
-              }
-            })
-          )
+            return {
+              id: item.queueEntryId || item.visitId || idx + 10,
+              visitId: item.visitId || item.visit_id,
+              queueEntryId: item.queueEntryId || item.queue_entry_id,
+              queueNo: item.queueNo ?? item.queue_number ?? item.sequence ?? idx + 1,
+              name: item.name || item.student_name,
+              initials,
+              rollNo: roll,
+              communityCode: item.communityCode || item.community_code || null,
+              category: item.category || null,
+              patientType: item.patientType || item.patient_type || (item.communityCode ? 'COMMUNITY' : 'STUDENT'),
+              age: item.age || 20,
+              gender: item.gender || (item.communityCode ? (item.category || 'Community') : 'Student'),
+              bloodGroup: item.bloodGroup || item.blood_group || 'B+',
+              waitTime: item.waitingSince ? `${item.waitingSince}` : `${(idx + 1) * 6} min`,
+              status,
+              statusCode: isInConsultation ? 'IN_CONSULTATION' : 'WAITING',
+              statusBadge,
+              avatarBg: isInConsultation
+                ? 'bg-teal-700 text-white'
+                : idx === 1
+                ? 'bg-slate-700 text-white'
+                : idx === 2
+                ? 'bg-amber-700 text-white'
+                : 'bg-indigo-700 text-white',
+              complaint:
+                item.complaint ||
+                (summary.conditions && summary.conditions !== 'None recorded'
+                  ? summary.conditions
+                  : 'OPD Health Evaluation'),
+              history: item.communityCode
+                ? `Campus Community (${item.category || 'Member'}). Code: ${roll}. Blood: ${item.bloodGroup || 'B+'}, Age: ${item.age || 20}.`
+                : `TIET Student. Roll: ${roll}. Blood Group: ${item.bloodGroup || 'B+'}, Age: ${item.age || 20}.`,
+              allergies: allergiesList,
+              prescriptions: [],
+            }
+          })
 
           setPatients(mapped)
           setQueueError(null)
@@ -498,14 +500,180 @@ export default function Doctors_Dashboard() {
     }
   }
 
-  // Live polling every 4 seconds
+  // Lazy summary fetch effect for selected patient
+  useEffect(() => {
+    const roll = selectedPatient?.rollNo
+    if (!roll || summaryCacheRef.current[roll]) return
+    let cancelled = false
+    fetchPatientSummary(roll)
+      .then((summary) => {
+        if (cancelled || !summary) return
+        summaryCacheRef.current[roll] = summary
+        setPatients((prev) =>
+          prev.map((p) => {
+            if (p.rollNo !== roll) return p
+            const allergiesList =
+              summary.allergies && summary.allergies !== 'None recorded'
+                ? summary.allergies.split(',').map((s) => s.trim())
+                : ['None declared']
+            return {
+              ...p,
+              allergies: allergiesList,
+              complaint:
+                p.complaint && p.complaint !== 'OPD Health Evaluation'
+                  ? p.complaint
+                  : summary.conditions && summary.conditions !== 'None recorded'
+                  ? summary.conditions
+                  : p.complaint,
+            }
+          })
+        )
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [selectedPatient?.rollNo])
+
+  // Real-time WebSocket connection for doctor queue with exponential backoff & keepalive
+  useEffect(() => {
+    if (!doctorId) return
+
+    let isUnmounted = false
+
+    const connectWs = () => {
+      if (isUnmounted) return
+
+      try {
+        const token = getToken()
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+        let wsUrl
+        const envApiUrl = import.meta.env.VITE_API_URL
+        if (envApiUrl && envApiUrl.startsWith('http')) {
+          const parsed = new URL(envApiUrl)
+          const wsProto = parsed.protocol === 'https:' ? 'wss:' : 'ws:'
+          wsUrl = `${wsProto}//${parsed.host}/api/ws/doctor/${doctorId}?token=${encodeURIComponent(token || '')}`
+        } else {
+          wsUrl = `${protocol}//${window.location.host}/api/ws/doctor/${doctorId}?token=${encodeURIComponent(token || '')}`
+        }
+
+        const ws = new WebSocket(wsUrl)
+        wsRef.current = ws
+        setWsStatus('connecting')
+
+        ws.onopen = () => {
+          if (isUnmounted) {
+            ws.close()
+            return
+          }
+          setWsStatus('connected')
+          backoffDelayRef.current = 1000
+
+          try {
+            ws.send(JSON.stringify({ type: 'RECONNECT_SYNC', doctor_id: doctorId }))
+          } catch {
+            // quiet
+          }
+
+          loadBackendData(false)
+
+          if (pingIntervalRef.current) clearInterval(pingIntervalRef.current)
+          pingIntervalRef.current = setInterval(() => {
+            if (ws.readyState === WebSocket.OPEN) {
+              try {
+                ws.send(JSON.stringify({ type: 'PING', timestamp: Date.now() }))
+              } catch {
+                // quiet
+              }
+            }
+          }, 30000)
+        }
+
+        ws.onmessage = (event) => {
+          try {
+            const msg = JSON.parse(event.data)
+            const eventId = msg.event_id
+            if (eventId) {
+              if (seenEventsRef.current.has(eventId)) return
+              seenEventsRef.current.add(eventId)
+              if (seenEventsRef.current.size > 200) {
+                const [first] = seenEventsRef.current
+                seenEventsRef.current.delete(first)
+              }
+            }
+
+            const evtType = msg.type
+            if (evtType === 'QUEUE_PATIENT_CHECKED_IN') {
+              const patientName = msg.data?.name || msg.data?.student_name || 'Patient'
+              const queueNum = msg.data?.queueNo || msg.data?.queue_number || ''
+              setRealtimeNotification({
+                message: `Patient ${patientName} checked in ${queueNum ? `(#${queueNum})` : ''}`,
+                id: Date.now(),
+              })
+              loadBackendData(false)
+            } else if (
+              evtType === 'PATIENT_CALLED' ||
+              evtType === 'PATIENT_NO_SHOW' ||
+              evtType === 'CONSULTATION_COMPLETED' ||
+              evtType === 'QUEUE_PATIENT_REQUEUED'
+            ) {
+              loadBackendData(false)
+            }
+          } catch (parseErr) {
+            console.debug('WebSocket parse error:', parseErr)
+          }
+        }
+
+        ws.onclose = () => {
+          if (pingIntervalRef.current) clearInterval(pingIntervalRef.current)
+          if (isUnmounted) return
+          setWsStatus('disconnected')
+
+          const delay = backoffDelayRef.current
+          backoffDelayRef.current = Math.min(backoffDelayRef.current * 2, 30000)
+          reconnectTimeoutRef.current = setTimeout(connectWs, delay)
+        }
+
+        ws.onerror = () => {
+          try {
+            ws.close()
+          } catch {
+            // quiet
+          }
+        }
+      } catch (err) {
+        setWsStatus('disconnected')
+        const delay = backoffDelayRef.current
+        backoffDelayRef.current = Math.min(backoffDelayRef.current * 2, 30000)
+        reconnectTimeoutRef.current = setTimeout(connectWs, delay)
+      }
+    }
+
+    connectWs()
+
+    return () => {
+      isUnmounted = true
+      if (pingIntervalRef.current) clearInterval(pingIntervalRef.current)
+      if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current)
+      if (wsRef.current) {
+        try {
+          wsRef.current.close()
+        } catch {
+          // quiet
+        }
+      }
+    }
+  }, [doctorId])
+
+  // Polling fallback: quiet 30s when disconnected; 60s safety sync when connected
   useEffect(() => {
     loadBackendData(true)
+    const intervalMs = wsStatus === 'connected' ? 60000 : 30000
     const timer = setInterval(() => {
       loadBackendData(false)
-    }, 4000)
+    }, intervalMs)
     return () => clearInterval(timer)
-  }, [doctorId])
+  }, [doctorId, wsStatus])
 
   // Filtered queue
   const filteredPatients = useMemo(() => {
@@ -1061,6 +1229,21 @@ export default function Doctors_Dashboard() {
 
           {/* Right Profile & Actions */}
           <div className="flex items-center gap-2.5">
+            <div
+              className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border border-slate-200 bg-white text-[11px] font-medium text-slate-600 select-none"
+              title={wsStatus === 'connected' ? 'WebSocket real-time updates active' : 'Connecting to real-time feed...'}
+            >
+              <span
+                className={cn(
+                  'w-2 h-2 rounded-full',
+                  wsStatus === 'connected' ? 'bg-emerald-500 animate-pulse' : 'bg-amber-400'
+                )}
+              />
+              <span className={wsStatus === 'connected' ? 'text-emerald-700 font-semibold' : 'text-slate-500'}>
+                {wsStatus === 'connected' ? 'Live' : 'Syncing'}
+              </span>
+            </div>
+
             <button
               onClick={() => loadBackendData(true)}
               title="Sync Queue"
@@ -1142,6 +1325,27 @@ export default function Doctors_Dashboard() {
 
       {/* ── COMFORTABLY ENLARGED MAIN WORKSPACE (MAX-WIDTH 1440PX) ── */}
       <main className="w-full max-w-[1440px] xl:max-w-[1500px] mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-5 flex-1 flex flex-col space-y-4">
+        <AnimatePresence>
+          {realtimeNotification && (
+            <motion.div
+              initial={{ opacity: 0, y: -8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              className="bg-emerald-50 border border-emerald-200 text-emerald-800 px-4 py-2.5 rounded-xl text-xs flex items-center justify-between shadow-xs"
+            >
+              <div className="flex items-center gap-2.5">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping shrink-0" />
+                <span className="font-semibold">{realtimeNotification.message}</span>
+              </div>
+              <button
+                onClick={() => setRealtimeNotification(null)}
+                className="text-emerald-700 hover:text-emerald-950 font-bold ml-3 cursor-pointer"
+              >
+                Dismiss
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
         
         {/* ═══════════════════════════════════════════════════════════
             VIEW 1: OPD CONSULTATION QUEUE & CLINICAL CHART

@@ -8,16 +8,14 @@ Strict Shift Partitioning in Asia/Kolkata timezone:
 """
 
 import logging
-from datetime import date, datetime, time, timedelta
+from datetime import date, datetime, time, timedelta, timezone
 from typing import Any, Dict, List, Optional
-import zoneinfo
 
-from app.core.config import CAMPUSCARE_WEB_URL
-from app.core.database import get_db_connection
-
-logger = logging.getLogger(__name__)
-
-KOLKATA_TZ = zoneinfo.ZoneInfo("Asia/Kolkata")
+try:
+    import zoneinfo
+    KOLKATA_TZ = zoneinfo.ZoneInfo("Asia/Kolkata")
+except Exception:
+    KOLKATA_TZ = timezone(timedelta(hours=5, minutes=30))
 
 
 def get_reporting_window(target_date: date):

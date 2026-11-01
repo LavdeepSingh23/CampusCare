@@ -19,6 +19,7 @@ from typing import Literal, Dict, Any, List
 from app.core.util import display_name_from_email
 from app.schemas.dispensing import DispenseRequest
 from app.services import queue_lifecycle as ql
+from app.services.queue_ws_manager import safe_broadcast_event
 
 logger = logging.getLogger(__name__)
 
@@ -409,6 +410,27 @@ def check_in(body: CheckInRequest, me: CurrentReceptionist = Depends(get_current
                 card_identifier=card_id,
             )
             conn.commit()
+            safe_broadcast_event(
+                doctor_id=body.doctor_id,
+                event_type="QUEUE_PATIENT_CHECKED_IN",
+                data={
+                    "visitId": result["visitId"],
+                    "visit_id": result["visitId"],
+                    "queueEntryId": result["queueEntryId"],
+                    "queue_entry_id": result["queueEntryId"],
+                    "queueNo": result["queueNo"],
+                    "queue_number": result["queueNo"],
+                    "name": result.get("name"),
+                    "student_name": result.get("name"),
+                    "rollNumber": result.get("rollNumber"),
+                    "roll_number": result.get("rollNumber"),
+                    "complaint": body.complaint or "General Consultation",
+                    "status": "Waiting",
+                    "statusCode": "WAITING",
+                    "status_code": "WAITING",
+                    "patientType": "STUDENT",
+                },
+            )
             return {
                 "visit_id": result["visitId"],
                 "visitId": result["visitId"],
