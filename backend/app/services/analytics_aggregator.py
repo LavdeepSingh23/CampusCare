@@ -196,6 +196,79 @@ def aggregate_daily_analytics(target_date: Optional[Any] = None, scope: str = "d
                 {"name": "Night (Shift 3)", "hours": "20:00 – 06:00 (+1d)", "count": s3_count, "percentage": s3_pct},
             ]
 
+            # Shift-wise Student, Faculty, Others Distribution
+            if is_all_time:
+                cursor.execute(
+                    """
+                    SELECT 
+                        CASE 
+                            WHEN TIME(v.checked_in_at) >= '06:00:00' AND TIME(v.checked_in_at) < '14:00:00' THEN 1
+                            WHEN TIME(v.checked_in_at) >= '14:00:00' AND TIME(v.checked_in_at) < '20:00:00' THEN 2
+                            ELSE 3
+                        END as shift_num,
+                        SUM(CASE WHEN p.patient_type = 'STUDENT' OR (p.patient_type IS NULL AND v.roll_number IS NOT NULL) THEN 1 ELSE 0 END) as student_count,
+                        SUM(CASE WHEN p.patient_type IN ('FACULTY', 'FACULTY_DEPENDENT') THEN 1 ELSE 0 END) as faculty_count,
+                        SUM(CASE WHEN (p.patient_type NOT IN ('STUDENT', 'FACULTY', 'FACULTY_DEPENDENT') OR p.patient_type IS NULL) AND v.roll_number IS NULL THEN 1 ELSE 0 END) as others_count,
+                        COUNT(*) as total_shift_visits
+                    FROM VISIT v
+                    LEFT JOIN PATIENT p ON p.patient_id = v.patient_id
+                    GROUP BY shift_num
+                    ORDER BY shift_num
+                    """
+                )
+            else:
+                cursor.execute(
+                    """
+                    SELECT 
+                        CASE 
+                            WHEN v.checked_in_at >= %s AND v.checked_in_at < %s THEN 1
+                            WHEN v.checked_in_at >= %s AND v.checked_in_at < %s THEN 2
+                            ELSE 3
+                        END as shift_num,
+                        SUM(CASE WHEN p.patient_type = 'STUDENT' OR (p.patient_type IS NULL AND v.roll_number IS NOT NULL) THEN 1 ELSE 0 END) as student_count,
+                        SUM(CASE WHEN p.patient_type IN ('FACULTY', 'FACULTY_DEPENDENT') THEN 1 ELSE 0 END) as faculty_count,
+                        SUM(CASE WHEN (p.patient_type NOT IN ('STUDENT', 'FACULTY', 'FACULTY_DEPENDENT') OR p.patient_type IS NULL) AND v.roll_number IS NULL THEN 1 ELSE 0 END) as others_count,
+                        COUNT(*) as total_shift_visits
+                    FROM VISIT v
+                    LEFT JOIN PATIENT p ON p.patient_id = v.patient_id
+                    WHERE v.checked_in_at >= %s AND v.checked_in_at < %s
+                    GROUP BY shift_num
+                    ORDER BY shift_num
+                    """,
+                    (start_dt, s1_end, s1_end, s2_end, start_dt, end_dt),
+                )
+            shift_demo_rows = cursor.fetchall() or []
+            shift_demo_map = {int(r["shift_num"]): r for r in shift_demo_rows}
+            shift_demographics = [
+                {
+                    "shift_num": 1,
+                    "name": "Shift 1 (Morning)",
+                    "hours": "06:00 – 14:00",
+                    "student_count": int(shift_demo_map.get(1, {}).get("student_count") or 0),
+                    "faculty_count": int(shift_demo_map.get(1, {}).get("faculty_count") or 0),
+                    "others_count": int(shift_demo_map.get(1, {}).get("others_count") or 0),
+                    "total": int(shift_demo_map.get(1, {}).get("total_shift_visits") or 0),
+                },
+                {
+                    "shift_num": 2,
+                    "name": "Shift 2 (Evening)",
+                    "hours": "14:00 – 20:00",
+                    "student_count": int(shift_demo_map.get(2, {}).get("student_count") or 0),
+                    "faculty_count": int(shift_demo_map.get(2, {}).get("faculty_count") or 0),
+                    "others_count": int(shift_demo_map.get(2, {}).get("others_count") or 0),
+                    "total": int(shift_demo_map.get(2, {}).get("total_shift_visits") or 0),
+                },
+                {
+                    "shift_num": 3,
+                    "name": "Shift 3 (Night)",
+                    "hours": "20:00 – 06:00 (+1d)",
+                    "student_count": int(shift_demo_map.get(3, {}).get("student_count") or 0),
+                    "faculty_count": int(shift_demo_map.get(3, {}).get("faculty_count") or 0),
+                    "others_count": int(shift_demo_map.get(3, {}).get("others_count") or 0),
+                    "total": int(shift_demo_map.get(3, {}).get("total_shift_visits") or 0),
+                },
+            ]
+
             # 3. DOCTOR CONSULTATIONS DISTRIBUTION
             if is_all_time:
                 cursor.execute(
@@ -646,6 +719,7 @@ def aggregate_daily_analytics(target_date: Optional[Any] = None, scope: str = "d
         },
         "visitor_distribution": visitor_distribution,
         "shift_activity": shift_activity,
+        "shift_demographics": shift_demographics,
         "top_diagnoses": top_diagnoses,
         "total_diagnoses": total_diagnoses,
         "daily_comparison": {
