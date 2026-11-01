@@ -1,5 +1,7 @@
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo, useRef } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
+import { jsPDF } from 'jspdf'
+import html2canvas from 'html2canvas'
 import { useAuth } from '../../context/AuthContext'
 import { fetchAdminAnalytics } from '../../api'
 import {
@@ -89,6 +91,7 @@ export default function AdminAnalyticsDashboard() {
 
   // Data states
   const [analytics, setAnalytics] = useState(null)
+  const dashboardRef = useRef(null)
 
   // PDF Export States
   const [exportingPdf, setExportingPdf] = useState(false)
@@ -144,7 +147,7 @@ export default function AdminAnalyticsDashboard() {
     }
   }
 
-  // Authenticated PDF Generation and Direct Download
+  // Download Authentic Actual Dashboard PDF
   const handleExportPDF = async () => {
     if (exportingPdf) return
     setExportingPdf(true)
@@ -179,7 +182,7 @@ export default function AdminAnalyticsDashboard() {
       const blobUrl = window.URL.createObjectURL(blob)
       const link = document.createElement('a')
       link.href = blobUrl
-      link.download = `CampusCare_Analytics_${targetParam}.pdf`
+      link.download = `CampusCare_Actual_Dashboard_${targetParam}.pdf`
       document.body.appendChild(link)
       link.click()
       document.body.removeChild(link)
@@ -188,7 +191,7 @@ export default function AdminAnalyticsDashboard() {
       setPdfSuccess(true)
       setTimeout(() => setPdfSuccess(false), 3500)
     } catch (err) {
-      console.error('PDF export error:', err)
+      console.error('Actual dashboard PDF export error:', err)
       alert(`Unable to export PDF: ${err.message}`)
     } finally {
       setExportingPdf(false)
@@ -309,16 +312,6 @@ export default function AdminAnalyticsDashboard() {
               Overview
             </button>
             <button
-              onClick={() => scrollToSection('disease-chart-section', 'disease-chart')}
-              className={`px-3.5 sm:px-5 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer ${
-                activeNav === 'disease-chart'
-                  ? 'bg-[#078653] text-white shadow-sm'
-                  : 'text-[#858B87] hover:text-[#202421] hover:bg-[#F3F4F3]'
-              }`}
-            >
-              Disease Distribution
-            </button>
-            <button
               onClick={() => scrollToSection('shift-demographics-section', 'shift-demographics')}
               className={`px-3.5 sm:px-5 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer ${
                 activeNav === 'shift-demographics'
@@ -327,6 +320,16 @@ export default function AdminAnalyticsDashboard() {
               }`}
             >
               Shift Demographics
+            </button>
+            <button
+              onClick={() => scrollToSection('disease-chart-section', 'disease-chart')}
+              className={`px-3.5 sm:px-5 py-1.5 rounded-full text-xs font-semibold transition-all cursor-pointer ${
+                activeNav === 'disease-chart'
+                  ? 'bg-[#078653] text-white shadow-sm'
+                  : 'text-[#858B87] hover:text-[#202421] hover:bg-[#F3F4F3]'
+              }`}
+            >
+              Disease Distribution
             </button>
             <button
               onClick={() => scrollToSection('clinical-table-section', 'table')}
@@ -425,20 +428,7 @@ export default function AdminAnalyticsDashboard() {
               <LayoutGrid className="w-4 h-4" />
             </button>
 
-            {/* 2. Disease Distribution Chart Feature */}
-            <button
-              onClick={() => scrollToSection('disease-chart-section', 'disease-chart')}
-              className={`w-10 h-10 rounded-2xl flex items-center justify-center transition-all cursor-pointer ${
-                activeNav === 'disease-chart'
-                  ? 'bg-[#078653] text-white shadow-sm'
-                  : 'text-[#858B87] hover:text-[#078653] hover:bg-[#E5F4EC]'
-              }`}
-              title="Disease Distribution Chart"
-            >
-              <PieChart className="w-4 h-4" />
-            </button>
-
-            {/* 3. Shift Demographics Feature */}
+            {/* 2. Shift Demographics Feature (FIRST) */}
             <button
               onClick={() => scrollToSection('shift-demographics-section', 'shift-demographics')}
               className={`w-10 h-10 rounded-2xl flex items-center justify-center transition-all cursor-pointer ${
@@ -449,6 +439,19 @@ export default function AdminAnalyticsDashboard() {
               title="Shift Demographics (Student, Faculty, Others)"
             >
               <Users className="w-4 h-4" />
+            </button>
+
+            {/* 3. Disease Distribution Chart Feature (SECOND) */}
+            <button
+              onClick={() => scrollToSection('disease-chart-section', 'disease-chart')}
+              className={`w-10 h-10 rounded-2xl flex items-center justify-center transition-all cursor-pointer ${
+                activeNav === 'disease-chart'
+                  ? 'bg-[#078653] text-white shadow-sm'
+                  : 'text-[#858B87] hover:text-[#078653] hover:bg-[#E5F4EC]'
+              }`}
+              title="Disease Distribution Chart"
+            >
+              <PieChart className="w-4 h-4" />
             </button>
 
             {/* 4. Diagnostic Registry Table */}
@@ -507,7 +510,7 @@ export default function AdminAnalyticsDashboard() {
         </aside>
 
         {/* ── 3. MAIN DASHBOARD CONTENT AREA ───────────────────────────── */}
-        <main className="flex-1 min-w-0 space-y-6">
+        <main ref={dashboardRef} id="actual-dashboard-container" className="flex-1 min-w-0 space-y-6">
           {/* Header Row with Clean Scope Switcher */}
           <div id="top" className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
@@ -703,143 +706,7 @@ export default function AdminAnalyticsDashboard() {
             </div>
           </div>
 
-          {/* ── 5. FEATURE 1: DISEASE DISTRIBUTION CHART ───────────────── */}
-          <section
-            id="disease-chart-section"
-            className="bg-white rounded-3xl p-6 sm:p-7 border border-[#ECEFEC] shadow-sm space-y-5 scroll-mt-6"
-          >
-            {/* Header & Chart View Toggle */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-[#ECEFEC]">
-              <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-2xl bg-[#E5F4EC] text-[#078653] flex items-center justify-center shrink-0">
-                  <PieChart className="w-4 h-4" />
-                </div>
-                <div>
-                  <h2 className="text-base font-bold text-[#202421]">Disease Distribution Chart</h2>
-                  <p className="text-[11px] text-[#858B87]">
-                    Distribution of clinical impressions ({totalDiagnosesCount} consultations)
-                  </p>
-                </div>
-              </div>
-
-              {/* View Switcher: Conditions vs Categories */}
-              <div className="flex items-center bg-[#F3F4F3] p-1 rounded-full text-xs font-semibold self-start sm:self-auto">
-                <button
-                  onClick={() => setDiseaseChartTab('conditions')}
-                  className={`px-3 py-1 rounded-full transition-all cursor-pointer ${
-                    diseaseChartTab === 'conditions'
-                      ? 'bg-[#078653] text-white shadow-xs'
-                      : 'text-[#858B87] hover:text-[#202421]'
-                  }`}
-                >
-                  Clinical Conditions ({masterDiagnosesList.length})
-                </button>
-                <button
-                  onClick={() => setDiseaseChartTab('categories')}
-                  className={`px-3 py-1 rounded-full transition-all cursor-pointer ${
-                    diseaseChartTab === 'categories'
-                      ? 'bg-[#078653] text-white shadow-xs'
-                      : 'text-[#858B87] hover:text-[#202421]'
-                  }`}
-                >
-                  Disease Categories ({categoryStats.length})
-                </button>
-              </div>
-            </div>
-
-            {/* Chart Body */}
-            {diseaseChartTab === 'conditions' ? (
-              /* TAB 1: Specific Conditions Horizontal Distribution Bars */
-              <div className="space-y-3 pt-1">
-                {masterDiagnosesList.length > 0 ? (
-                  masterDiagnosesList.map((d, idx) => {
-                    const theme = CATEGORY_THEMES[d.category] || CATEGORY_THEMES['General OPD']
-                    const widthPct = Math.max((d.count / maxDiagnosisCount) * 100, 6)
-                    return (
-                      <div key={idx} className="group">
-                        <div className="flex items-center justify-between text-xs mb-1">
-                          <div className="flex items-center gap-2 min-w-0 pr-2">
-                            <span className="w-5 h-5 rounded-full bg-[#F3F4F3] text-[#858B87] font-bold text-[10px] flex items-center justify-center shrink-0">
-                              {idx + 1}
-                            </span>
-                            <span className="font-semibold text-[#202421] truncate">{d.name}</span>
-                            <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full hidden sm:inline-block ${theme.badge}`}>
-                              {d.category}
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-2 shrink-0">
-                            <span className="font-extrabold text-[#202421]">{d.count}</span>
-                            <span className="text-[11px] text-[#858B87] w-12 text-right">{d.percentage}%</span>
-                          </div>
-                        </div>
-                        {/* Bar */}
-                        <div className="w-full bg-[#F3F4F3] h-2.5 rounded-full overflow-hidden">
-                          <div
-                            style={{ width: `${widthPct}%` }}
-                            className={`h-full rounded-full transition-all duration-500 ${theme.bar}`}
-                          />
-                        </div>
-                      </div>
-                    )
-                  })
-                ) : (
-                  <div className="text-center py-8 text-xs text-[#858B87] italic">
-                    No clinical diagnoses logged for this reporting selection.
-                  </div>
-                )}
-              </div>
-            ) : (
-              /* TAB 2: Categorical Distribution */
-              <div className="space-y-4 pt-1">
-                {/* Segmented Combined Progress Bar */}
-                <div className="w-full h-4 rounded-full overflow-hidden flex bg-[#ECEFEC] shadow-inner">
-                  {categoryStats.map((cat, idx) => {
-                    const theme = CATEGORY_THEMES[cat.category] || CATEGORY_THEMES['General OPD']
-                    return (
-                      <div
-                        key={idx}
-                        style={{ width: `${cat.percentage}%` }}
-                        className={`${theme.bar} transition-all duration-500 hover:opacity-90 relative group`}
-                        title={`${cat.category}: ${cat.count} cases (${cat.percentage}%)`}
-                      />
-                    )
-                  })}
-                </div>
-
-                {/* Categories Grid */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-2">
-                  {categoryStats.map((cat, idx) => {
-                    const theme = CATEGORY_THEMES[cat.category] || CATEGORY_THEMES['General OPD']
-                    const widthPct = Math.max((cat.count / maxCategoryCount) * 100, 6)
-                    return (
-                      <div key={idx} className="p-3 rounded-2xl bg-[#F8FAF8] border border-[#ECEFEC] flex flex-col justify-between">
-                        <div className="flex items-center justify-between mb-2">
-                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${theme.badge}`}>
-                            {cat.category}
-                          </span>
-                          <span className="text-xs font-bold text-[#202421]">{cat.count} cases</span>
-                        </div>
-                        <div className="space-y-1">
-                          <div className="flex justify-between text-[11px] text-[#858B87]">
-                            <span>Share</span>
-                            <span className="font-semibold text-[#202421]">{cat.percentage}%</span>
-                          </div>
-                          <div className="w-full bg-[#E6EAE7] h-2 rounded-full overflow-hidden">
-                            <div
-                              style={{ width: `${widthPct}%` }}
-                              className={`h-full rounded-full ${theme.bar}`}
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
-            )}
-          </section>
-
-          {/* ── 6. FEATURE 2: SHIFT-WISE STUDENT, FACULTY, OTHERS DISTRIBUTION ─── */}
+          {/* ── 5. SHIFT-WISE STUDENT, FACULTY, OTHERS DISTRIBUTION ─── */}
           <section
             id="shift-demographics-section"
             className="bg-white rounded-3xl p-6 sm:p-7 border border-[#ECEFEC] shadow-sm space-y-6 scroll-mt-6"
@@ -1027,6 +894,142 @@ export default function AdminAnalyticsDashboard() {
                 </div>
               </div>
             </div>
+          </section>
+
+          {/* ── 6. DISEASE DISTRIBUTION CHART ───────────────── */}
+          <section
+            id="disease-chart-section"
+            className="bg-white rounded-3xl p-6 sm:p-7 border border-[#ECEFEC] shadow-sm space-y-5 scroll-mt-6"
+          >
+            {/* Header & Chart View Toggle */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-[#ECEFEC]">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-2xl bg-[#E5F4EC] text-[#078653] flex items-center justify-center shrink-0">
+                  <PieChart className="w-4 h-4" />
+                </div>
+                <div>
+                  <h2 className="text-base font-bold text-[#202421]">Disease Distribution Chart</h2>
+                  <p className="text-[11px] text-[#858B87]">
+                    Distribution of clinical impressions ({totalDiagnosesCount} consultations)
+                  </p>
+                </div>
+              </div>
+
+              {/* View Switcher: Conditions vs Categories */}
+              <div className="flex items-center bg-[#F3F4F3] p-1 rounded-full text-xs font-semibold self-start sm:self-auto">
+                <button
+                  onClick={() => setDiseaseChartTab('conditions')}
+                  className={`px-3 py-1 rounded-full transition-all cursor-pointer ${
+                    diseaseChartTab === 'conditions'
+                      ? 'bg-[#078653] text-white shadow-xs'
+                      : 'text-[#858B87] hover:text-[#202421]'
+                  }`}
+                >
+                  Clinical Conditions ({masterDiagnosesList.length})
+                </button>
+                <button
+                  onClick={() => setDiseaseChartTab('categories')}
+                  className={`px-3 py-1 rounded-full transition-all cursor-pointer ${
+                    diseaseChartTab === 'categories'
+                      ? 'bg-[#078653] text-white shadow-xs'
+                      : 'text-[#858B87] hover:text-[#202421]'
+                  }`}
+                >
+                  Disease Categories ({categoryStats.length})
+                </button>
+              </div>
+            </div>
+
+            {/* Chart Body */}
+            {diseaseChartTab === 'conditions' ? (
+              /* TAB 1: Specific Conditions Horizontal Distribution Bars */
+              <div className="space-y-3 pt-1">
+                {masterDiagnosesList.length > 0 ? (
+                  masterDiagnosesList.map((d, idx) => {
+                    const theme = CATEGORY_THEMES[d.category] || CATEGORY_THEMES['General OPD']
+                    const widthPct = Math.max((d.count / maxDiagnosisCount) * 100, 6)
+                    return (
+                      <div key={idx} className="group">
+                        <div className="flex items-center justify-between text-xs mb-1">
+                          <div className="flex items-center gap-2 min-w-0 pr-2">
+                            <span className="w-5 h-5 rounded-full bg-[#F3F4F3] text-[#858B87] font-bold text-[10px] flex items-center justify-center shrink-0">
+                              {idx + 1}
+                            </span>
+                            <span className="font-semibold text-[#202421] truncate">{d.name}</span>
+                            <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full hidden sm:inline-block ${theme.badge}`}>
+                              {d.category}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <span className="font-extrabold text-[#202421]">{d.count}</span>
+                            <span className="text-[11px] text-[#858B87] w-12 text-right">{d.percentage}%</span>
+                          </div>
+                        </div>
+                        {/* Bar */}
+                        <div className="w-full bg-[#F3F4F3] h-2.5 rounded-full overflow-hidden">
+                          <div
+                            style={{ width: `${widthPct}%` }}
+                            className={`h-full rounded-full transition-all duration-500 ${theme.bar}`}
+                          />
+                        </div>
+                      </div>
+                    )
+                  })
+                ) : (
+                  <div className="text-center py-8 text-xs text-[#858B87] italic">
+                    No clinical diagnoses logged for this reporting selection.
+                  </div>
+                )}
+              </div>
+            ) : (
+              /* TAB 2: Categorical Distribution */
+              <div className="space-y-4 pt-1">
+                {/* Segmented Combined Progress Bar */}
+                <div className="w-full h-4 rounded-full overflow-hidden flex bg-[#ECEFEC] shadow-inner">
+                  {categoryStats.map((cat, idx) => {
+                    const theme = CATEGORY_THEMES[cat.category] || CATEGORY_THEMES['General OPD']
+                    return (
+                      <div
+                        key={idx}
+                        style={{ width: `${cat.percentage}%` }}
+                        className={`${theme.bar} transition-all duration-500 hover:opacity-90 relative group`}
+                        title={`${cat.category}: ${cat.count} cases (${cat.percentage}%)`}
+                      />
+                    )
+                  })}
+                </div>
+
+                {/* Categories Grid */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-2">
+                  {categoryStats.map((cat, idx) => {
+                    const theme = CATEGORY_THEMES[cat.category] || CATEGORY_THEMES['General OPD']
+                    const widthPct = Math.max((cat.count / maxCategoryCount) * 100, 6)
+                    return (
+                      <div key={idx} className="p-3 rounded-2xl bg-[#F8FAF8] border border-[#ECEFEC] flex flex-col justify-between">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${theme.badge}`}>
+                            {cat.category}
+                          </span>
+                          <span className="text-xs font-bold text-[#202421]">{cat.count} cases</span>
+                        </div>
+                        <div className="space-y-1">
+                          <div className="flex justify-between text-[11px] text-[#858B87]">
+                            <span>Share</span>
+                            <span className="font-semibold text-[#202421]">{cat.percentage}%</span>
+                          </div>
+                          <div className="w-full bg-[#E6EAE7] h-2 rounded-full overflow-hidden">
+                            <div
+                              style={{ width: `${widthPct}%` }}
+                              className={`h-full rounded-full ${theme.bar}`}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
           </section>
 
           {/* ── 7. DETAILED CLINICAL DIAGNOSTIC REGISTRY (Streamlined Table) ─── */}

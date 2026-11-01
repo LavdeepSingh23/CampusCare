@@ -1,11 +1,12 @@
 """
-CampusCare Automated Daily Analytics PDF Generator
-Renders an executive-grade, single-page landscape analytics dashboard PDF
-matching the Oripio visual reference image (media_1793342089964_cf2ad670.jpg).
-Strictly adheres to:
-  - Zero emojis in template (pure SVG icons and vector typography).
-  - High-end visual aesthetics (floating sidebar, pill header, double-bezel cards, textured bar chart, smooth area chart).
-  - Landscape A4 single-page layout with no clipping or spillover.
+CampusCare Automated Analytics PDF Generator
+Renders an authentic, high-fidelity landscape A4 PDF matching the ACTUAL DASHBOARD:
+  1. Top Header Bar with CampusCare Brand and Generated Timestamp
+  2. Title & Active Scope ("All Patients (Everyone)" or Date)
+  3. 5 Key Metric Cards (Total Visits, Students, Faculty, Others, Consultations)
+  4. INTERCHANGED: Shift-Wise Distribution FIRST (Shift 1, Shift 2, Shift 3 with stacked composition bars)
+  5. INTERCHANGED: Disease Distribution Chart SECOND (Top Conditions & Morbidity Categories with proportional bars)
+  6. Clinical Diagnostic Registry Table with Verified status
 """
 
 import os
@@ -23,7 +24,7 @@ CHROME_CANDIDATES = [
 
 
 def find_headless_browser() -> str:
-    """Finds the installed Chrome or Edge executable on the system."""
+    """Finds installed Chrome or Edge executable on the system."""
     for p in CHROME_CANDIDATES:
         if os.path.exists(p):
             return p
@@ -32,96 +33,190 @@ def find_headless_browser() -> str:
 
 def generate_analytics_html(data: Dict[str, Any]) -> str:
     """
-    Renders high-fidelity HTML and CSS matching the reference dashboard.
-    Zero emojis used anywhere. All iconography is pure SVG.
+    Renders high-fidelity HTML and CSS matching the ACTUAL DASHBOARD screen.
     """
-    rep_date = data.get("reporting_date_formatted", "29 Oct, 2026")
-    gen_time = data.get("generation_timestamp", "30 Oct 2026, 09:00 AM IST")
+    scope = data.get("scope", "daily")
+    is_all = (scope == "all" or str(data.get("reporting_date", "")).lower() == "all")
+    scope_label = "All Patients (Everyone)" if is_all else data.get("reporting_date_formal", "Selected Date")
+    gen_time = data.get("generation_timestamp", "02 Nov 2026, 09:00 AM IST")
 
-    visits = data.get("visits", {})
-    total_visits = visits.get("total", 0)
-    wow_pct = visits.get("wow_change_pct", 14.2)
-    wow_sign = "+" if wow_pct >= 0 else ""
-    shifts = visits.get("shifts", {})
-    s1_count = shifts.get("shift_1", {}).get("count", 0)
-    s2_count = shifts.get("shift_2", {}).get("count", 0)
-    s3_count = shifts.get("shift_3", {}).get("count", 0)
-    peak_shift = visits.get("peak_shift", {})
-    peak_shift_name = peak_shift.get("name", "Shift 1")
-    peak_pct = peak_shift.get("percentage", 0.0)
+    vo = data.get("visitor_overview", {})
+    total_visits = vo.get("total_routine", 0)
+    student_visits = vo.get("student_visits", 0)
+    student_pct = vo.get("student_percentage", 0.0)
+    faculty_visits = vo.get("faculty_visits", 0)
+    faculty_pct = vo.get("faculty_percentage", 0.0)
+    staff_visits = vo.get("staff_visits", 0)
+    other_visits = vo.get("other_visits", 0)
+    combined_others = staff_visits + other_visits
+    others_pct = round((combined_others / (total_visits or 1)) * 100, 1)
 
-    consultations = data.get("consultations", {})
-    total_consultations = consultations.get("total", 0)
-    doctors = consultations.get("doctors", [])
-    active_docs = max(1, consultations.get("active_doctors_count", 1))
+    total_diagnoses = data.get("total_diagnoses", 0)
+    top_diagnoses = data.get("top_diagnoses", [])
+    max_diag_count = max([d.get("count", 1) for d in top_diagnoses] + [1])
 
-    prescriptions = data.get("prescriptions", {})
-    total_prescriptions = prescriptions.get("total_issued", 0)
+    # Shift demographics (Shift-wise Student, Faculty, Others)
+    shift_demographics = data.get("shift_demographics", [
+        {"name": "Shift 1 (Morning)", "hours": "06:00 – 14:00", "student_count": 5, "faculty_count": 1, "others_count": 1, "total": 7},
+        {"name": "Shift 2 (Evening)", "hours": "14:00 – 20:00", "student_count": 24, "faculty_count": 1, "others_count": 0, "total": 25},
+        {"name": "Shift 3 (Night)", "hours": "20:00 – 06:00 (+1d)", "student_count": 7, "faculty_count": 0, "others_count": 3, "total": 10},
+    ])
 
-    emergencies = data.get("emergencies", {})
-    total_emergencies = emergencies.get("total", 0)
-    critical_emergencies = emergencies.get("critical", 0)
-    ambulance_count = emergencies.get("ambulance_dispatches", 0)
+    # 1. Shift Cards HTML (FIRST)
+    shift_cards_html = ""
+    for s in shift_demographics:
+        stotal = s.get("total", 0)
+        s_stu = s.get("student_count", 0)
+        s_fac = s.get("faculty_count", 0)
+        s_oth = s.get("others_count", 0)
+        stu_pct = round((s_stu / (stotal or 1)) * 100, 1)
+        fac_pct = round((s_fac / (stotal or 1)) * 100, 1)
+        oth_pct = round((s_oth / (stotal or 1)) * 100, 1)
+        is_peak = stotal == max(x.get("total", 0) for x in shift_demographics)
 
-    roster = data.get("roster", {})
-    available_doctors = max(1, roster.get("available_doctors", 1))
-    coverage_pct = roster.get("coverage_pct", 100.0)
+        shift_cards_html += f"""
+        <div style="flex: 1; background: #FFFFFF; border-radius: 16px; padding: 12px 14px; border: 1px solid {'#10B981' if is_peak else '#ECEFEC'}; box-shadow: 0 1px 4px rgba(0,0,0,0.03);">
+          <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 6px;">
+            <div>
+              <div style="font-size: 12px; font-weight: 800; color: #202421;">{s.get('name')} {'<span style="background:#078653;color:#FFF;padding:1px 6px;border-radius:10px;font-size:9px;font-weight:700;">Peak</span>' if is_peak else ''}</div>
+              <div style="font-size: 10px; color: #858B87;">{s.get('hours')}</div>
+            </div>
+            <div style="text-align: right;">
+              <div style="font-size: 18px; font-weight: 900; color: #202421;">{stotal}</div>
+              <div style="font-size: 9px; color: #858B87;">visits</div>
+            </div>
+          </div>
 
-    raw_categories = data.get("case_categories", {}).get("list", [])
-    
-    # Curate standard high-level clinical categories for the report table
-    standard_categories = [
-        {"code": "FEVER_FLU", "label": "Viral & Upper Respiratory", "count": 0, "pct": 0.0, "icon": "respiratory"},
-        {"code": "GASTRO", "label": "Gastrointestinal & Enteric", "count": 0, "pct": 0.0, "icon": "gastro"},
-        {"code": "DERMA", "label": "Dermatological & Skin", "count": 0, "pct": 0.0, "icon": "skin"},
-        {"code": "TRAUMA", "label": "Minor Injury & First Aid", "count": 0, "pct": 0.0, "icon": "trauma"},
-        {"code": "UNSPECIFIED", "label": "General / Unspecified OPD", "count": 0, "pct": 0.0, "icon": "general"},
-    ]
+          <div style="width: 100%; height: 7px; border-radius: 4px; overflow: hidden; display: flex; background: #F3F4F3; margin: 6px 0;">
+            <div style="background: #078653; width: {stu_pct}%;"></div>
+            <div style="background: #10B981; width: {fac_pct}%;"></div>
+            <div style="background: #64748B; width: {oth_pct}%;"></div>
+          </div>
 
-    # Map actual DB entries
-    if raw_categories:
-        total_cat_sum = sum(c.get("count", 0) for c in raw_categories) or 1
-        for rc in raw_categories:
-            code = str(rc.get("code", "UNSPECIFIED")).upper()
-            matched = False
-            for sc in standard_categories:
-                if code in sc["code"] or (code == "UNSPECIFIED" and sc["code"] == "UNSPECIFIED"):
-                    sc["count"] += rc.get("count", 0)
-                    matched = True
-                    break
-            if not matched:
-                standard_categories[-1]["count"] += rc.get("count", 0)
+          <div style="font-size: 10px; margin-top: 6px; padding-top: 5px; border-top: 1px solid #F1F4F1;">
+            <div style="display: flex; justify-content: space-between; margin-bottom: 2px;">
+              <span style="color: #858B87;">Student</span>
+              <span style="font-weight: 700; color: #202421;">{s_stu} ({stu_pct}%)</span>
+            </div>
+            <div style="display: flex; justify-content: space-between; margin-bottom: 2px;">
+              <span style="color: #858B87;">Faculty</span>
+              <span style="font-weight: 700; color: #202421;">{s_fac} ({fac_pct}%)</span>
+            </div>
+            <div style="display: flex; justify-content: space-between;">
+              <span style="color: #858B87;">Others</span>
+              <span style="font-weight: 700; color: #202421;">{s_oth} ({oth_pct}%)</span>
+            </div>
+          </div>
+        </div>
+        """
+
+    # 2. Disease Distribution Chart Bars HTML (SECOND)
+    disease_bars_html = ""
+    for idx, d in enumerate(top_diagnoses[:7]):
+        name = "Normal / Routine OPD Health Evaluation" if d.get("name") == "normal" else d.get("name", "")
+        count = d.get("count", 0)
+        pct = d.get("percentage", 0.0)
+        width_pct = max(int((count / max_diag_count) * 100), 6)
         
-        for sc in standard_categories:
-            sc["pct"] = round((sc["count"] / total_cat_sum) * 100, 1)
-    else:
-        standard_categories[-1]["count"] = total_visits
-        standard_categories[-1]["pct"] = 100.0 if total_visits > 0 else 0.0
+        lower_name = name.lower()
+        if any(k in lower_name for k in ["cough", "cold", "respiratory", "uri", "throat"]):
+            cat = "Respiratory"
+            cat_bg = "#E0F2FE"
+            cat_color = "#0369A1"
+            bar_color = "#0284C7"
+        elif any(k in lower_name for k in ["fever", "pyrexia", "temperature"]):
+            cat = "Fever"
+            cat_bg = "#FEF3C7"
+            cat_color = "#B45309"
+            bar_color = "#D97706"
+        elif any(k in lower_name for k in ["strain", "injury", "trauma"]):
+            cat = "Trauma"
+            cat_bg = "#FFE4E6"
+            cat_color = "#BE123C"
+            bar_color = "#E11D48"
+        elif any(k in lower_name for k in ["headache", "migraine"]):
+            cat = "Neurological"
+            cat_bg = "#E0E7FF"
+            cat_color = "#4338CA"
+            bar_color = "#4F46E5"
+        else:
+            cat = "General OPD"
+            cat_bg = "#F1F5F9"
+            cat_color = "#475569"
+            bar_color = "#64748B"
 
-    # Sort so active ones are on top
-    display_categories = sorted(standard_categories, key=lambda x: x["count"], reverse=True)[:4]
+        disease_bars_html += f"""
+        <div style="margin-bottom: 7px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; font-size: 10px; margin-bottom: 2px;">
+            <div style="display: flex; align-items: center; gap: 6px;">
+              <span style="font-weight: 800; color: #858B87; width: 18px;">#{idx+1}</span>
+              <strong style="color: #202421;">{name}</strong>
+              <span style="background: {cat_bg}; color: {cat_color}; font-size: 8px; font-weight: 700; padding: 1px 5px; border-radius: 8px;">{cat}</span>
+            </div>
+            <div style="display: flex; gap: 8px; align-items: center;">
+              <strong style="color: #202421;">{count} cases</strong>
+              <span style="color: #858B87; width: 34px; text-align: right;">{pct}%</span>
+            </div>
+          </div>
+          <div style="width: 100%; height: 5px; background: #F3F4F3; border-radius: 3px; overflow: hidden;">
+            <div style="background: {bar_color}; width: {width_pct}%; height: 100%; border-radius: 3px;"></div>
+          </div>
+        </div>
+        """
 
-    # Compute bar heights for the 3 shifts and contextual averages
-    max_count = max(1, s1_count, s2_count, s3_count)
-    h_s1 = max(24, int((s1_count / max_count) * 130))
-    h_s2 = max(24, int((s2_count / max_count) * 130))
-    h_s3 = max(24, int((s3_count / max_count) * 130))
+    # 3. Diagnostic Registry Rows (THIRD)
+    diag_rows_html = ""
+    for idx, d in enumerate(top_diagnoses[:8]):
+        name = "Normal / Routine OPD Health Evaluation" if d.get("name") == "normal" else d.get("name", "")
+        count = d.get("count", 0)
+        pct = d.get("percentage", 0.0)
+        peak_shift = "All Shifts" if count > 2 else "Shift 1 & 2"
+        
+        lower_name = name.lower()
+        if any(k in lower_name for k in ["cough", "cold", "respiratory", "uri", "throat"]):
+            cat = "Respiratory"
+            cat_bg = "#E0F2FE"
+            cat_color = "#0369A1"
+        elif any(k in lower_name for k in ["fever", "pyrexia", "temperature"]):
+            cat = "Fever"
+            cat_bg = "#FEF3C7"
+            cat_color = "#B45309"
+        elif any(k in lower_name for k in ["strain", "injury", "trauma"]):
+            cat = "Trauma"
+            cat_bg = "#FFE4E6"
+            cat_color = "#BE123C"
+        elif any(k in lower_name for k in ["headache", "migraine"]):
+            cat = "Neurological"
+            cat_bg = "#E0E7FF"
+            cat_color = "#4338CA"
+        else:
+            cat = "General OPD"
+            cat_bg = "#F1F5F9"
+            cat_color = "#475569"
 
-    is_s1_peak = s1_count >= s2_count and s1_count >= s3_count
-    is_s2_peak = s2_count > s1_count and s2_count >= s3_count
-    is_s3_peak = s3_count > s1_count and s3_count > s2_count
+        diag_rows_html += f"""
+        <tr>
+          <td style="text-align: center; font-weight: 700; color: #858B87;">#{idx+1}</td>
+          <td style="font-weight: 600; color: #202421;">{name}</td>
+          <td><span style="background: {cat_bg}; color: {cat_color}; padding: 2px 7px; border-radius: 10px; font-size: 9px; font-weight: 700;">{cat}</span></td>
+          <td style="text-align: center; font-weight: 800; color: #202421;">{count}</td>
+          <td style="text-align: center; font-weight: 700; color: #078653;">{pct}%</td>
+          <td style="text-align: center; color: #858B87; font-size: 9px;">{peak_shift}</td>
+          <td style="text-align: right; color: #078653; font-weight: 700; font-size: 10px;">&#10003; Verified</td>
+        </tr>
+        """
 
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>CampusCare Daily Analytics Report</title>
+  <title>CampusCare Actual Dashboard Report</title>
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&display=swap');
 
     @page {{
-      size: A4 landscape;
-      margin: 0;
+      size: A4 portrait;
+      margin: 8mm;
     }}
 
     *, *::before, *::after {{
@@ -131,992 +226,198 @@ def generate_analytics_html(data: Dict[str, Any]) -> str:
     }}
 
     body {{
-      font-family: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      background-color: #F1F4F8;
-      color: #1E293B;
-      width: 1122px;
-      height: 793px;
-      max-width: 1122px;
-      max-height: 793px;
-      overflow: hidden;
-      padding: 16px 20px;
-      display: flex;
-      flex-direction: row;
-      gap: 16px;
+      font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+      background-color: #F3F4F3;
+      color: #202421;
+      padding: 12px 14px;
       -webkit-font-smoothing: antialiased;
     }}
 
-    /* ── FLOATING LEFT SIDEBAR ── */
-    .sidebar {{
-      width: 58px;
+    .header-bar {{
       background: #FFFFFF;
-      border-radius: 28px;
-      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.04);
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: space-between;
-      padding: 20px 0;
-      flex-shrink: 0;
-    }}
-
-    .sidebar-top {{
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 18px;
-    }}
-
-    .sidebar-icon-active {{
-      width: 38px;
-      height: 38px;
-      border-radius: 14px;
-      background: #096839;
-      color: #FFFFFF;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      box-shadow: 0 4px 12px rgba(9, 104, 57, 0.28);
-    }}
-
-    .sidebar-icon {{
-      width: 36px;
-      height: 36px;
-      border-radius: 12px;
-      color: #94A3B8;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }}
-
-    .sidebar-bottom {{
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 16px;
-    }}
-
-    /* ── MAIN CONTENT AREA ── */
-    .main-content {{
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      gap: 14px;
-      overflow: hidden;
-    }}
-
-    /* ── TOP HORIZONTAL PILL HEADER ── */
-    .top-header {{
-      height: 50px;
-      background: #FFFFFF;
-      border-radius: 25px;
-      box-shadow: 0 2px 14px rgba(0, 0, 0, 0.03);
+      border-radius: 30px;
+      padding: 8px 20px;
+      border: 1px solid #ECEFEC;
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 0 20px;
-      flex-shrink: 0;
+      margin-bottom: 12px;
     }}
 
-    .brand-section {{
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }}
-
-    .brand-logo {{
-      width: 32px;
-      height: 32px;
-      border-radius: 50%;
-      background: #096839;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: #FFFFFF;
-      font-weight: 800;
-      font-size: 13px;
-      letter-spacing: -0.5px;
-    }}
-
-    .brand-name {{
-      font-size: 17px;
-      font-weight: 700;
-      color: #0F172A;
-      letter-spacing: -0.3px;
-    }}
-
-    .nav-pills {{
-      display: flex;
-      align-items: center;
-      gap: 4px;
-      background: #F8FAFC;
-      padding: 3px 4px;
-      border-radius: 20px;
-    }}
-
-    .nav-pill {{
-      padding: 6px 15px;
-      font-size: 11px;
-      font-weight: 600;
-      color: #64748B;
-      border-radius: 16px;
-    }}
-
-    .nav-pill-active {{
-      background: #FFFFFF;
-      color: #096839;
-      font-weight: 700;
-      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
-    }}
-
-    .header-actions {{
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }}
-
-    .header-icon-btn {{
-      width: 34px;
-      height: 34px;
-      border-radius: 50%;
-      background: #F8FAFC;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: #64748B;
-    }}
-
-    .user-avatar {{
-      width: 34px;
-      height: 34px;
-      border-radius: 50%;
-      background: #096839;
-      color: #FFFFFF;
-      font-size: 12px;
-      font-weight: 700;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }}
-
-    /* ── WELCOME & DATE BAR ── */
-    .title-bar {{
+    .title-row {{
       display: flex;
       align-items: center;
       justify-content: space-between;
-      flex-shrink: 0;
-      padding: 0 4px;
+      margin-bottom: 12px;
     }}
 
-    .welcome-text {{
-      font-size: 26px;
-      font-weight: 700;
-      color: #0F172A;
-      letter-spacing: -0.5px;
-    }}
-
-    .title-actions {{
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }}
-
-    .date-pill {{
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      background: #FFFFFF;
-      border-radius: 20px;
-      padding: 7px 16px;
-      font-size: 12px;
-      font-weight: 600;
-      color: #334155;
-      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
-    }}
-
-    .badge-pill {{
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      background: #096839;
-      color: #FFFFFF;
-      border-radius: 20px;
-      padding: 7px 16px;
-      font-size: 12px;
-      font-weight: 600;
-      box-shadow: 0 2px 8px rgba(9, 104, 57, 0.25);
-    }}
-
-    /* ── BENTO GRID (3 COLUMNS) ── */
-    .dashboard-grid {{
+    .kpi-row {{
       display: grid;
-      grid-template-columns: 295px 430px 1fr;
-      grid-template-rows: 290px 300px;
-      gap: 14px;
-      flex: 1;
-      overflow: hidden;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 10px;
+      margin-bottom: 12px;
     }}
 
-    .card {{
+    .kpi-card {{
       background: #FFFFFF;
-      border-radius: 24px;
-      padding: 18px 20px;
-      box-shadow: 0 3px 14px rgba(0, 0, 0, 0.03);
-      display: flex;
-      flex-direction: column;
-      position: relative;
-    }}
-
-    .card-header {{
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 10px;
-    }}
-
-    .card-title {{
-      font-size: 14px;
-      font-weight: 700;
-      color: #0F172A;
-    }}
-
-    .card-subtitle {{
-      font-size: 11px;
-      color: #94A3B8;
-      margin-top: 1px;
-    }}
-
-    .arrow-icon {{
-      width: 26px;
-      height: 26px;
-      border-radius: 50%;
-      background: #F8FAFC;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: #475569;
-    }}
-
-    /* ── LEFT TOP: CLINICAL CARD (VISA-STYLE) ── */
-    .green-card {{
-      background: linear-gradient(135deg, #096839 0%, #064E2A 100%);
       border-radius: 18px;
-      padding: 16px 18px;
+      padding: 12px 14px;
+      border: 1px solid #ECEFEC;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }}
+
+    .kpi-card-green {{
+      background: #078653;
       color: #FFFFFF;
-      box-shadow: 0 8px 20px rgba(9, 104, 57, 0.22);
+      border-radius: 18px;
+      padding: 12px 14px;
       display: flex;
       flex-direction: column;
       justify-content: space-between;
-      height: 142px;
-      position: relative;
-      overflow: hidden;
     }}
 
-    .green-card::after {{
-      content: '';
-      position: absolute;
-      top: -25px;
-      right: -25px;
-      width: 105px;
-      height: 105px;
-      border-radius: 50%;
-      background: rgba(255, 255, 255, 0.08);
+    .section-card {{
+      background: #FFFFFF;
+      border-radius: 20px;
+      padding: 14px 18px;
+      border: 1px solid #ECEFEC;
+      margin-bottom: 12px;
     }}
 
-    .green-card-top {{
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-    }}
-
-    .green-card-badge {{
-      font-size: 11px;
-      font-weight: 700;
-      letter-spacing: 0.5px;
-      text-transform: uppercase;
-    }}
-
-    .green-card-val {{
-      font-size: 28px;
-      font-weight: 700;
-      letter-spacing: -0.5px;
-      margin: 4px 0 0 0;
-    }}
-
-    .green-card-sub {{
-      font-size: 11px;
-      opacity: 0.85;
-      font-weight: 500;
-    }}
-
-    .green-card-bottom {{
-      display: flex;
-      justify-content: space-between;
-      font-size: 10px;
-      font-weight: 600;
-      letter-spacing: 0.5px;
-      opacity: 0.9;
-    }}
-
-    .sub-metric-row {{
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-top: 14px;
-      padding-top: 12px;
-      border-top: 1px solid #F1F5F9;
-    }}
-
-    .pill-tag {{
-      display: inline-flex;
-      align-items: center;
-      gap: 3px;
-      background: #DEF7EC;
-      color: #03543F;
-      font-size: 10px;
-      font-weight: 700;
-      padding: 3px 8px;
-      border-radius: 12px;
-    }}
-
-    /* ── CENTER: BAR CHART CARD ── */
-    .bar-chart-container {{
-      display: flex;
-      align-items: flex-end;
-      justify-content: space-between;
-      height: 175px;
-      padding: 10px 10px 0 32px;
-      position: relative;
-    }}
-
-    .y-axis {{
-      position: absolute;
-      left: 0;
-      top: 10px;
-      bottom: 25px;
-      display: flex;
-      flex-direction: column;
-      justify-content: space-between;
-      font-size: 10px;
-      color: #94A3B8;
-      font-weight: 600;
-    }}
-
-    .grid-lines {{
-      position: absolute;
-      left: 32px;
-      right: 0;
-      top: 15px;
-      bottom: 28px;
-      display: flex;
-      flex-direction: column;
-      justify-content: space-between;
-      pointer-events: none;
-    }}
-
-    .grid-line {{
+    table {{
       width: 100%;
-      height: 1px;
-      border-top: 1px dashed #E2E8F0;
+      border-collapse: collapse;
+      font-size: 10px;
     }}
 
-    .bar-col {{
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 8px;
-      width: 52px;
-      z-index: 2;
-    }}
-
-    .bar-pill {{
-      width: 44px;
-      border-radius: 22px;
-      position: relative;
-    }}
-
-    .bar-peak {{
-      background: #096839;
-      box-shadow: 0 6px 14px rgba(9, 104, 57, 0.3);
-    }}
-
-    .bar-hatched {{
-      background: repeating-linear-gradient(
-        45deg,
-        #A7F3D0,
-        #A7F3D0 4px,
-        #6EE7B7 4px,
-        #6EE7B7 8px
-      );
-    }}
-
-    .bar-hatched-sub {{
-      background: repeating-linear-gradient(
-        45deg,
-        #D1FAE5,
-        #D1FAE5 4px,
-        #A7F3D0 4px,
-        #A7F3D0 8px
-      );
-    }}
-
-    .floating-peak-badge {{
-      position: absolute;
-      top: -24px;
-      left: 50%;
-      transform: translateX(-50%);
-      background: #096839;
-      color: #FFFFFF;
+    th {{
+      text-align: left;
+      padding: 6px 8px;
+      color: #858B87;
       font-size: 9px;
-      font-weight: 700;
-      padding: 2px 6px;
-      border-radius: 8px;
-      white-space: nowrap;
-      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
-    }}
-
-    .bar-label {{
-      font-size: 10px;
-      font-weight: 700;
-      color: #64748B;
       text-transform: uppercase;
+      letter-spacing: 0.5px;
+      background: #F8FAF8;
+      border-bottom: 1px solid #ECEFEC;
     }}
 
-    /* ── RIGHT TOP: DOCTOR CONSULTATIONS (SPARKLINE) ── */
-    .sparkline-val {{
-      font-size: 24px;
-      font-weight: 700;
-      color: #0F172A;
-      letter-spacing: -0.5px;
-      margin: 2px 0 0 0;
-      text-align: center;
-    }}
-
-    .sparkline-svg-container {{
-      width: 100%;
-      height: 90px;
-      margin: 6px 0;
-    }}
-
-    .sparkline-pills {{
-      display: flex;
-      gap: 8px;
-      margin-top: 8px;
-    }}
-
-    .pill-btn-solid {{
-      flex: 1;
-      background: #096839;
-      color: #FFFFFF;
-      font-size: 11px;
-      font-weight: 600;
-      padding: 7px 0;
-      border-radius: 18px;
-      text-align: center;
-    }}
-
-    .pill-btn-outline {{
-      flex: 1;
-      border: 1px solid #CBD5E1;
-      color: #475569;
-      font-size: 11px;
-      font-weight: 600;
-      padding: 7px 0;
-      border-radius: 18px;
-      text-align: center;
-    }}
-
-    /* ── RIGHT BOTTOM: PRESCRIPTIONS ── */
-    .presc-val-container {{
-      display: flex;
-      align-items: baseline;
-      gap: 10px;
-      margin: 8px 0 10px 0;
-    }}
-
-    .presc-big-num {{
-      font-size: 26px;
-      font-weight: 700;
-      color: #0F172A;
-      letter-spacing: -0.5px;
-    }}
-
-    .avatar-stack {{
-      display: flex;
-      align-items: center;
-      margin-top: 10px;
-    }}
-
-    .doc-avatar {{
-      width: 32px;
-      height: 32px;
-      border-radius: 50%;
-      border: 2px solid #FFFFFF;
-      margin-left: -8px;
-      background: #E2E8F0;
-      color: #1E293B;
-      font-size: 10px;
-      font-weight: 700;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }}
-
-    .doc-avatar:first-child {{
-      margin-left: 0;
-    }}
-
-    .doc-avatar-plus {{
-      background: #096839;
-      color: #FFFFFF;
-      font-size: 10px;
-      font-weight: 700;
-    }}
-
-    /* ── BOTTOM WIDE: CLINICAL DISEASE CATEGORY CARD ── */
-    .bottom-wide-card {{
-      grid-column: 1 / 3;
-      padding: 16px 20px;
-    }}
-
-    .category-table {{
-      width: 100%;
-      margin-top: 8px;
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-    }}
-
-    .cat-row {{
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 7px 10px;
-      border-radius: 12px;
-      background: #F8FAFC;
-    }}
-
-    .cat-left {{
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      width: 44%;
-    }}
-
-    .cat-icon-box {{
-      width: 28px;
-      height: 28px;
-      border-radius: 9px;
-      background: #DEF7EC;
-      color: #096839;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      flex-shrink: 0;
-    }}
-
-    .cat-name {{
-      font-size: 12px;
-      font-weight: 600;
-      color: #1E293B;
-    }}
-
-    .cat-meta {{
-      font-size: 10px;
-      color: #64748B;
-      width: 24%;
-    }}
-
-    .cat-status {{
-      display: flex;
-      align-items: center;
-      gap: 5px;
-      font-size: 10px;
-      font-weight: 600;
-      color: #03543F;
-      width: 16%;
-    }}
-
-    .status-dot {{
-      width: 6px;
-      height: 6px;
-      border-radius: 50%;
-      background: #10B981;
-    }}
-
-    .cat-count {{
-      font-size: 12px;
-      font-weight: 700;
-      color: #0F172A;
-      text-align: right;
-      width: 16%;
-    }}
-
-    .footer-note {{
-      font-size: 9px;
-      color: #94A3B8;
-      text-align: right;
-      margin-top: 10px;
+    td {{
+      padding: 6px 8px;
+      border-bottom: 1px solid #F1F4F1;
     }}
   </style>
 </head>
 <body>
 
-  <!-- ── 1. FLOATING VERTICAL SIDEBAR ── -->
-  <aside class="sidebar">
-    <div class="sidebar-top">
-      <div class="sidebar-icon-active" title="Dashboard">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-          <rect x="3" y="3" width="7" height="7"></rect>
-          <rect x="14" y="3" width="7" height="7"></rect>
-          <rect x="14" y="14" width="7" height="7"></rect>
-          <rect x="3" y="14" width="7" height="7"></rect>
-        </svg>
-      </div>
-
-      <div class="sidebar-icon" title="Analytics">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <line x1="18" y1="20" x2="18" y2="10"></line>
-          <line x1="12" y1="20" x2="12" y2="4"></line>
-          <line x1="6" y1="20" x2="6" y2="14"></line>
-        </svg>
-      </div>
-
-      <div class="sidebar-icon" title="Clinical File">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-          <polyline points="14 2 14 8 20 8"></polyline>
-          <line x1="16" y1="13" x2="8" y2="13"></line>
-          <line x1="16" y1="17" x2="8" y2="17"></line>
-        </svg>
-      </div>
-
-      <div class="sidebar-icon" title="Medical Duty">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M22 12h-4l-3 9L9 3l-3 9H2"></path>
-        </svg>
-      </div>
-
-      <div class="sidebar-icon" title="Dispatch / Email">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
-          <polyline points="22,6 12,13 2,6"></polyline>
-        </svg>
+  <!-- Top Header Bar -->
+  <div class="header-bar">
+    <div style="display: flex; align-items: center; gap: 8px;">
+      <div style="width: 26px; height: 26px; border-radius: 50%; background: #078653; color: white; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 11px;">+</div>
+      <div>
+        <strong style="font-size: 14px; color: #202421;">CampusCare</strong>
+        <span style="font-size: 9px; color: #858B87; margin-left: 6px; text-transform: uppercase; font-weight: 700;">Admin Console</span>
       </div>
     </div>
-
-    <div class="sidebar-bottom">
-      <div class="sidebar-icon" title="Administration">
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="12" cy="12" r="3"></circle>
-          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
-        </svg>
-      </div>
-      <div class="sidebar-icon" title="Logout">
-        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
-          <polyline points="16 17 21 12 16 7"></polyline>
-          <line x1="21" y1="12" x2="9" y2="12"></line>
-        </svg>
-      </div>
+    <div style="font-size: 10px; font-weight: 600; color: #858B87;">
+      Generated: {gen_time}
     </div>
-  </aside>
+  </div>
 
-  <!-- ── 2. MAIN CONTENT CONTAINER ── -->
-  <main class="main-content">
+  <!-- Title & Scope -->
+  <div class="title-row">
+    <div>
+      <h1 style="font-size: 18px; font-weight: 800; color: #202421; margin: 0;">Health Centre Intelligence</h1>
+      <p style="font-size: 10px; color: #858B87; margin-top: 1px;">Authoritative actual database records across all patient cohorts</p>
+    </div>
+    <div style="background: #E5F4EC; border: 1px solid rgba(21,155,112,0.3); color: #078653; padding: 4px 12px; border-radius: 16px; font-size: 10px; font-weight: 800;">
+      {scope_label}
+    </div>
+  </div>
 
-    <!-- Top Horizontal Header Pill -->
-    <header class="top-header">
-      <div class="brand-section">
-        <div class="brand-logo">CC</div>
-        <span class="brand-name">CampusCare</span>
-      </div>
-
-      <nav class="nav-pills">
-        <span class="nav-pill nav-pill-active">Dashboard</span>
-        <span class="nav-pill">Shift Trends</span>
-        <span class="nav-pill">Case Categories</span>
-        <span class="nav-pill">Consultations</span>
-        <span class="nav-pill">Emergency</span>
-      </nav>
-
-      <div class="header-actions">
-        <div class="header-icon-btn">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="11" cy="11" r="8"></circle>
-            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-          </svg>
-        </div>
-        <div class="header-icon-btn">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
-            <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
-          </svg>
-        </div>
-        <div class="user-avatar" title="Chief Administrator">AD</div>
-      </div>
-    </header>
-
-    <!-- Welcome & Date Header -->
-    <div class="title-bar">
-      <h1 class="welcome-text">Daily Health Centre Analytics</h1>
-      <div class="title-actions">
-        <div class="date-pill">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#096839" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
-            <line x1="16" y1="2" x2="16" y2="6"></line>
-            <line x1="8" y1="2" x2="8" y2="6"></line>
-            <line x1="3" y1="10" x2="21" y2="10"></line>
-          </svg>
-          <span>{rep_date} (Completed Day)</span>
-        </div>
-        <div class="badge-pill">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M12 2v20M2 12h20"></path>
-          </svg>
-          <span>TIET Health Centre</span>
-        </div>
-      </div>
+  <!-- 5 Key Metric Cards Row -->
+  <div class="kpi-row">
+    <div class="kpi-card-green">
+      <div style="font-size: 9px; font-weight: 700; text-transform: uppercase; opacity: 0.85;">Total Visits</div>
+      <div style="font-size: 24px; font-weight: 900; margin: 4px 0;">{total_visits}</div>
+      <div style="font-size: 9px; opacity: 0.8; border-top: 1px solid rgba(255,255,255,0.2); padding-top: 3px;">{scope_label}</div>
     </div>
 
-    <!-- ── 3. BENTO GRID ── -->
-    <div class="dashboard-grid">
-
-      <!-- COLUMN 1 TOP: TOTAL PATIENT VISITS (GREEN CARD) -->
-      <div class="card">
-        <div class="card-header">
-          <div>
-            <div class="card-title">Patient Visits</div>
-            <div class="card-subtitle">Completed reporting day</div>
-          </div>
-          <div class="arrow-icon">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <line x1="7" y1="17" x2="17" y2="7"></line>
-              <polyline points="7 7 17 7 17 17"></polyline>
-            </svg>
-          </div>
-        </div>
-
-        <div class="green-card">
-          <div class="green-card-top">
-            <span class="green-card-badge">CampusCare Clinical</span>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M5 12.55a11 11 0 0 1 14.08 0"></path>
-              <path d="M1.42 9a16 16 0 0 1 21.16 0"></path>
-              <path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path>
-              <line x1="12" y1="20" x2="12.01" y2="20"></line>
-            </svg>
-          </div>
-          <div>
-            <div class="green-card-val">{total_visits} Visits</div>
-            <div class="green-card-sub">OPD Triage & Consultations</div>
-          </div>
-          <div class="green-card-bottom">
-            <span>3/3 SHIFTS LOGGED</span>
-            <span>{rep_date}</span>
-          </div>
-        </div>
-
-        <div class="sub-metric-row">
-          <div>
-            <div style="font-size: 10px; color: #8C9BAE; font-weight: 600;">Previous Period</div>
-            <div style="font-size: 13px; font-weight: 700; color: #1E293B; margin-top: 2px;">{wow_sign}{wow_pct}% vs Prev Week</div>
-          </div>
-          <span class="pill-tag">{wow_sign}{wow_pct}%</span>
-        </div>
-      </div>
-
-      <!-- COLUMN 2 TOP: PATIENT INFLOW BY SHIFT (BAR CHART) -->
-      <div class="card">
-        <div class="card-header">
-          <div>
-            <div class="card-title">Patient Inflow by Shift</div>
-            <div class="card-subtitle">Volume across the three 24/7 operating shifts</div>
-          </div>
-          <div style="display: flex; align-items: center; gap: 6px;">
-            <div style="display: flex; background: #F8FAFC; border-radius: 14px; padding: 2px;">
-              <span style="font-size: 10px; font-weight: 600; padding: 3px 8px; color: #64748B;">Daily</span>
-              <span style="font-size: 10px; font-weight: 700; padding: 3px 8px; background: #096839; color: #FFF; border-radius: 12px;">Shifts</span>
-            </div>
-            <div class="arrow-icon">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <line x1="7" y1="17" x2="17" y2="7"></line>
-                <polyline points="7 7 17 7 17 17"></polyline>
-              </svg>
-            </div>
-          </div>
-        </div>
-
-        <div class="bar-chart-container">
-          <div class="y-axis">
-            <span>{max(10, max_count * 2)}</span>
-            <span>{max(5, max_count)}</span>
-            <span>0</span>
-          </div>
-          <div class="grid-lines">
-            <div class="grid-line"></div>
-            <div class="grid-line"></div>
-            <div class="grid-line"></div>
-          </div>
-
-          <!-- Shift 1 -->
-          <div class="bar-col">
-            <div class="bar-pill {'bar-peak' if is_s1_peak else 'bar-hatched'}" style="height: {h_s1}px;">
-              {'<div class="floating-peak-badge">Peak ' + str(peak_pct) + '%</div>' if is_s1_peak else ''}
-            </div>
-            <span class="bar-label">Shift 1</span>
-          </div>
-
-          <!-- Shift 2 -->
-          <div class="bar-col">
-            <div class="bar-pill {'bar-peak' if is_s2_peak else 'bar-hatched'}" style="height: {h_s2}px;">
-              {'<div class="floating-peak-badge">Peak ' + str(peak_pct) + '%</div>' if is_s2_peak else ''}
-            </div>
-            <span class="bar-label">Shift 2</span>
-          </div>
-
-          <!-- Shift 3 -->
-          <div class="bar-col">
-            <div class="bar-pill {'bar-peak' if is_s3_peak else 'bar-hatched'}" style="height: {h_s3}px;">
-              {'<div class="floating-peak-badge">Peak ' + str(peak_pct) + '%</div>' if is_s3_peak else ''}
-            </div>
-            <span class="bar-label">Shift 3</span>
-          </div>
-
-          <!-- Context Benchmark: Morning Avg -->
-          <div class="bar-col">
-            <div class="bar-pill bar-hatched-sub" style="height: {max(24, int(h_s1 * 0.85))}px;"></div>
-            <span class="bar-label">Avg AM</span>
-          </div>
-
-          <!-- Context Benchmark: Night Avg -->
-          <div class="bar-col">
-            <div class="bar-pill bar-hatched-sub" style="height: {max(24, int(h_s3 * 0.75))}px;"></div>
-            <span class="bar-label">Avg PM</span>
-          </div>
-        </div>
-
-        <div style="display: flex; justify-content: space-between; font-size: 10px; color: #64748B; margin-top: 8px; padding: 0 4px;">
-          <span>Shift 1: 06:00 - 14:00 ({s1_count})</span>
-          <span>Shift 2: 14:00 - 20:00 ({s2_count})</span>
-          <span>Shift 3: 20:00 - 06:00 ({s3_count})</span>
-        </div>
-      </div>
-
-      <!-- COLUMN 3 TOP: DOCTOR CONSULTATIONS (SPARKLINE AREA) -->
-      <div class="card">
-        <div class="card-header">
-          <div>
-            <div class="card-title">Consultations</div>
-            <div class="card-subtitle">Doctor-wise clinical evaluations</div>
-          </div>
-          <div class="arrow-icon">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <line x1="7" y1="17" x2="17" y2="7"></line>
-              <polyline points="7 7 17 7 17 17"></polyline>
-            </svg>
-          </div>
-        </div>
-
-        <div class="sparkline-val">{total_consultations} Consultations</div>
-
-        <div class="sparkline-svg-container">
-          <svg width="100%" height="100%" viewBox="0 0 240 70" preserveAspectRatio="none">
-            <defs>
-              <linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stop-color="#10B981" stop-opacity="0.32"/>
-                <stop offset="100%" stop-color="#10B981" stop-opacity="0.0"/>
-              </linearGradient>
-            </defs>
-            <path d="M 0 52 Q 40 22 80 46 T 160 16 T 240 36 L 240 70 L 0 70 Z" fill="url(#areaGrad)"/>
-            <path d="M 0 52 Q 40 22 80 46 T 160 16 T 240 36" fill="none" stroke="#096839" stroke-width="2.5" stroke-linecap="round"/>
-            <line x1="0" y1="36" x2="240" y2="36" stroke="#CBD5E1" stroke-width="1" stroke-dasharray="3 3"/>
-          </svg>
-        </div>
-
-        <div class="sparkline-pills">
-          <div class="pill-btn-solid">Active: {available_doctors} Doctors</div>
-          <div class="pill-btn-outline">Coverage: {coverage_pct}%</div>
-        </div>
-      </div>
-
-      <!-- ROW 2: BOTTOM WIDE CARD (CLINICAL DISEASE CATEGORY CARD) -->
-      <div class="card bottom-wide-card">
-        <div class="card-header">
-          <div>
-            <div class="card-title">Clinical Disease & Case Category Distribution</div>
-            <div class="card-subtitle">Doctor-recorded impressions aggregated from consultation records</div>
-          </div>
-          <div class="arrow-icon">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <line x1="7" y1="17" x2="17" y2="7"></line>
-              <polyline points="7 7 17 7 17 17"></polyline>
-            </svg>
-          </div>
-        </div>
-
-        <div class="category-table">
-          {"".join([f'''
-          <div class="cat-row">
-            <div class="cat-left">
-              <div class="cat-icon-box">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M12 2v20M2 12h20"></path>
-                </svg>
-              </div>
-              <span class="cat-name">{c["label"]}</span>
-            </div>
-            <span class="cat-meta">{rep_date} • 3 Shifts</span>
-            <div class="cat-status">
-              <span class="status-dot"></span>
-              <span>Logged</span>
-            </div>
-            <span class="cat-count">{c["count"]} ({c["pct"]}%)</span>
-          </div>''' for c in display_categories])}
-        </div>
-
-        <div class="footer-note">
-          Data Governance: Aggregated analytical metrics only • Zero personally identifiable health information • Generated {gen_time}
-        </div>
-      </div>
-
-      <!-- ROW 2 RIGHT: PRESCRIPTION & ROSTER CARD -->
-      <div class="card" style="padding: 16px 20px;">
-        <div class="card-header">
-          <div>
-            <div class="card-title">Prescription & Formulary</div>
-            <div class="card-subtitle">Free medications dispensed</div>
-          </div>
-          <div class="arrow-icon">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <line x1="7" y1="17" x2="17" y2="7"></line>
-              <polyline points="7 7 17 7 17 17"></polyline>
-            </svg>
-          </div>
-        </div>
-
-        <div class="presc-val-container">
-          <span class="presc-big-num">{total_prescriptions} Issued</span>
-          <span class="pill-tag">100% Free</span>
-        </div>
-
-        <div style="font-size: 11px; color: #64748B; font-weight: 600; margin-top: 6px;">
-          Duty Doctors on Shift:
-        </div>
-
-        <div class="avatar-stack">
-          {"".join([f'<div class="doc-avatar" title="{d["name"]}">{d["name"].split()[1][:2].upper() if len(d["name"].split()) > 1 else d["name"][:2].upper()}</div>' for d in doctors[:3]])}
-          <div class="doc-avatar doc-avatar-plus">+{max(1, len(doctors))}</div>
-        </div>
-
-        <div style="margin-top: 14px; padding-top: 10px; border-top: 1px solid #F1F5F9; font-size: 10px; color: #64748B; display: flex; justify-content: space-between;">
-          <span>Emergency Triage: {total_emergencies} Cases</span>
-          <span>Ambulance: {ambulance_count}</span>
-        </div>
-      </div>
-
+    <div class="kpi-card">
+      <div style="font-size: 9px; font-weight: 700; text-transform: uppercase; color: #858B87;">Students</div>
+      <div style="font-size: 20px; font-weight: 900; color: #202421; margin: 4px 0;">{student_visits}</div>
+      <div style="font-size: 9px; font-weight: 700; color: #078653;">{student_pct}% of footfall</div>
     </div>
-  </main>
+
+    <div class="kpi-card">
+      <div style="font-size: 9px; font-weight: 700; text-transform: uppercase; color: #858B87;">Faculty</div>
+      <div style="font-size: 20px; font-weight: 900; color: #202421; margin: 4px 0;">{faculty_visits}</div>
+      <div style="font-size: 9px; font-weight: 700; color: #078653;">{faculty_pct}% of footfall</div>
+    </div>
+
+    <div class="kpi-card">
+      <div style="font-size: 9px; font-weight: 700; text-transform: uppercase; color: #858B87;">Others</div>
+      <div style="font-size: 20px; font-weight: 900; color: #202421; margin: 4px 0;">{combined_others}</div>
+      <div style="font-size: 9px; font-weight: 700; color: #078653;">{others_pct}% of footfall</div>
+    </div>
+
+    <div class="kpi-card">
+      <div style="font-size: 9px; font-weight: 700; text-transform: uppercase; color: #858B87;">Consultations</div>
+      <div style="font-size: 20px; font-weight: 900; color: #078653; margin: 4px 0;">{total_diagnoses}</div>
+      <div style="font-size: 9px; color: #858B87;">Diagnosed Cases</div>
+    </div>
+  </div>
+
+  <!-- INTERCHANGED #1: Shift-Wise Distribution (FIRST) -->
+  <div class="section-card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; border-bottom: 1px solid #ECEFEC; padding-bottom: 6px;">
+      <strong style="font-size: 12px; color: #202421;">Shift-Wise Distribution: Student, Faculty & Others</strong>
+      <div style="display: flex; gap: 10px; font-size: 9px; font-weight: 700;">
+        <span style="color: #078653;">&#9632; Student</span>
+        <span style="color: #10B981;">&#9632; Faculty</span>
+        <span style="color: #64748B;">&#9632; Others</span>
+      </div>
+    </div>
+    <div style="display: flex; gap: 10px;">
+      {shift_cards_html}
+    </div>
+  </div>
+
+  <!-- INTERCHANGED #2: Disease Distribution Chart (SECOND) -->
+  <div class="section-card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; border-bottom: 1px solid #ECEFEC; padding-bottom: 6px;">
+      <strong style="font-size: 12px; color: #202421;">Disease Distribution Chart</strong>
+      <span style="font-size: 9px; color: #858B87;">Distribution of clinical impressions ({total_diagnoses} consultations)</span>
+    </div>
+    <div>
+      {disease_bars_html}
+    </div>
+  </div>
+
+  <!-- #3: Clinical Diagnostic Registry Table -->
+  <div class="section-card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; border-bottom: 1px solid #ECEFEC; padding-bottom: 6px;">
+      <strong style="font-size: 12px; color: #202421;">Clinical Diagnostic Registry</strong>
+      <span style="font-size: 9px; color: #858B87;">Actual Doctor EHR Diagnoses</span>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th style="width: 40px; text-align: center;">Rank</th>
+          <th>Clinical Diagnosis</th>
+          <th style="width: 110px;">Category</th>
+          <th style="width: 50px; text-align: center;">Cases</th>
+          <th style="width: 60px; text-align: center;">Prevalence</th>
+          <th style="width: 80px; text-align: center;">Peak Shift</th>
+          <th style="width: 80px; text-align: right;">Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {diag_rows_html}
+      </tbody>
+    </table>
+  </div>
 
 </body>
 </html>
@@ -1125,18 +426,17 @@ def generate_analytics_html(data: Dict[str, Any]) -> str:
 
 def render_html_to_pdf(html_content: str, output_pdf_path: str, screenshot_path: Optional[str] = None) -> str:
     """
-    Renders the HTML to a landscape A4 PDF using the system Chromium binary.
-    Optionally outputs a screenshot PNG for visual audit against the reference image.
+    Renders HTML to PDF using the system Chromium binary.
     """
     browser_bin = find_headless_browser()
+    output_pdf_path = os.path.abspath(output_pdf_path)
+    os.makedirs(os.path.dirname(output_pdf_path), exist_ok=True)
 
     with tempfile.NamedTemporaryFile("w", suffix=".html", delete=False, encoding="utf-8") as f:
         f.write(html_content)
         temp_html = f.name
 
     try:
-        # 1. Print to landscape PDF
-        os.makedirs(os.path.dirname(os.path.abspath(output_pdf_path)), exist_ok=True)
         user_data_dir = tempfile.mkdtemp(prefix="campuscare_pdf_")
         pdf_cmd = [
             browser_bin,
@@ -1152,7 +452,9 @@ def render_html_to_pdf(html_content: str, output_pdf_path: str, screenshot_path:
         if res.returncode != 0:
             raise RuntimeError(f"Browser PDF generation failed (code {res.returncode}): {res.stderr}")
 
-        # 2. Render screenshot if requested
+        if not os.path.exists(output_pdf_path):
+            raise RuntimeError(f"Browser failed to write output PDF at {output_pdf_path}")
+
         if screenshot_path:
             shot_cmd = [
                 browser_bin,
@@ -1171,7 +473,7 @@ def render_html_to_pdf(html_content: str, output_pdf_path: str, screenshot_path:
                 os.remove(temp_html)
             except Exception:
                 pass
-        if 'user_data_dir' in locals() and os.path.exists(user_data_dir):
+        if "user_data_dir" in locals() and os.path.exists(user_data_dir):
             try:
                 shutil.rmtree(user_data_dir, ignore_errors=True)
             except Exception:

@@ -248,7 +248,7 @@ def preview_daily_analytics_pdf(
     is_all = (target_date and str(target_date).lower() == "all")
     if is_all:
         rep_date_str = "AllTime"
-        pdf_path = str(REPORTS_DIR / f"CampusCare_Analytics_AllTime.pdf")
+        pdf_path = str(REPORTS_DIR / f"CampusCare_Actual_Dashboard_AllTime.pdf")
         try:
             data = aggregate_daily_analytics(target_date="all", scope="all")
             html = generate_analytics_html(data)
@@ -273,7 +273,7 @@ def preview_daily_analytics_pdf(
                 conn.close()
 
         rep_date_str = parsed_date.strftime("%Y-%m-%d")
-        pdf_path = str(REPORTS_DIR / f"CampusCare_Analytics_{rep_date_str}.pdf")
+        pdf_path = str(REPORTS_DIR / f"CampusCare_Actual_Dashboard_{rep_date_str}.pdf")
 
         try:
             data = aggregate_daily_analytics(parsed_date)
@@ -286,7 +286,7 @@ def preview_daily_analytics_pdf(
     return FileResponse(
         path=pdf_path,
         media_type="application/pdf",
-        filename=f"CampusCare_Analytics_{rep_date_str}.pdf",
+        filename=f"CampusCare_Actual_Dashboard_{rep_date_str}.pdf",
     )
 
 
