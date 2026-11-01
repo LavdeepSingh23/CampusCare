@@ -11,6 +11,8 @@ import logging
 from datetime import date, datetime, time, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
+from app.core.database import get_db_connection
+
 try:
     import zoneinfo
     KOLKATA_TZ = zoneinfo.ZoneInfo("Asia/Kolkata")

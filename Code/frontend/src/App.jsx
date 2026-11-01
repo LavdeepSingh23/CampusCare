@@ -106,7 +106,7 @@ function AppRoutes() {
       <Route
         path="/reception_dashboard"
         element={
-          <ProtectedRoute allowedRoles={['RECEPTIONIST']}>
+          <ProtectedRoute allowedRoles={['RECEPTIONIST', 'ADMIN']}>
             <ReceptionDashboard />
           </ProtectedRoute>
         }
@@ -114,7 +114,7 @@ function AppRoutes() {
       <Route
         path="/emergency"
         element={
-          <ProtectedRoute allowedRoles={['RECEPTIONIST']}>
+          <ProtectedRoute allowedRoles={['RECEPTIONIST', 'ADMIN']}>
             <ReceptionDashboard initialPage="emergency" />
           </ProtectedRoute>
         }

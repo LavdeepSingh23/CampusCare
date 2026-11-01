@@ -3,7 +3,10 @@ import os
 from datetime import date, datetime, timedelta
 from typing import Optional
 import zoneinfo
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from jose import JWTError
+from app.core.security import decode_access_token
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, EmailStr, Field
 
@@ -202,10 +205,40 @@ def trigger_daily_analytics_report(
         raise HTTPException(status_code=500, detail=f"Failed to generate and email analytics report: {exc}")
 
 
+_bearer_scheme = HTTPBearer(auto_error=False)
+
+
+def verify_admin_token(
+    token: Optional[str] = Query(None),
+    auth: Optional[HTTPAuthorizationCredentials] = Depends(_bearer_scheme),
+):
+    raw_token = auth.credentials if auth else token
+    if not raw_token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required. Please provide a Bearer token or token query parameter.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    try:
+        payload = decode_access_token(raw_token)
+    except JWTError as err:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=f"Invalid or expired token: {err}",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    if payload.get("role") != "ADMIN":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access forbidden: Admin privileges required.",
+        )
+    return payload
+
+
 @router.get("/reports/analytics/preview")
 def preview_daily_analytics_pdf(
     target_date: Optional[str] = None,
-    current: CurrentAdmin = Depends(get_current_admin),
+    current: dict = Depends(verify_admin_token),
 ):
     """
     Generates (if not cached) and streams the landscape analytics dashboard PDF

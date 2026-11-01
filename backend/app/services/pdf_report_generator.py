@@ -11,6 +11,7 @@ Strictly adheres to:
 import os
 import subprocess
 import tempfile
+import shutil
 from typing import Any, Dict, Optional
 
 CHROME_CANDIDATES = [
@@ -1135,10 +1136,14 @@ def render_html_to_pdf(html_content: str, output_pdf_path: str, screenshot_path:
 
     try:
         # 1. Print to landscape PDF
+        os.makedirs(os.path.dirname(os.path.abspath(output_pdf_path)), exist_ok=True)
+        user_data_dir = tempfile.mkdtemp(prefix="campuscare_pdf_")
         pdf_cmd = [
             browser_bin,
             "--headless=new",
             "--disable-gpu",
+            "--no-sandbox",
+            f"--user-data-dir={user_data_dir}",
             "--no-pdf-header-footer",
             f"--print-to-pdf={output_pdf_path}",
             temp_html,
@@ -1164,5 +1169,10 @@ def render_html_to_pdf(html_content: str, output_pdf_path: str, screenshot_path:
         if os.path.exists(temp_html):
             try:
                 os.remove(temp_html)
+            except Exception:
+                pass
+        if 'user_data_dir' in locals() and os.path.exists(user_data_dir):
+            try:
+                shutil.rmtree(user_data_dir, ignore_errors=True)
             except Exception:
                 pass
