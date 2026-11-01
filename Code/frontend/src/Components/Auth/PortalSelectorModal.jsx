@@ -100,6 +100,18 @@ export default function PortalSelectorModal({ isOpen, onClose }) {
             )
           })}
         </div>
+
+        {/* Footer with Administrator Link */}
+        <div className="px-5 py-3 bg-slate-50 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+          <span>CampusCare System</span>
+          <button
+            type="button"
+            onClick={() => handleSelect('/admin/login')}
+            className="text-teal-700 hover:text-teal-900 font-semibold cursor-pointer"
+          >
+            Administrator Login &rarr;
+          </button>
+        </div>
       </div>
     </div>
   )
