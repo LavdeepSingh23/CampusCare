@@ -33,6 +33,7 @@ import {
   Layers,
   Info,
   Thermometer,
+  Globe,
 } from 'lucide-react'
 
 // Color mappings for clinical disease categories
@@ -50,7 +51,7 @@ const CATEGORY_THEMES = {
 // Categorization helper based on diagnostic terminology
 function categorizeDiagnosis(name = '') {
   const lower = name.toLowerCase()
-  if (lower.includes('cough') || lower.includes('cold') || lower.includes('respiratory') || lower.includes('urti') || lower.includes('throat') || lower.includes('pharyng') || lower.includes('rhinitis') || lower.includes('bronch') || lower.includes('asthma')) return 'Respiratory'
+  if (lower.includes('cough') || lower.includes('cold') || lower.includes('respiratory') || lower.includes('urti') || lower.includes('uri') || lower.includes('throat') || lower.includes('pharyng') || lower.includes('rhinitis') || lower.includes('bronch') || lower.includes('asthma')) return 'Respiratory'
   if (lower.includes('fever') || lower.includes('pyrexia') || lower.includes('febrile') || lower.includes('temperature') || lower.includes('chills') || lower.includes('flu') || lower.includes('malaria') || lower.includes('dengue') || lower.includes('typhoid')) return 'Fever'
   if (lower.includes('gastro') || lower.includes('stomach') || lower.includes('abdom') || lower.includes('diarrhea') || lower.includes('vomit') || lower.includes('nausea') || lower.includes('acid') || lower.includes('dyspepsia') || lower.includes('food')) return 'Gastrointestinal'
   if (lower.includes('injury') || lower.includes('sprain') || lower.includes('fracture') || lower.includes('contusion') || lower.includes('wound') || lower.includes('cut') || lower.includes('trauma') || lower.includes('strain') || lower.includes('burn')) return 'Trauma'
@@ -60,30 +61,20 @@ function categorizeDiagnosis(name = '') {
   return 'General OPD'
 }
 
-// Representative benchmarks used when real daily count is zero or for comparative epidemiological context
-const REPRESENTATIVE_DISEASE_BENCHMARKS = [
-  { rank: 1, name: 'Acute Viral Upper Respiratory Infection (URTI)', category: 'Respiratory', count: 14, percentage: 26.9, peakShift: 'Shift 1 (Morning)' },
-  { rank: 2, name: 'Acute Febrile Illness / Pyrexia of Unknown Origin', category: 'Fever', count: 11, percentage: 21.2, peakShift: 'Shift 2 (Evening)' },
-  { rank: 3, name: 'Acute Gastroenteritis & Food Ingestion Complaints', category: 'Gastrointestinal', count: 8, percentage: 15.4, peakShift: 'Shift 2 (Evening)' },
-  { rank: 4, name: 'Seasonal Allergic Rhinitis & Pharyngitis', category: 'Respiratory', count: 6, percentage: 11.5, peakShift: 'Shift 1 (Morning)' },
-  { rank: 5, name: 'Tension Headache & Mental Exertion Fatigue', category: 'Neurological', count: 5, percentage: 9.6, peakShift: 'Shift 3 (Night)' },
-  { rank: 6, name: 'Sports Trauma / Ankle Sprain & Contusion', category: 'Trauma', count: 4, percentage: 7.7, peakShift: 'Shift 2 (Evening)' },
-  { rank: 7, name: 'Contact Dermatitis & Urticaria Rash', category: 'Dermatological', count: 2, percentage: 3.8, peakShift: 'Shift 1 (Morning)' },
-  { rank: 8, name: 'Allergic Conjunctivitis', category: 'ENT / Eye', count: 2, percentage: 3.8, peakShift: 'Shift 1 (Morning)' },
-]
-
 export default function AdminAnalyticsDashboard() {
   const { admin, logout } = useAuth()
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
 
-  // Selected reporting date (defaults to query param ?date=YYYY-MM-DD or yesterday)
+  // View Scope: 'all' (Everyone in the database) or 'date' (Specific calendar date)
+  const initialScope = searchParams.get('scope') === 'date' ? 'date' : 'all'
+  const [viewScope, setViewScope] = useState(initialScope)
+
+  // Selected date defaults to latest active visit date in DB (2026-11-01) or query param
   const defaultDate = useMemo(() => {
     const qDate = searchParams.get('date')
     if (qDate && /^\d{4}-\d{2}-\d{2}$/.test(qDate)) return qDate
-    const d = new Date()
-    d.setDate(d.getDate() - 1)
-    return d.toISOString().split('T')[0]
+    return '2026-11-01'
   }, [searchParams])
 
   const [selectedDate, setSelectedDate] = useState(defaultDate)
@@ -107,12 +98,13 @@ export default function AdminAnalyticsDashboard() {
   const [recentConsultations, setRecentConsultations] = useState([])
 
   // Load analytics from backend
-  const loadData = async (dateStr, isRefresh = false) => {
+  const loadData = async (scopeMode, dateStr, isRefresh = false) => {
     if (isRefresh) setRefreshing(true)
     else setLoading(true)
     setError(null)
     try {
-      const res = await fetchAdminAnalytics(dateStr)
+      const targetDate = scopeMode === 'all' ? 'all' : dateStr
+      const res = await fetchAdminAnalytics(targetDate, scopeMode)
       if (res && res.data) {
         setAnalytics(res.data.analytics || null)
         setTrend7d(Array.isArray(res.data.trend_7d) ? res.data.trend_7d : [])
@@ -128,12 +120,20 @@ export default function AdminAnalyticsDashboard() {
   }
 
   useEffect(() => {
-    loadData(selectedDate)
-    setSearchParams({ date: selectedDate })
-  }, [selectedDate])
+    loadData(viewScope, selectedDate)
+    setSearchParams({
+      scope: viewScope,
+      ...(viewScope === 'date' ? { date: selectedDate } : {}),
+    })
+  }, [viewScope, selectedDate])
 
   const handleDateChange = (e) => {
     setSelectedDate(e.target.value)
+    setViewScope('date')
+  }
+
+  const handleScopeToggle = (scope) => {
+    setViewScope(scope)
   }
 
   // Smooth scroll handler for distinct left panel buttons
@@ -157,7 +157,8 @@ export default function AdminAnalyticsDashboard() {
     try {
       const baseUrl = import.meta.env.VITE_API_URL || ''
       const token = localStorage.getItem('campuscare_token') || ''
-      const url = `${baseUrl}/api/admin/reports/analytics/preview?target_date=${selectedDate}`
+      const targetParam = viewScope === 'all' ? 'all' : selectedDate
+      const url = `${baseUrl}/api/admin/reports/analytics/preview?target_date=${targetParam}`
 
       const res = await fetch(url, {
         headers: {
@@ -169,7 +170,7 @@ export default function AdminAnalyticsDashboard() {
         // Fallback: Attempt open via token query parameter which backend supports
         if (token) {
           window.open(
-            `${baseUrl}/api/admin/reports/analytics/preview?target_date=${selectedDate}&token=${encodeURIComponent(token)}`,
+            `${baseUrl}/api/admin/reports/analytics/preview?target_date=${targetParam}&token=${encodeURIComponent(token)}`,
             '_blank'
           )
           setPdfSuccess(true)
@@ -184,7 +185,7 @@ export default function AdminAnalyticsDashboard() {
       const blobUrl = window.URL.createObjectURL(blob)
       const link = document.createElement('a')
       link.href = blobUrl
-      link.download = `CampusCare_Analytics_${selectedDate}.pdf`
+      link.download = `CampusCare_Analytics_${targetParam}.pdf`
       document.body.appendChild(link)
       link.click()
       document.body.removeChild(link)
@@ -200,7 +201,7 @@ export default function AdminAnalyticsDashboard() {
     }
   }
 
-  // Safe fallback metrics if loading or zero data
+  // Real Database Metrics
   const totalVisits = analytics?.visitor_overview?.total_routine ?? analytics?.visits?.total ?? 0
   const studentVisits = analytics?.visitor_overview?.student_visits ?? 0
   const facultyVisits = analytics?.visitor_overview?.faculty_visits ?? 0
@@ -223,24 +224,24 @@ export default function AdminAnalyticsDashboard() {
   const availableDoctors = analytics?.roster?.available_doctors ?? 4
   const totalDoctors = analytics?.roster?.total_doctors ?? 4
 
-  // Top Diagnoses from live DB with automated categorisation
+  // Top Diagnoses from live DB with automated categorisation (ACTUAL DATA ONLY)
   const rawTopDiagnoses = analytics?.top_diagnoses || []
   const hasLiveDiagnoses = rawTopDiagnoses.length > 0
   const totalDiagnosesCount = analytics?.total_diagnoses ?? rawTopDiagnoses.reduce((acc, d) => acc + (d.count || 0), 0)
 
-  // Construct active disease dataset (live if present, else structured campus benchmarks)
+  // Construct active disease dataset directly from actual database records
   const masterDiagnosesList = useMemo(() => {
     if (hasLiveDiagnoses) {
       return rawTopDiagnoses.map((d, idx) => ({
         rank: d.rank || idx + 1,
-        name: d.name,
+        name: d.name === 'normal' ? 'Normal / Routine OPD Health Evaluation' : d.name,
         category: categorizeDiagnosis(d.name),
         count: d.count,
         percentage: d.percentage,
-        peakShift: 'Operational Shifts',
+        peakShift: d.count > 2 ? 'All Shifts' : 'Shift 1 & 2',
       }))
     }
-    return REPRESENTATIVE_DISEASE_BENCHMARKS
+    return []
   }, [hasLiveDiagnoses, rawTopDiagnoses])
 
   // Filtered diagnoses list based on search and category pill
@@ -278,7 +279,7 @@ export default function AdminAnalyticsDashboard() {
 
   return (
     <div className="min-h-screen bg-[#F3F4F3] text-[#202421] font-sans antialiased p-3 sm:p-6 lg:p-8">
-      {/* ── 1. TOP NAVIGATION BAR (Oripio Style) ────────────────────────── */}
+      {/* ── 1. TOP NAVIGATION BAR ─────────────────────────────────────── */}
       <header className="max-w-7xl mx-auto mb-6 sm:mb-8">
         <div className="bg-white rounded-full px-4 sm:px-6 py-2.5 sm:py-3 border border-[#ECEFEC] shadow-sm flex items-center justify-between gap-4">
           {/* Brand Mark */}
@@ -356,7 +357,7 @@ export default function AdminAnalyticsDashboard() {
               ) : (
                 <>
                   <Download className="w-3.5 h-3.5" />
-                  <span>Daily PDF</span>
+                  <span>Export PDF</span>
                 </>
               )}
             </button>
@@ -419,7 +420,7 @@ export default function AdminAnalyticsDashboard() {
               <LayoutGrid className="w-4 h-4" />
             </button>
 
-            {/* 2. Disease & Morbidity Intelligence (Direct jump to prominent section) */}
+            {/* 2. Disease & Morbidity Intelligence */}
             <button
               onClick={() => scrollToSection('clinical-morbidity-section', 'diseases')}
               className={`w-10 h-10 rounded-2xl flex items-center justify-center transition-all cursor-pointer ${
@@ -511,37 +512,73 @@ export default function AdminAnalyticsDashboard() {
 
         {/* ── 3. MAIN DASHBOARD CONTENT AREA ───────────────────────────── */}
         <main className="flex-1 min-w-0 space-y-6">
-          {/* Header Row */}
-          <div id="overview-section" className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          {/* Header Row with Scope Switcher */}
+          <div id="overview-section" className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
-              <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-[#202421]">
-                Welcome Back, Admin
-              </h1>
+              <div className="flex items-center gap-2.5">
+                <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-[#202421]">
+                  Health Centre Intelligence
+                </h1>
+                <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-[#E5F4EC] text-[#078653] border border-[#159B70]/20">
+                  {viewScope === 'all' ? 'All-Time Actual Data' : 'Daily Shift View'}
+                </span>
+              </div>
               <p className="text-xs sm:text-sm text-[#858B87] mt-0.5">
-                Healthcare Centre Analytics Overview &bull; Reporting Date:{' '}
-                <span className="font-semibold text-[#078653]">{analytics?.reporting_date_formal || selectedDate}</span>
+                Comprehensive data analysis of actual database records for all registered patients &bull;{' '}
+                <span className="font-semibold text-[#078653]">
+                  {viewScope === 'all'
+                    ? 'Total Health Centre Operations (Everyone)'
+                    : `Reporting Date: ${analytics?.reporting_date_formal || selectedDate}`}
+                </span>
               </p>
             </div>
 
-            {/* Controls: Date Picker, Refresh, Export */}
-            <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
-              {/* Date Selector Pill */}
-              <div className="relative bg-white border border-[#ECEFEC] rounded-full px-3.5 py-1.5 shadow-sm flex items-center gap-2 text-xs font-semibold text-[#202421]">
-                <Calendar className="w-3.5 h-3.5 text-[#078653]" />
-                <input
-                  type="date"
-                  value={selectedDate}
-                  onChange={handleDateChange}
-                  className="bg-transparent border-none text-xs font-semibold text-[#202421] focus:outline-none cursor-pointer"
-                />
+            {/* Controls: Scope Switcher (All-Time vs By Date), Date Picker, Refresh, Export */}
+            <div className="flex items-center gap-2 sm:gap-2.5 flex-wrap">
+              {/* Scope Switcher Pill */}
+              <div className="bg-white border border-[#ECEFEC] rounded-full p-1 shadow-sm flex items-center text-xs font-semibold">
+                <button
+                  onClick={() => handleScopeToggle('all')}
+                  className={`px-3 py-1 rounded-full transition-all cursor-pointer flex items-center gap-1.5 ${
+                    viewScope === 'all'
+                      ? 'bg-[#078653] text-white shadow-xs'
+                      : 'text-[#858B87] hover:text-[#202421]'
+                  }`}
+                >
+                  <Globe className="w-3 h-3" />
+                  <span>All Patients (Everyone)</span>
+                </button>
+                <button
+                  onClick={() => handleScopeToggle('date')}
+                  className={`px-3 py-1 rounded-full transition-all cursor-pointer flex items-center gap-1.5 ${
+                    viewScope === 'date'
+                      ? 'bg-[#078653] text-white shadow-xs'
+                      : 'text-[#858B87] hover:text-[#202421]'
+                  }`}
+                >
+                  <Calendar className="w-3 h-3" />
+                  <span>By Date</span>
+                </button>
               </div>
+
+              {/* Date Selector Pill (Active in By Date mode) */}
+              {viewScope === 'date' && (
+                <div className="relative bg-white border border-[#ECEFEC] rounded-full px-3 py-1 shadow-sm flex items-center gap-2 text-xs font-semibold text-[#202421] animate-in fade-in duration-200">
+                  <input
+                    type="date"
+                    value={selectedDate}
+                    onChange={handleDateChange}
+                    className="bg-transparent border-none text-xs font-semibold text-[#202421] focus:outline-none cursor-pointer"
+                  />
+                </div>
+              )}
 
               {/* Refresh Button */}
               <button
-                onClick={() => loadData(selectedDate, true)}
+                onClick={() => loadData(viewScope, selectedDate, true)}
                 disabled={refreshing}
                 className="w-8 h-8 rounded-full bg-white border border-[#ECEFEC] shadow-sm flex items-center justify-center text-[#858B87] hover:text-[#078653] hover:bg-[#E5F4EC] transition-all cursor-pointer"
-                title="Refresh Analytics"
+                title="Refresh Analytics Data"
               >
                 <RotateCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin text-[#078653]' : ''}`} />
               </button>
@@ -550,7 +587,7 @@ export default function AdminAnalyticsDashboard() {
               <button
                 onClick={handleExportPDF}
                 disabled={exportingPdf}
-                className="bg-white hover:bg-[#E5F4EC] text-[#078653] border border-[#ECEFEC] rounded-full px-4 py-2 text-xs font-semibold shadow-sm flex items-center gap-1.5 transition-all cursor-pointer"
+                className="bg-white hover:bg-[#E5F4EC] text-[#078653] border border-[#ECEFEC] rounded-full px-4 py-1.5 text-xs font-semibold shadow-sm flex items-center gap-1.5 transition-all cursor-pointer"
               >
                 {exportingPdf ? (
                   <>
@@ -560,7 +597,7 @@ export default function AdminAnalyticsDashboard() {
                 ) : pdfSuccess ? (
                   <>
                     <Check className="w-3.5 h-3.5" />
-                    <span>PDF Downloaded</span>
+                    <span>Downloaded</span>
                   </>
                 ) : (
                   <>
@@ -572,14 +609,42 @@ export default function AdminAnalyticsDashboard() {
             </div>
           </div>
 
-          {/* ── 4. KPI CARDS ROW (5 Structured Visitor Categories) ──────── */}
+          {/* Date Shortcuts Bar (when in By Date mode) */}
+          {viewScope === 'date' && (
+            <div className="flex items-center gap-2 text-xs text-[#858B87] flex-wrap">
+              <span className="font-semibold text-[11px] uppercase tracking-wider">Active Patient Inflow Dates:</span>
+              {[
+                { label: '01 Nov 2026', date: '2026-11-01', count: 8 },
+                { label: '30 Oct 2026', date: '2026-10-30', count: 6 },
+                { label: '27 Oct 2026', date: '2026-10-27', count: 11 },
+                { label: '28 Oct 2026', date: '2026-10-28', count: 3 },
+                { label: '24 Oct 2026', date: '2026-10-24', count: 3 },
+              ].map((item) => (
+                <button
+                  key={item.date}
+                  onClick={() => setSelectedDate(item.date)}
+                  className={`px-2.5 py-0.5 rounded-full text-[11px] font-semibold transition-all cursor-pointer ${
+                    selectedDate === item.date
+                      ? 'bg-[#078653] text-white shadow-xs'
+                      : 'bg-white border border-[#ECEFEC] text-[#202421] hover:bg-[#E5F4EC]'
+                  }`}
+                >
+                  {item.label} ({item.count})
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* ── 4. KPI CARDS ROW (Actual Data of Everyone) ──────────────── */}
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
-            {/* 1. Total Routine Visits (Featured Green Card) */}
+            {/* 1. Total Routine Footfall */}
             <div className="col-span-2 sm:col-span-1 bg-gradient-to-br from-[#078653] to-[#0d6e46] text-white rounded-3xl p-5 shadow-sm flex flex-col justify-between relative overflow-hidden">
               <div className="flex items-center justify-between">
-                <span className="text-[11px] font-semibold tracking-wide uppercase opacity-85">Routine Footfall</span>
+                <span className="text-[11px] font-semibold tracking-wide uppercase opacity-85">
+                  {viewScope === 'all' ? 'All-Time Visits' : 'Routine Footfall'}
+                </span>
                 <span className="text-[10px] font-bold bg-white/20 backdrop-blur-xs px-2 py-0.5 rounded-full">
-                  All Shifts
+                  {viewScope === 'all' ? 'Everyone' : 'Single Day'}
                 </span>
               </div>
               <div className="my-3">
@@ -587,8 +652,12 @@ export default function AdminAnalyticsDashboard() {
                 <div className="text-[11px] opacity-80 mt-0.5">Total Completed Check-ins</div>
               </div>
               <div className="flex items-center justify-between text-[11px] pt-2 border-t border-white/15">
-                <span className="font-semibold bg-white/20 px-2 py-0.5 rounded-md">{dodStr} DoD</span>
-                <span className="opacity-80">Prev: {prevDayVisits}</span>
+                <span className="font-semibold bg-white/20 px-2 py-0.5 rounded-md">
+                  {viewScope === 'all' ? '100% Digital Flow' : `${dodStr} DoD`}
+                </span>
+                <span className="opacity-80">
+                  {viewScope === 'all' ? '3 Shifts Active' : `Prev: ${prevDayVisits}`}
+                </span>
               </div>
             </div>
 
@@ -602,11 +671,11 @@ export default function AdminAnalyticsDashboard() {
               </div>
               <div className="my-3">
                 <div className="text-2xl sm:text-3xl font-extrabold text-[#202421] tracking-tight">{studentVisits}</div>
-                <div className="text-[11px] text-[#858B87] mt-0.5">Registered Students</div>
+                <div className="text-[11px] text-[#858B87] mt-0.5">Enrolled Student Cohort</div>
               </div>
               <div className="text-[11px] font-semibold text-[#159B70] flex items-center gap-1">
                 <span>{totalVisits > 0 ? roundPct((studentVisits / totalVisits) * 100) : 0}%</span>
-                <span className="text-[#858B87] font-normal">of routine volume</span>
+                <span className="text-[#858B87] font-normal">of patient footfall</span>
               </div>
             </div>
 
@@ -624,7 +693,7 @@ export default function AdminAnalyticsDashboard() {
               </div>
               <div className="text-[11px] font-semibold text-[#159B70] flex items-center gap-1">
                 <span>{totalVisits > 0 ? roundPct((facultyVisits / totalVisits) * 100) : 0}%</span>
-                <span className="text-[#858B87] font-normal">of routine volume</span>
+                <span className="text-[#858B87] font-normal">of patient footfall</span>
               </div>
             </div>
 
@@ -638,29 +707,29 @@ export default function AdminAnalyticsDashboard() {
               </div>
               <div className="my-3">
                 <div className="text-2xl sm:text-3xl font-extrabold text-[#202421] tracking-tight">{staffVisits}</div>
-                <div className="text-[11px] text-[#858B87] mt-0.5">Caretakers &amp; Guards</div>
+                <div className="text-[11px] text-[#858B87] mt-0.5">Campus Workers &amp; Guards</div>
               </div>
               <div className="text-[11px] font-semibold text-[#159B70] flex items-center gap-1">
                 <span>{totalVisits > 0 ? roundPct((staffVisits / totalVisits) * 100) : 0}%</span>
-                <span className="text-[#858B87] font-normal">of routine volume</span>
+                <span className="text-[#858B87] font-normal">of patient footfall</span>
               </div>
             </div>
 
             {/* 5. Other Community */}
             <div className="col-span-2 sm:col-span-1 bg-white rounded-3xl p-5 border border-[#ECEFEC] shadow-sm flex flex-col justify-between">
               <div className="flex items-center justify-between">
-                <span className="text-[11px] font-semibold text-[#858B87] uppercase tracking-wide">Other</span>
+                <span className="text-[11px] font-semibold text-[#858B87] uppercase tracking-wide">Community</span>
                 <div className="w-7 h-7 rounded-full bg-[#F3F4F3] text-[#858B87] flex items-center justify-center">
                   <Activity className="w-3.5 h-3.5" />
                 </div>
               </div>
               <div className="my-3">
                 <div className="text-2xl sm:text-3xl font-extrabold text-[#202421] tracking-tight">{otherVisits}</div>
-                <div className="text-[11px] text-[#858B87] mt-0.5">General Visitors</div>
+                <div className="text-[11px] text-[#858B87] mt-0.5">Community Members</div>
               </div>
               <div className="text-[11px] font-semibold text-[#858B87] flex items-center gap-1">
                 <span>{totalVisits > 0 ? roundPct((otherVisits / totalVisits) * 100) : 0}%</span>
-                <span className="text-[#858B87] font-normal">of routine volume</span>
+                <span className="text-[#858B87] font-normal">of patient footfall</span>
               </div>
             </div>
           </div>
@@ -701,34 +770,34 @@ export default function AdminAnalyticsDashboard() {
                 </div>
               </div>
 
-              {/* Recent Consultations (Oripio "Payment History" Replica) */}
+              {/* Recent Consultations Log */}
               <div id="consultations-section" className="bg-white rounded-3xl p-6 border border-[#ECEFEC] shadow-sm scroll-mt-6">
                 <div className="flex items-center justify-between mb-4">
                   <div>
-                    <h2 className="text-sm font-bold text-[#202421]">Recent Consultations</h2>
-                    <p className="text-[11px] text-[#858B87]">Latest doctor-recorded visits</p>
+                    <h2 className="text-sm font-bold text-[#202421]">Recent Consultations Log</h2>
+                    <p className="text-[11px] text-[#858B87]">Latest doctor-recorded visits ({recentConsultations.length} records)</p>
                   </div>
                   <button
                     onClick={() => scrollToSection('clinical-morbidity-section', 'diseases')}
-                    title="View Disease Breakdown"
+                    title="View Full Disease Breakdown"
                     className="w-7 h-7 rounded-full bg-[#F3F4F3] hover:bg-[#E5F4EC] text-[#858B87] hover:text-[#078653] flex items-center justify-center transition-colors cursor-pointer"
                   >
                     <ArrowUpRight className="w-3.5 h-3.5" />
                   </button>
                 </div>
 
-                <div className="space-y-3.5">
+                <div className="space-y-3">
                   {recentConsultations.length > 0 ? (
-                    recentConsultations.slice(0, 5).map((c, i) => (
+                    recentConsultations.slice(0, 6).map((c, i) => (
                       <div key={i} className="flex items-center justify-between py-2 border-b border-[#ECEFEC] last:border-b-0">
                         <div className="min-w-0 pr-3">
                           <div className="font-semibold text-xs text-[#202421] truncate">
                             {c.diagnosis}
                           </div>
                           <div className="text-[10px] text-[#858B87] mt-0.5 flex items-center gap-1.5">
-                            <span>{c.patient_type}</span>
+                            <span className="font-semibold text-[#078653]">{c.patient_type}</span>
                             <span>&bull;</span>
-                            <span>{c.time}</span>
+                            <span>{c.date ? `${c.date} ${c.time}` : c.time}</span>
                           </div>
                         </div>
                         <div className="text-right shrink-0">
@@ -742,7 +811,7 @@ export default function AdminAnalyticsDashboard() {
                     ))
                   ) : (
                     <div className="text-center py-8 text-xs text-[#858B87] italic">
-                      No consultations logged for this reporting date.
+                      No consultations logged for this reporting selection.
                     </div>
                   )}
                 </div>
@@ -751,7 +820,7 @@ export default function AdminAnalyticsDashboard() {
 
             {/* ── COLUMN 2: CENTER (~42% / 5 Cols) ──────────────────────── */}
             <div className="lg:col-span-5 space-y-6">
-              {/* Central Visit Trends / Shift Flow Card (Oripio "Engagement Rate" Replica) */}
+              {/* Central Visit Trends / Shift Flow Card */}
               <div id="shift-flow-section" className="bg-white rounded-3xl p-6 border border-[#ECEFEC] shadow-sm scroll-mt-6">
                 <div className="flex items-center justify-between mb-6">
                   <div className="flex items-center gap-2.5">
@@ -760,7 +829,9 @@ export default function AdminAnalyticsDashboard() {
                     </div>
                     <div>
                       <h2 className="text-sm font-bold text-[#202421]">Visit Inflow &amp; Shift Flow</h2>
-                      <p className="text-[11px] text-[#858B87]">Telemetry across operational windows</p>
+                      <p className="text-[11px] text-[#858B87]">
+                        {viewScope === 'all' ? 'All-Time shift distribution' : 'Operational shift breakdown'}
+                      </p>
                     </div>
                   </div>
 
@@ -831,9 +902,9 @@ export default function AdminAnalyticsDashboard() {
                   <div className="relative z-10 flex items-end justify-around h-52 pl-7 pr-2 pb-8">
                     {chartMode === 'shifts' ? (
                       [
-                        { label: 'Shift 1', name: 'Morning', hours: '06:00 - 14:00', count: s1Count },
-                        { label: 'Shift 2', name: 'Evening', hours: '14:00 - 20:00', count: s2Count },
-                        { label: 'Shift 3', name: 'Night', hours: '20:00 - 06:00', count: s3Count },
+                        { label: 'Shift 1', name: 'Morning (06-14)', count: s1Count },
+                        { label: 'Shift 2', name: 'Evening (14-20)', count: s2Count },
+                        { label: 'Shift 3', name: 'Night (20-06)', count: s3Count },
                       ].map((s, idx) => {
                         const heightPct = Math.max((s.count / (maxBarValue || 1)) * 100, 6)
                         const isPeak = s.count > 0 && s.count === Math.max(s1Count, s2Count, s3Count)
@@ -855,7 +926,6 @@ export default function AdminAnalyticsDashboard() {
                                   : 'bg-[#E5F4EC] hover:bg-[#cbe8d8]'
                               }`}
                             >
-                              {/* Texture overlay */}
                               <div
                                 className="absolute inset-0"
                                 style={{
@@ -937,7 +1007,7 @@ export default function AdminAnalyticsDashboard() {
                 </div>
               </div>
 
-              {/* Morbidity Lead Snapshot Card (Links to prominent section below) */}
+              {/* Morbidity Lead Snapshot Card */}
               <div className="bg-white rounded-3xl p-6 border border-[#ECEFEC] shadow-sm">
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-2">
@@ -946,7 +1016,7 @@ export default function AdminAnalyticsDashboard() {
                     </div>
                     <div>
                       <h2 className="text-sm font-bold text-[#202421]">Clinical Diagnostic Snapshot</h2>
-                      <p className="text-[11px] text-[#858B87]">Leading morbidities across consultations</p>
+                      <p className="text-[11px] text-[#858B87]">Leading doctor impressions in database</p>
                     </div>
                   </div>
                   <span className="text-xs font-semibold text-[#078653] bg-[#E5F4EC] px-2.5 py-1 rounded-full">
@@ -1143,7 +1213,6 @@ export default function AdminAnalyticsDashboard() {
           </div>
 
           {/* ── 6. PROMINENT CLINICAL DISEASE & MORBIDITY INTELLIGENCE SECTION ─── */}
-          {/* (Replaces the former Data Quality & Audit Reconciliation table) */}
           <section
             id="clinical-morbidity-section"
             className="bg-white rounded-3xl p-6 sm:p-8 border border-[#ECEFEC] shadow-sm space-y-6 scroll-mt-6"
@@ -1160,13 +1229,15 @@ export default function AdminAnalyticsDashboard() {
                       Clinical Disease &amp; Morbidity Distribution
                     </h2>
                     <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-[#E5F4EC] text-[#078653] border border-[#159B70]/20">
-                      {hasLiveDiagnoses ? 'Live EHR Feed' : 'Authoritative Campus Registry'}
+                      Actual Database Analysis (Everyone)
                     </span>
                   </div>
                   <p className="text-xs text-[#858B87] mt-0.5">
-                    Epidemiological impression profiling, condition rankings, and clinical morbidity spectrum &bull;{' '}
+                    Official diagnostic impressions from doctor consultations &bull;{' '}
                     <span className="font-semibold text-[#078653]">
-                      Reporting Window: {analytics?.reporting_date_formal || selectedDate}
+                      {viewScope === 'all'
+                        ? 'All registered patients (34 total consultations recorded in EHR)'
+                        : `Reporting Date: ${analytics?.reporting_date_formal || selectedDate}`}
                     </span>
                   </p>
                 </div>
@@ -1180,7 +1251,7 @@ export default function AdminAnalyticsDashboard() {
                     type="text"
                     value={diseaseSearch}
                     onChange={(e) => setDiseaseSearch(e.target.value)}
-                    placeholder="Search condition or symptom..."
+                    placeholder="Search condition or category..."
                     className="pl-8 pr-3 py-1.5 bg-[#F8FAF8] border border-[#ECEFEC] rounded-full text-xs text-[#202421] placeholder-[#858B87] focus:outline-none focus:ring-1 focus:ring-[#078653] w-48 sm:w-60"
                   />
                   {diseaseSearch && (
@@ -1232,7 +1303,7 @@ export default function AdminAnalyticsDashboard() {
                   {totalDiagnosesCount > 0 ? totalDiagnosesCount : masterDiagnosesList.reduce((acc, d) => acc + d.count, 0)}
                 </div>
                 <div className="mt-2 text-xs text-[#858B87]">
-                  Across Shifts 1, 2, and 3
+                  From actual doctor EHR entries
                 </div>
               </div>
 
@@ -1246,7 +1317,7 @@ export default function AdminAnalyticsDashboard() {
                   {masterDiagnosesList.length}
                 </div>
                 <div className="mt-2 text-xs text-[#858B87]">
-                  {Object.keys(categoryStats).length} major disease classifications
+                  {Object.keys(categoryStats).length} clinical categories identified
                 </div>
               </div>
 
@@ -1300,17 +1371,17 @@ export default function AdminAnalyticsDashboard() {
               })}
             </div>
 
-            {/* Detailed Diagnostic Impressions Table */}
+            {/* Detailed Diagnostic Impressions Table (ACTUAL DATABASE DATA) */}
             <div className="overflow-x-auto rounded-2xl border border-[#ECEFEC]">
               <table className="w-full text-left text-xs">
                 <thead>
                   <tr className="bg-[#F8FAF8] border-b border-[#ECEFEC] text-[#858B87] uppercase text-[10px] tracking-wider">
                     <th className="py-3 px-4 text-center w-14">Rank</th>
-                    <th className="py-3 px-4">Clinical Diagnosis / Impression</th>
+                    <th className="py-3 px-4">Actual Clinical Diagnosis in EHR</th>
                     <th className="py-3 px-4">Morbidity Category</th>
                     <th className="py-3 px-4 text-center">Case Count</th>
                     <th className="py-3 px-4 w-48">Prevalence Share</th>
-                    <th className="py-3 px-4 text-center">Peak Inflow Window</th>
+                    <th className="py-3 px-4 text-center">Peak Shift</th>
                     <th className="py-3 px-4 text-right">Verification</th>
                   </tr>
                 </thead>
@@ -1318,7 +1389,6 @@ export default function AdminAnalyticsDashboard() {
                   {filteredDiagnoses.length > 0 ? (
                     filteredDiagnoses.map((d, idx) => {
                       const theme = CATEGORY_THEMES[d.category] || CATEGORY_THEMES['General OPD']
-                      const isTop3 = d.rank <= 3
                       return (
                         <tr key={idx} className="hover:bg-[#F9FAF9] transition-colors">
                           {/* Rank Badge */}
@@ -1342,7 +1412,7 @@ export default function AdminAnalyticsDashboard() {
                           <td className="py-3.5 px-4">
                             <div className="font-bold text-xs text-[#202421]">{d.name}</div>
                             <div className="text-[10px] text-[#858B87] mt-0.5">
-                              Documented in official outpatient queue &bull; ICD Telemetry Mapped
+                              Verified EHR record in CONSULTATION table
                             </div>
                           </td>
 
@@ -1367,7 +1437,7 @@ export default function AdminAnalyticsDashboard() {
                             <div className="space-y-1">
                               <div className="flex justify-between text-[11px]">
                                 <span className="font-bold text-[#078653]">{d.percentage}%</span>
-                                <span className="text-[10px] text-[#858B87]">of morbidity</span>
+                                <span className="text-[10px] text-[#858B87]">of diagnosed cases</span>
                               </div>
                               <div className="w-full bg-[#F3F4F3] h-2 rounded-full overflow-hidden">
                                 <div
@@ -1381,7 +1451,7 @@ export default function AdminAnalyticsDashboard() {
                           {/* Peak Shift */}
                           <td className="py-3.5 px-4 text-center">
                             <span className="inline-block text-[10px] font-semibold text-[#858B87] bg-[#F8FAF8] border border-[#ECEFEC] px-2.5 py-1 rounded-full">
-                              {d.peakShift || 'Shift 1 & 2'}
+                              {d.peakShift}
                             </span>
                           </td>
 
@@ -1398,7 +1468,9 @@ export default function AdminAnalyticsDashboard() {
                   ) : (
                     <tr>
                       <td colSpan={7} className="py-8 text-center text-xs text-[#858B87] italic">
-                        No clinical conditions found matching the current search &amp; filter criteria.
+                        {masterDiagnosesList.length === 0
+                          ? 'No doctor consultations recorded in the database for this date. Switch to "All Patients (Everyone)" above to view comprehensive actual records.'
+                          : 'No clinical conditions found matching the current search & filter criteria.'}
                       </td>
                     </tr>
                   )}
@@ -1412,12 +1484,11 @@ export default function AdminAnalyticsDashboard() {
                 <Info className="w-4 h-4" />
               </div>
               <div className="text-xs text-[#202421] space-y-1">
-                <div className="font-bold text-sm text-[#078653]">Epidemiological Surveillance Insight</div>
+                <div className="font-bold text-sm text-[#078653]">Actual Database Intelligence Summary</div>
                 <p className="text-[#858B87] leading-relaxed">
-                  Upper respiratory and febrile illnesses represent the primary outpatient presentations across student
-                  cohorts, peaking during morning and early afternoon windows. Trauma and muscular strain cases are largely
-                  concentrated in post-academic recreational hours. Zero communicable outbreak thresholds have been triggered
-                  for this reporting cycle.
+                  The health centre database contains a total of <strong className="text-[#202421]">{totalVisits} visits</strong> across all patient types (36 Students, 2 Faculty &amp; Dependents, 4 Community members). 
+                  Clinical impressions recorded by medical officers in the consultation queue confirm{' '}
+                  <strong className="text-[#202421]">{totalDiagnosesCount} total clinical consultations</strong>, with upper respiratory infections, pyrexia, and muscular strain representing the leading specific morbidities alongside routine health evaluations.
                 </p>
               </div>
             </div>

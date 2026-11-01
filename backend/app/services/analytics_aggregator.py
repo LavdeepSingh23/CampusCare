@@ -11,6 +11,7 @@ import logging
 from datetime import date, datetime, time, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
+from app.core.config import CAMPUSCARE_WEB_URL
 from app.core.database import get_db_connection
 
 try:
@@ -34,44 +35,85 @@ def get_reporting_window(target_date: date):
     return start_dt, shift_1_end, shift_2_end, end_dt
 
 
-def aggregate_daily_analytics(target_date: Optional[date] = None) -> Dict[str, Any]:
+def aggregate_daily_analytics(target_date: Optional[Any] = None, scope: str = "daily") -> Dict[str, Any]:
     """
-    Executes authoritative database queries to aggregate health centre operations
-    for the specified target_date (defaults to yesterday).
+    Executes authoritative database queries to aggregate health centre operations:
+    - If scope == 'all' or target_date == 'all': aggregates all-time actual patient data across everyone in DB.
+    - If scope == 'daily': aggregates the specified target_date (defaults to latest active date with visits).
     All identifiable patient data is strictly excluded.
     """
-    now_kolkata = datetime.now(KOLKATA_TZ)
-    if target_date is None:
-        target_date = (now_kolkata - timedelta(days=1)).date()
-
-    start_dt, s1_end, s2_end, end_dt = get_reporting_window(target_date)
-
-    # Previous day window
-    prev_date = target_date - timedelta(days=1)
-    p_s1, _, _, p_ed = get_reporting_window(prev_date)
-
-    # 7 days prior window
-    seven_days_start, _, _, _ = get_reporting_window(target_date - timedelta(days=7))
-
     connection = get_db_connection()
     try:
         with connection.cursor() as cursor:
+            now_kolkata = datetime.now(KOLKATA_TZ)
+            is_all_time = (scope == "all" or str(target_date).lower() == "all")
+
+            if is_all_time:
+                target_date_obj = (now_kolkata - timedelta(days=1)).date()
+                formatted_target_date = "All-Time Comprehensive Health Centre Registry"
+                formatted_target_date_short = "All Registered"
+                reporting_date_str = "all"
+                start_dt = datetime.combine(target_date_obj, time(6, 0, 0))
+                end_dt = datetime.combine(target_date_obj + timedelta(days=1), time(6, 0, 0))
+                prev_date = target_date_obj - timedelta(days=1)
+                p_s1, _, _, p_ed = get_reporting_window(prev_date)
+                seven_days_start, _, _, _ = get_reporting_window(target_date_obj - timedelta(days=7))
+            else:
+                if target_date is None:
+                    # Find latest date with actual visits so we never default to an empty day
+                    cursor.execute("SELECT MAX(DATE(checked_in_at)) as max_d FROM VISIT")
+                    r_max = cursor.fetchone()
+                    if r_max and r_max.get("max_d"):
+                        target_date_obj = r_max["max_d"]
+                    else:
+                        target_date_obj = (now_kolkata - timedelta(days=1)).date()
+                elif isinstance(target_date, str):
+                    try:
+                        target_date_obj = datetime.strptime(target_date, "%Y-%m-%d").date()
+                    except ValueError:
+                        target_date_obj = (now_kolkata - timedelta(days=1)).date()
+                else:
+                    target_date_obj = target_date
+
+                start_dt, s1_end, s2_end, end_dt = get_reporting_window(target_date_obj)
+                prev_date = target_date_obj - timedelta(days=1)
+                p_s1, _, _, p_ed = get_reporting_window(prev_date)
+                seven_days_start, _, _, _ = get_reporting_window(target_date_obj - timedelta(days=7))
+                formatted_target_date = target_date_obj.strftime("%d %B %Y")
+                formatted_target_date_short = target_date_obj.strftime("%d %b, %Y")
+                reporting_date_str = target_date_obj.isoformat()
+
             # 1. VISITS & SHIFT DISTRIBUTION
-            cursor.execute(
-                """
-                SELECT
-                    COUNT(*) as total_visits,
-                    SUM(CASE WHEN checked_in_at >= %s AND checked_in_at < %s THEN 1 ELSE 0 END) as shift_1_visits,
-                    SUM(CASE WHEN checked_in_at >= %s AND checked_in_at < %s THEN 1 ELSE 0 END) as shift_2_visits,
-                    SUM(CASE WHEN checked_in_at >= %s AND checked_in_at < %s THEN 1 ELSE 0 END) as shift_3_visits,
-                    SUM(CASE WHEN status = 'COMPLETED' THEN 1 ELSE 0 END) as completed_visits,
-                    SUM(CASE WHEN status IN ('CANCELLED', 'NO_SHOW') THEN 1 ELSE 0 END) as cancelled_visits,
-                    SUM(CASE WHEN status NOT IN ('COMPLETED', 'CANCELLED', 'NO_SHOW') THEN 1 ELSE 0 END) as pending_visits
-                FROM VISIT
-                WHERE checked_in_at >= %s AND checked_in_at < %s
-                """,
-                (start_dt, s1_end, s1_end, s2_end, s2_end, end_dt, start_dt, end_dt),
-            )
+            if is_all_time:
+                cursor.execute(
+                    """
+                    SELECT
+                        COUNT(*) as total_visits,
+                        SUM(CASE WHEN TIME(checked_in_at) >= '06:00:00' AND TIME(checked_in_at) < '14:00:00' THEN 1 ELSE 0 END) as shift_1_visits,
+                        SUM(CASE WHEN TIME(checked_in_at) >= '14:00:00' AND TIME(checked_in_at) < '20:00:00' THEN 1 ELSE 0 END) as shift_2_visits,
+                        SUM(CASE WHEN TIME(checked_in_at) >= '20:00:00' OR TIME(checked_in_at) < '06:00:00' THEN 1 ELSE 0 END) as shift_3_visits,
+                        SUM(CASE WHEN status = 'COMPLETED' THEN 1 ELSE 0 END) as completed_visits,
+                        SUM(CASE WHEN status IN ('CANCELLED', 'NO_SHOW') THEN 1 ELSE 0 END) as cancelled_visits,
+                        SUM(CASE WHEN status NOT IN ('COMPLETED', 'CANCELLED', 'NO_SHOW') THEN 1 ELSE 0 END) as pending_visits
+                    FROM VISIT
+                    """
+                )
+            else:
+                cursor.execute(
+                    """
+                    SELECT
+                        COUNT(*) as total_visits,
+                        SUM(CASE WHEN checked_in_at >= %s AND checked_in_at < %s THEN 1 ELSE 0 END) as shift_1_visits,
+                        SUM(CASE WHEN checked_in_at >= %s AND checked_in_at < %s THEN 1 ELSE 0 END) as shift_2_visits,
+                        SUM(CASE WHEN checked_in_at >= %s AND checked_in_at < %s THEN 1 ELSE 0 END) as shift_3_visits,
+                        SUM(CASE WHEN status = 'COMPLETED' THEN 1 ELSE 0 END) as completed_visits,
+                        SUM(CASE WHEN status IN ('CANCELLED', 'NO_SHOW') THEN 1 ELSE 0 END) as cancelled_visits,
+                        SUM(CASE WHEN status NOT IN ('COMPLETED', 'CANCELLED', 'NO_SHOW') THEN 1 ELSE 0 END) as pending_visits
+                    FROM VISIT
+                    WHERE checked_in_at >= %s AND checked_in_at < %s
+                    """,
+                    (start_dt, s1_end, s1_end, s2_end, s2_end, end_dt, start_dt, end_dt),
+                )
             visit_stats = cursor.fetchone() or {}
             total_visits = int(visit_stats.get("total_visits") or 0)
             s1_count = int(visit_stats.get("shift_1_visits") or 0)
@@ -82,24 +124,42 @@ def aggregate_daily_analytics(target_date: Optional[date] = None) -> Dict[str, A
             pending_visits = int(visit_stats.get("pending_visits") or 0)
 
             # 2. VISITOR DEMOGRAPHICS
-            cursor.execute(
-                """
-                SELECT 
-                    SUM(CASE WHEN p.patient_type = 'STUDENT' OR (p.patient_type IS NULL AND v.roll_number IS NOT NULL) THEN 1 ELSE 0 END) as student_count,
-                    SUM(CASE WHEN p.patient_type IN ('FACULTY', 'FACULTY_DEPENDENT') THEN 1 ELSE 0 END) as faculty_count,
-                    SUM(CASE WHEN p.patient_type = 'COMMUNITY' AND cp.category IN ('CARETAKER', 'CAMPUS_WORKER', 'GUARD', 'STAFF') THEN 1 ELSE 0 END) as staff_count,
-                    SUM(CASE 
-                        WHEN p.patient_type = 'COMMUNITY' AND (cp.category = 'OTHER' OR cp.category IS NULL) THEN 1
-                        WHEN p.patient_type IS NULL AND v.roll_number IS NULL THEN 1
-                        ELSE 0 
-                    END) as other_count
-                FROM VISIT v
-                LEFT JOIN PATIENT p ON p.patient_id = v.patient_id
-                LEFT JOIN COMMUNITY_PROFILE cp ON cp.patient_id = p.patient_id
-                WHERE v.checked_in_at >= %s AND v.checked_in_at < %s
-                """,
-                (start_dt, end_dt),
-            )
+            if is_all_time:
+                cursor.execute(
+                    """
+                    SELECT 
+                        SUM(CASE WHEN p.patient_type = 'STUDENT' OR (p.patient_type IS NULL AND v.roll_number IS NOT NULL) THEN 1 ELSE 0 END) as student_count,
+                        SUM(CASE WHEN p.patient_type IN ('FACULTY', 'FACULTY_DEPENDENT') THEN 1 ELSE 0 END) as faculty_count,
+                        SUM(CASE WHEN p.patient_type = 'COMMUNITY' AND cp.category IN ('CARETAKER', 'CAMPUS_WORKER', 'GUARD', 'STAFF') THEN 1 ELSE 0 END) as staff_count,
+                        SUM(CASE 
+                            WHEN p.patient_type = 'COMMUNITY' AND (cp.category = 'OTHER' OR cp.category IS NULL) THEN 1
+                            WHEN p.patient_type IS NULL AND v.roll_number IS NULL THEN 1
+                            ELSE 0 
+                        END) as other_count
+                    FROM VISIT v
+                    LEFT JOIN PATIENT p ON p.patient_id = v.patient_id
+                    LEFT JOIN COMMUNITY_PROFILE cp ON cp.patient_id = p.patient_id
+                    """
+                )
+            else:
+                cursor.execute(
+                    """
+                    SELECT 
+                        SUM(CASE WHEN p.patient_type = 'STUDENT' OR (p.patient_type IS NULL AND v.roll_number IS NOT NULL) THEN 1 ELSE 0 END) as student_count,
+                        SUM(CASE WHEN p.patient_type IN ('FACULTY', 'FACULTY_DEPENDENT') THEN 1 ELSE 0 END) as faculty_count,
+                        SUM(CASE WHEN p.patient_type = 'COMMUNITY' AND cp.category IN ('CARETAKER', 'CAMPUS_WORKER', 'GUARD', 'STAFF') THEN 1 ELSE 0 END) as staff_count,
+                        SUM(CASE 
+                            WHEN p.patient_type = 'COMMUNITY' AND (cp.category = 'OTHER' OR cp.category IS NULL) THEN 1
+                            WHEN p.patient_type IS NULL AND v.roll_number IS NULL THEN 1
+                            ELSE 0 
+                        END) as other_count
+                    FROM VISIT v
+                    LEFT JOIN PATIENT p ON p.patient_id = v.patient_id
+                    LEFT JOIN COMMUNITY_PROFILE cp ON cp.patient_id = p.patient_id
+                    WHERE v.checked_in_at >= %s AND v.checked_in_at < %s
+                    """,
+                    (start_dt, end_dt),
+                )
             cat_row = cursor.fetchone() or {}
             student_visits = int(cat_row.get("student_count") or 0)
             faculty_visits = int(cat_row.get("faculty_count") or 0)
@@ -137,24 +197,42 @@ def aggregate_daily_analytics(target_date: Optional[date] = None) -> Dict[str, A
             ]
 
             # 3. DOCTOR CONSULTATIONS DISTRIBUTION
-            cursor.execute(
-                """
-                SELECT
-                    COALESCE(ua.email, CONCAT('Doctor #', d.doctor_id)) as doctor_identifier,
-                    COALESCE(sp.name, 'General Physician') as specialty_name,
-                    COUNT(c.consultation_id) as consultation_count
-                FROM CONSULTATION c
-                JOIN VISIT v ON v.visit_id = c.visit_id
-                JOIN DOCTOR d ON d.doctor_id = c.doctor_id
-                LEFT JOIN SPECIALTY sp ON sp.specialty_id = d.specialty_id
-                JOIN STAFF s ON s.staff_id = d.staff_id
-                JOIN USER_ACCOUNT ua ON ua.user_id = s.user_id
-                WHERE v.checked_in_at >= %s AND v.checked_in_at < %s
-                GROUP BY d.doctor_id, ua.email, sp.name
-                ORDER BY consultation_count DESC
-                """,
-                (start_dt, end_dt),
-            )
+            if is_all_time:
+                cursor.execute(
+                    """
+                    SELECT
+                        COALESCE(ua.email, CONCAT('Doctor #', d.doctor_id)) as doctor_identifier,
+                        COALESCE(sp.name, 'General Physician') as specialty_name,
+                        COUNT(c.consultation_id) as consultation_count
+                    FROM CONSULTATION c
+                    JOIN VISIT v ON v.visit_id = c.visit_id
+                    JOIN DOCTOR d ON d.doctor_id = c.doctor_id
+                    LEFT JOIN SPECIALTY sp ON sp.specialty_id = d.specialty_id
+                    JOIN STAFF s ON s.staff_id = d.staff_id
+                    JOIN USER_ACCOUNT ua ON ua.user_id = s.user_id
+                    GROUP BY d.doctor_id, ua.email, sp.name
+                    ORDER BY consultation_count DESC
+                    """
+                )
+            else:
+                cursor.execute(
+                    """
+                    SELECT
+                        COALESCE(ua.email, CONCAT('Doctor #', d.doctor_id)) as doctor_identifier,
+                        COALESCE(sp.name, 'General Physician') as specialty_name,
+                        COUNT(c.consultation_id) as consultation_count
+                    FROM CONSULTATION c
+                    JOIN VISIT v ON v.visit_id = c.visit_id
+                    JOIN DOCTOR d ON d.doctor_id = c.doctor_id
+                    LEFT JOIN SPECIALTY sp ON sp.specialty_id = d.specialty_id
+                    JOIN STAFF s ON s.staff_id = d.staff_id
+                    JOIN USER_ACCOUNT ua ON ua.user_id = s.user_id
+                    WHERE v.checked_in_at >= %s AND v.checked_in_at < %s
+                    GROUP BY d.doctor_id, ua.email, sp.name
+                    ORDER BY consultation_count DESC
+                    """,
+                    (start_dt, end_dt),
+                )
             doc_rows = cursor.fetchall() or []
             total_consultations = sum(int(r["consultation_count"]) for r in doc_rows)
 
@@ -171,19 +249,31 @@ def aggregate_daily_analytics(target_date: Optional[date] = None) -> Dict[str, A
                 })
 
             # 4. CLINICAL CASE CATEGORIES
-            cursor.execute(
-                """
-                SELECT
-                    COALESCE(NULLIF(c.case_category, ''), 'UNSPECIFIED') as category_code,
-                    COUNT(*) as category_count
-                FROM CONSULTATION c
-                JOIN VISIT v ON v.visit_id = c.visit_id
-                WHERE v.checked_in_at >= %s AND v.checked_in_at < %s
-                GROUP BY category_code
-                ORDER BY category_count DESC
-                """,
-                (start_dt, end_dt),
-            )
+            if is_all_time:
+                cursor.execute(
+                    """
+                    SELECT
+                        COALESCE(NULLIF(c.case_category, ''), 'UNSPECIFIED') as category_code,
+                        COUNT(*) as category_count
+                    FROM CONSULTATION c
+                    GROUP BY category_code
+                    ORDER BY category_count DESC
+                    """
+                )
+            else:
+                cursor.execute(
+                    """
+                    SELECT
+                        COALESCE(NULLIF(c.case_category, ''), 'UNSPECIFIED') as category_code,
+                        COUNT(*) as category_count
+                    FROM CONSULTATION c
+                    JOIN VISIT v ON v.visit_id = c.visit_id
+                    WHERE v.checked_in_at >= %s AND v.checked_in_at < %s
+                    GROUP BY category_code
+                    ORDER BY category_count DESC
+                    """,
+                    (start_dt, end_dt),
+                )
             cat_rows = cursor.fetchall() or []
             total_categorized = sum(int(r["category_count"]) for r in cat_rows)
 
@@ -225,19 +315,31 @@ def aggregate_daily_analytics(target_date: Optional[date] = None) -> Dict[str, A
             top_category_pct = case_categories[0]["percentage"] if case_categories else 0.0
 
             # 5. TOP 10 DIAGNOSED CONDITIONS (from CONSULTATION.diagnosis)
-            cursor.execute(
-                """
-                SELECT 
-                    COALESCE(NULLIF(TRIM(c.diagnosis), ''), 'General OPD Evaluation') as diagnosis_name,
-                    COUNT(*) as case_count
-                FROM CONSULTATION c
-                JOIN VISIT v ON v.visit_id = c.visit_id
-                WHERE v.checked_in_at >= %s AND v.checked_in_at < %s
-                GROUP BY diagnosis_name
-                ORDER BY case_count DESC
-                """,
-                (start_dt, end_dt),
-            )
+            if is_all_time:
+                cursor.execute(
+                    """
+                    SELECT 
+                        COALESCE(NULLIF(TRIM(c.diagnosis), ''), 'General OPD Evaluation') as diagnosis_name,
+                        COUNT(*) as case_count
+                    FROM CONSULTATION c
+                    GROUP BY diagnosis_name
+                    ORDER BY case_count DESC
+                    """
+                )
+            else:
+                cursor.execute(
+                    """
+                    SELECT 
+                        COALESCE(NULLIF(TRIM(c.diagnosis), ''), 'General OPD Evaluation') as diagnosis_name,
+                        COUNT(*) as case_count
+                    FROM CONSULTATION c
+                    JOIN VISIT v ON v.visit_id = c.visit_id
+                    WHERE v.checked_in_at >= %s AND v.checked_in_at < %s
+                    GROUP BY diagnosis_name
+                    ORDER BY case_count DESC
+                    """,
+                    (start_dt, end_dt),
+                )
             diag_rows = cursor.fetchall() or []
             total_diagnoses = sum(int(r["case_count"]) for r in diag_rows)
 
@@ -265,19 +367,30 @@ def aggregate_daily_analytics(target_date: Optional[date] = None) -> Dict[str, A
                 })
 
             # 6. PRESCRIPTIONS STATISTICS
-            cursor.execute(
-                """
-                SELECT
-                    COUNT(DISTINCT p.prescription_id) as total_prescriptions,
-                    COUNT(pi.prescription_item_id) as total_med_items
-                FROM PRESCRIPTION p
-                JOIN CONSULTATION c ON c.consultation_id = p.consultation_id
-                JOIN VISIT v ON v.visit_id = c.visit_id
-                LEFT JOIN PRESCRIPTION_ITEM pi ON pi.prescription_id = p.prescription_id
-                WHERE v.checked_in_at >= %s AND v.checked_in_at < %s
-                """,
-                (start_dt, end_dt),
-            )
+            if is_all_time:
+                cursor.execute(
+                    """
+                    SELECT
+                        COUNT(DISTINCT p.prescription_id) as total_prescriptions,
+                        COUNT(pi.prescription_item_id) as total_med_items
+                    FROM PRESCRIPTION p
+                    LEFT JOIN PRESCRIPTION_ITEM pi ON pi.prescription_id = p.prescription_id
+                    """
+                )
+            else:
+                cursor.execute(
+                    """
+                    SELECT
+                        COUNT(DISTINCT p.prescription_id) as total_prescriptions,
+                        COUNT(pi.prescription_item_id) as total_med_items
+                    FROM PRESCRIPTION p
+                    JOIN CONSULTATION c ON c.consultation_id = p.consultation_id
+                    JOIN VISIT v ON v.visit_id = c.visit_id
+                    LEFT JOIN PRESCRIPTION_ITEM pi ON pi.prescription_id = p.prescription_id
+                    WHERE v.checked_in_at >= %s AND v.checked_in_at < %s
+                    """,
+                    (start_dt, end_dt),
+                )
             presc_stats = cursor.fetchone() or {}
             total_prescriptions = int(presc_stats.get("total_prescriptions") or 0)
             total_med_items = int(presc_stats.get("total_med_items") or 0)
@@ -303,20 +416,34 @@ def aggregate_daily_analytics(target_date: Optional[date] = None) -> Dict[str, A
             top_medicines = [{"name": r["medicine_name"], "frequency": int(r["freq"])} for r in top_meds_rows]
 
             # 7. EMERGENCY CASES (separate from routine visits)
-            cursor.execute(
-                """
-                SELECT
-                    COUNT(*) as total_emergencies,
-                    SUM(CASE WHEN severity = 'CRITICAL' THEN 1 ELSE 0 END) as critical_count,
-                    SUM(CASE WHEN severity = 'HIGH' THEN 1 ELSE 0 END) as high_count,
-                    SUM(CASE WHEN severity = 'MEDIUM' THEN 1 ELSE 0 END) as medium_count,
-                    SUM(CASE WHEN severity = 'LOW' THEN 1 ELSE 0 END) as low_count,
-                    SUM(CASE WHEN ambulance_required = 1 THEN 1 ELSE 0 END) as ambulance_count
-                FROM EMERGENCY_LOG
-                WHERE occurred_at >= %s AND occurred_at < %s
-                """,
-                (start_dt, end_dt),
-            )
+            if is_all_time:
+                cursor.execute(
+                    """
+                    SELECT
+                        COUNT(*) as total_emergencies,
+                        SUM(CASE WHEN severity = 'CRITICAL' THEN 1 ELSE 0 END) as critical_count,
+                        SUM(CASE WHEN severity = 'HIGH' THEN 1 ELSE 0 END) as high_count,
+                        SUM(CASE WHEN severity = 'MEDIUM' THEN 1 ELSE 0 END) as medium_count,
+                        SUM(CASE WHEN severity = 'LOW' THEN 1 ELSE 0 END) as low_count,
+                        SUM(CASE WHEN ambulance_required = 1 THEN 1 ELSE 0 END) as ambulance_count
+                    FROM EMERGENCY_LOG
+                    """
+                )
+            else:
+                cursor.execute(
+                    """
+                    SELECT
+                        COUNT(*) as total_emergencies,
+                        SUM(CASE WHEN severity = 'CRITICAL' THEN 1 ELSE 0 END) as critical_count,
+                        SUM(CASE WHEN severity = 'HIGH' THEN 1 ELSE 0 END) as high_count,
+                        SUM(CASE WHEN severity = 'MEDIUM' THEN 1 ELSE 0 END) as medium_count,
+                        SUM(CASE WHEN severity = 'LOW' THEN 1 ELSE 0 END) as low_count,
+                        SUM(CASE WHEN ambulance_required = 1 THEN 1 ELSE 0 END) as ambulance_count
+                    FROM EMERGENCY_LOG
+                    WHERE occurred_at >= %s AND occurred_at < %s
+                    """,
+                    (start_dt, end_dt),
+                )
             em_row = cursor.fetchone() or {}
             total_emergencies = int(em_row.get("total_emergencies") or 0)
             critical_emergencies = int(em_row.get("critical_count") or 0)
@@ -364,15 +491,24 @@ def aggregate_daily_analytics(target_date: Optional[date] = None) -> Dict[str, A
             # 9. DATA QUALITY METRICS
             # Reconciles database records, offline imports, duplicate prevention, and records needing review
             records_requiring_review = cancelled_visits + pending_visits
-            cursor.execute(
-                """
-                SELECT COUNT(*) as unmatched_cnt
-                FROM VISIT
-                WHERE checked_in_at >= %s AND checked_in_at < %s
-                  AND patient_id IS NULL AND roll_number IS NULL
-                """,
-                (start_dt, end_dt),
-            )
+            if is_all_time:
+                cursor.execute(
+                    """
+                    SELECT COUNT(*) as unmatched_cnt
+                    FROM VISIT
+                    WHERE patient_id IS NULL AND roll_number IS NULL
+                    """
+                )
+            else:
+                cursor.execute(
+                    """
+                    SELECT COUNT(*) as unmatched_cnt
+                    FROM VISIT
+                    WHERE checked_in_at >= %s AND checked_in_at < %s
+                      AND patient_id IS NULL AND roll_number IS NULL
+                    """,
+                    (start_dt, end_dt),
+                )
             unmatched_row = cursor.fetchone() or {}
             unmatched_records = int(unmatched_row.get("unmatched_cnt") or 0)
 
@@ -381,24 +517,24 @@ def aggregate_daily_analytics(target_date: Optional[date] = None) -> Dict[str, A
             roster_row = cursor.fetchone() or {}
             total_roster_doctors = int(roster_row.get("roster_count") or 4)
 
-            cursor.execute(
-                """
-                SELECT COUNT(DISTINCT doctor_id) as available_today
-                FROM DOCTOR_AVAILABILITY
-                WHERE availability_date = %s AND status = 'AVAILABLE'
-                """,
-                (target_date,),
-            )
-            avail_row = cursor.fetchone() or {}
-            available_doctors = int(avail_row.get("available_today") or 0)
-            if available_doctors == 0:
-                available_doctors = min(total_roster_doctors, max(1, len(doctor_distribution)))
+            if is_all_time:
+                available_doctors = total_roster_doctors
+            else:
+                cursor.execute(
+                    """
+                    SELECT COUNT(DISTINCT doctor_id) as available_today
+                    FROM DOCTOR_AVAILABILITY
+                    WHERE availability_date = %s AND status = 'AVAILABLE'
+                    """,
+                    (target_date_obj,),
+                )
+                avail_row = cursor.fetchone() or {}
+                available_doctors = int(avail_row.get("available_today") or 0)
+                if available_doctors == 0:
+                    available_doctors = min(total_roster_doctors, max(1, len(doctor_distribution)))
 
     finally:
         connection.close()
-
-    formatted_target_date = target_date.strftime("%d %B %Y")
-    formatted_target_date_short = target_date.strftime("%d %b, %Y")
     now_formatted = now_kolkata.strftime("%d %b %Y, %I:%M %p IST")
 
     # Format signed percentages
@@ -482,10 +618,11 @@ def aggregate_daily_analytics(target_date: Optional[date] = None) -> Dict[str, A
             "Zero emergency presentations or campus ambulance dispatches were logged during this 24-hour reporting cycle."
         )
 
-    admin_dashboard_url = f"{CAMPUSCARE_WEB_URL}/admin/analytics?date={target_date.isoformat()}"
+    admin_dashboard_url = f"{CAMPUSCARE_WEB_URL}/admin/analytics?date={reporting_date_str}"
 
     return {
-        "reporting_date": target_date.isoformat(),
+        "scope": "all" if is_all_time else "daily",
+        "reporting_date": reporting_date_str,
         "reporting_date_formatted": formatted_target_date_short,
         "reporting_date_formal": formatted_target_date,
         "generation_timestamp": now_formatted,

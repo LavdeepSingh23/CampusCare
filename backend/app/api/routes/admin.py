@@ -243,24 +243,45 @@ def preview_daily_analytics_pdf(
     """
     Generates (if not cached) and streams the landscape analytics dashboard PDF
     for browser preview or download.
+    Supports target_date='all' for cumulative report across everyone.
     """
-    parsed_date = None
-    if target_date:
+    is_all = (target_date and str(target_date).lower() == "all")
+    if is_all:
+        rep_date_str = "AllTime"
+        pdf_path = str(REPORTS_DIR / f"CampusCare_Analytics_AllTime.pdf")
         try:
-            parsed_date = datetime.strptime(target_date, "%Y-%m-%d").date()
-        except ValueError:
-            raise HTTPException(status_code=400, detail="Invalid target_date format. Must be YYYY-MM-DD.")
+            data = aggregate_daily_analytics(target_date="all", scope="all")
+            html = generate_analytics_html(data)
+            render_html_to_pdf(html, pdf_path)
+        except Exception as exc:
+            logger.error("Failed to generate all-time analytics PDF: %s", exc, exc_info=True)
+            raise HTTPException(status_code=500, detail=f"Failed to generate all-time analytics PDF: {exc}")
     else:
-        parsed_date = (datetime.now(KOLKATA_TZ) - timedelta(days=1)).date()
+        if target_date:
+            try:
+                parsed_date = datetime.strptime(target_date, "%Y-%m-%d").date()
+            except ValueError:
+                raise HTTPException(status_code=400, detail="Invalid target_date format. Must be YYYY-MM-DD.")
+        else:
+            conn = get_db_connection()
+            try:
+                with conn.cursor() as cur:
+                    cur.execute("SELECT MAX(DATE(checked_in_at)) as max_d FROM VISIT")
+                    r_max = cur.fetchone()
+                    parsed_date = r_max["max_d"] if r_max and r_max.get("max_d") else (datetime.now(KOLKATA_TZ) - timedelta(days=1)).date()
+            finally:
+                conn.close()
 
-    rep_date_str = parsed_date.strftime("%Y-%m-%d")
-    pdf_path = str(REPORTS_DIR / f"CampusCare_Analytics_{rep_date_str}.pdf")
+        rep_date_str = parsed_date.strftime("%Y-%m-%d")
+        pdf_path = str(REPORTS_DIR / f"CampusCare_Analytics_{rep_date_str}.pdf")
 
-    # If PDF does not exist, generate on the fly
-    if not os.path.exists(pdf_path):
-        data = aggregate_daily_analytics(parsed_date)
-        html = generate_analytics_html(data)
-        render_html_to_pdf(html, pdf_path)
+        try:
+            data = aggregate_daily_analytics(parsed_date)
+            html = generate_analytics_html(data)
+            render_html_to_pdf(html, pdf_path)
+        except Exception as exc:
+            logger.error("Failed to generate analytics PDF: %s", exc, exc_info=True)
+            raise HTTPException(status_code=500, detail=f"Failed to generate analytics PDF: {exc}")
 
     return FileResponse(
         path=pdf_path,
@@ -303,24 +324,36 @@ def get_analytics_report_logs(
 @router.get("/analytics")
 def get_admin_analytics_dashboard(
     date: Optional[str] = None,
+    scope: Optional[str] = None,
     current: CurrentAdmin = Depends(get_current_admin),
 ):
     """
     Returns comprehensive analytics telemetry for the CampusCare Admin Analytics Dashboard:
-    - Authoritative single-day aggregated data (shifts, categories, diagnoses, comparisons)
+    - Authoritative aggregated data (supports scope='all' for everyone, or specific date)
     - 7-day volume trend for the interactive chart
     - Recent consultation log for the operations table
     """
-    parsed_date = None
-    if date:
-        try:
-            parsed_date = datetime.strptime(date, "%Y-%m-%d").date()
-        except ValueError:
-            raise HTTPException(status_code=400, detail="Invalid date format. Must be YYYY-MM-DD.")
-    else:
+    is_all = (scope == "all" or (date and str(date).lower() == "all"))
+    if is_all:
+        analytics_data = aggregate_daily_analytics(target_date="all", scope="all")
         parsed_date = (datetime.now(KOLKATA_TZ) - timedelta(days=1)).date()
+    else:
+        if date:
+            try:
+                parsed_date = datetime.strptime(date, "%Y-%m-%d").date()
+            except ValueError:
+                raise HTTPException(status_code=400, detail="Invalid date format. Must be YYYY-MM-DD.")
+        else:
+            conn = get_db_connection()
+            try:
+                with conn.cursor() as cur:
+                    cur.execute("SELECT MAX(DATE(checked_in_at)) as max_d FROM VISIT")
+                    r_max = cur.fetchone()
+                    parsed_date = r_max["max_d"] if r_max and r_max.get("max_d") else (datetime.now(KOLKATA_TZ) - timedelta(days=1)).date()
+            finally:
+                conn.close()
 
-    analytics_data = aggregate_daily_analytics(parsed_date)
+        analytics_data = aggregate_daily_analytics(parsed_date)
 
     trend_7d = []
     recent_consultations = []
@@ -386,28 +419,51 @@ def get_admin_analytics_dashboard(
                 })
 
             s1_cur, _, _, ed_cur = get_reporting_window(parsed_date)
-            cursor.execute(
-                """
-                SELECT 
-                    v.visit_id,
-                    v.checked_in_at,
-                    v.status,
-                    p.patient_type,
-                    COALESCE(NULLIF(TRIM(c.diagnosis), ''), 'General OPD Evaluation') as diagnosis,
-                    COALESCE(NULLIF(TRIM(c.case_category), ''), 'UNSPECIFIED') as category,
-                    COALESCE(ua.email, 'Medical Officer') as doctor_email
-                FROM VISIT v
-                LEFT JOIN PATIENT p ON p.patient_id = v.patient_id
-                LEFT JOIN CONSULTATION c ON c.visit_id = v.visit_id
-                LEFT JOIN DOCTOR d ON d.doctor_id = c.doctor_id
-                LEFT JOIN STAFF s ON s.staff_id = d.staff_id
-                LEFT JOIN USER_ACCOUNT ua ON ua.user_id = s.user_id
-                WHERE v.checked_in_at >= %s AND v.checked_in_at < %s
-                ORDER BY v.checked_in_at DESC
-                LIMIT 15
-                """,
-                (s1_cur, ed_cur),
-            )
+            if is_all:
+                cursor.execute(
+                    """
+                    SELECT 
+                        v.visit_id,
+                        v.checked_in_at,
+                        v.status,
+                        p.patient_type,
+                        COALESCE(NULLIF(TRIM(c.diagnosis), ''), 'General OPD Evaluation') as diagnosis,
+                        COALESCE(NULLIF(TRIM(c.case_category), ''), 'UNSPECIFIED') as category,
+                        COALESCE(ua.email, 'Medical Officer') as doctor_email
+                    FROM VISIT v
+                    LEFT JOIN PATIENT p ON p.patient_id = v.patient_id
+                    LEFT JOIN CONSULTATION c ON c.visit_id = v.visit_id
+                    LEFT JOIN DOCTOR d ON d.doctor_id = c.doctor_id
+                    LEFT JOIN STAFF s ON s.staff_id = d.staff_id
+                    JOIN USER_ACCOUNT ua ON ua.user_id = s.user_id
+                    WHERE v.checked_in_at IS NOT NULL
+                    ORDER BY v.checked_in_at DESC
+                    LIMIT 20
+                    """
+                )
+            else:
+                cursor.execute(
+                    """
+                    SELECT 
+                        v.visit_id,
+                        v.checked_in_at,
+                        v.status,
+                        p.patient_type,
+                        COALESCE(NULLIF(TRIM(c.diagnosis), ''), 'General OPD Evaluation') as diagnosis,
+                        COALESCE(NULLIF(TRIM(c.case_category), ''), 'UNSPECIFIED') as category,
+                        COALESCE(ua.email, 'Medical Officer') as doctor_email
+                    FROM VISIT v
+                    LEFT JOIN PATIENT p ON p.patient_id = v.patient_id
+                    LEFT JOIN CONSULTATION c ON c.visit_id = v.visit_id
+                    LEFT JOIN DOCTOR d ON d.doctor_id = c.doctor_id
+                    LEFT JOIN STAFF s ON s.staff_id = d.staff_id
+                    JOIN USER_ACCOUNT ua ON ua.user_id = s.user_id
+                    WHERE v.checked_in_at >= %s AND v.checked_in_at < %s
+                    ORDER BY v.checked_in_at DESC
+                    LIMIT 20
+                    """,
+                    (s1_cur, ed_cur),
+                )
             raw_consults = cursor.fetchall() or []
             for r in raw_consults:
                 chk_dt = r["checked_in_at"]
