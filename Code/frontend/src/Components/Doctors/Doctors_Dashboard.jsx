@@ -106,6 +106,9 @@ export default function Doctors_Dashboard() {
   const [patients, setPatients] = useState([])
   const [selectedPatientId, setSelectedPatientId] = useState(null)
   const summaryCacheRef = useRef({})
+  const isQueueRefreshingRef = useRef(false)
+  const reconcileTimerRef = useRef(null)
+  const activeConsultationRef = useRef(null)
   const [wsStatus, setWsStatus] = useState('disconnected')
   const [realtimeNotification, setRealtimeNotification] = useState(null)
   const seenEventsRef = useRef(new Set())
@@ -358,7 +361,183 @@ export default function Doctors_Dashboard() {
     })
   }, [draftDiagnosis, selectedPatient, draftClinicalNotes, draftMedicines])
 
-  // Load backend data (Zero N+1 calls; uses summary cache)
+  // Canonical mapper from raw backend queue item or WebSocket payload to dashboard patient model
+  const mapRawItemToPatient = (item, idx, activeConsult, summaryCache) => {
+    const roll = item.rollNumber || item.roll_number || item.rollNo
+    const cachedSummary = roll ? summaryCache[roll] : null
+    const summary = cachedSummary || { allergies: 'None recorded', conditions: 'None recorded' }
+
+    const name = item.name || item.student_name || 'Patient'
+    const initials = name
+      .split(' ')
+      .filter(Boolean)
+      .map((w) => w[0])
+      .join('')
+      .slice(0, 2)
+      .toUpperCase() || 'ST'
+
+    const rawStatus = (item.statusCode || item.status || '').toUpperCase()
+    const isInConsultation =
+      rawStatus === 'IN_CONSULTATION' ||
+      (activeConsult?.active &&
+        (activeConsult.patient?.visitId === (item.visitId || item.visit_id) ||
+          (roll && activeConsult.patient?.rollNumber === roll)))
+
+    const status = isInConsultation
+      ? 'In Consultation'
+      : idx === 0 && !activeConsult?.active
+      ? 'Next in Line'
+      : 'Waiting'
+
+    const statusBadge = isInConsultation
+      ? 'bg-teal-50 text-teal-800 border-teal-200'
+      : status === 'Next in Line'
+      ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+      : 'bg-amber-50 text-amber-800 border-amber-200'
+
+    const allergiesList =
+      summary.allergies && summary.allergies !== 'None recorded'
+        ? summary.allergies.split(',').map((s) => s.trim())
+        : ['None declared']
+
+    const qEntryId = item.queueEntryId || item.queue_entry_id
+    const vId = item.visitId || item.visit_id
+    const qNo = Number(item.queueNo ?? item.queue_number ?? item.sequence ?? idx + 1)
+
+    return {
+      id: qEntryId || vId || idx + 10,
+      visitId: vId,
+      queueEntryId: qEntryId,
+      queueNo: qNo,
+      name,
+      initials,
+      rollNo: roll,
+      communityCode: item.communityCode || item.community_code || null,
+      category: item.category || null,
+      patientType: item.patientType || item.patient_type || (item.communityCode ? 'COMMUNITY' : 'STUDENT'),
+      age: item.age || 20,
+      gender: item.gender || (item.communityCode ? (item.category || 'Community') : 'Student'),
+      bloodGroup: item.bloodGroup || item.blood_group || 'B+',
+      waitTime: item.waitingSince ? `${item.waitingSince}` : `${(idx + 1) * 6} min`,
+      status,
+      statusCode: isInConsultation ? 'IN_CONSULTATION' : 'WAITING',
+      statusBadge,
+      avatarBg: isInConsultation
+        ? 'bg-teal-700 text-white'
+        : idx === 1
+        ? 'bg-slate-700 text-white'
+        : idx === 2
+        ? 'bg-amber-700 text-white'
+        : 'bg-indigo-700 text-white',
+      complaint:
+        item.complaint ||
+        (summary.conditions && summary.conditions !== 'None recorded'
+          ? summary.conditions
+          : 'OPD Health Evaluation'),
+      history: item.communityCode
+        ? `Campus Community (${item.category || 'Member'}). Code: ${roll}. Blood: ${item.bloodGroup || 'B+'}, Age: ${item.age || 20}.`
+        : `TIET Student. Roll: ${roll}. Blood Group: ${item.bloodGroup || 'B+'}, Age: ${item.age || 20}.`,
+      allergies: allergiesList,
+      prescriptions: item.prescriptions || [],
+    }
+  }
+
+  // Pure helper to sort patients and assign queue semantics
+  const sortAndAssignQueueSemantics = (list, activeConsult) => {
+    const sorted = [...list].sort((a, b) => {
+      const aInConsult = a.statusCode === 'IN_CONSULTATION' || a.status === 'In Consultation' ? 0 : 1
+      const bInConsult = b.statusCode === 'IN_CONSULTATION' || b.status === 'In Consultation' ? 0 : 1
+      if (aInConsult !== bInConsult) return aInConsult - bInConsult
+      const aNo = Number(a.queueNo || 0)
+      const bNo = Number(b.queueNo || 0)
+      if (aNo !== bNo) return aNo - bNo
+      return (a.id || 0) - (b.id || 0)
+    })
+
+    const hasConsult = Boolean(activeConsult?.active) || sorted.some((p) => p.status === 'In Consultation' || p.statusCode === 'IN_CONSULTATION')
+
+    let waitingIdx = 0
+    return sorted.map((p, idx) => {
+      const isInConsultation = p.status === 'In Consultation' || p.statusCode === 'IN_CONSULTATION'
+      let status = p.status
+      let statusBadge = p.statusBadge
+
+      if (isInConsultation) {
+        status = 'In Consultation'
+        statusBadge = 'bg-teal-50 text-teal-800 border-teal-200'
+      } else {
+        if (waitingIdx === 0 && !hasConsult) {
+          status = 'Next in Line'
+          statusBadge = 'bg-emerald-50 text-emerald-800 border-emerald-200'
+        } else {
+          status = 'Waiting'
+          statusBadge = 'bg-amber-50 text-amber-800 border-amber-200'
+        }
+        waitingIdx += 1
+      }
+
+      const avatarBg = isInConsultation
+        ? 'bg-teal-700 text-white'
+        : idx === 1
+        ? 'bg-slate-700 text-white'
+        : idx === 2
+        ? 'bg-amber-700 text-white'
+        : 'bg-indigo-700 text-white'
+
+      return {
+        ...p,
+        status,
+        statusCode: isInConsultation ? 'IN_CONSULTATION' : 'WAITING',
+        statusBadge,
+        avatarBg,
+      }
+    })
+  }
+
+  // Targeted queue refresh: only fetches doctor queue and active consultation (zero profile or stats queries)
+  const refreshQueueOnly = async (reconcileActiveConsult = false) => {
+    if (!doctorId || isQueueRefreshingRef.current) return
+    isQueueRefreshingRef.current = true
+    try {
+      const queueData = await fetchDoctorQueue(doctorId)
+      let activeConsult = activeConsultationRef.current
+      if (reconcileActiveConsult || !activeConsult) {
+        try {
+          activeConsult = await fetchActiveConsultation(doctorId)
+          activeConsultationRef.current = activeConsult
+        } catch {
+          // quiet fallback
+        }
+      }
+
+      if (Array.isArray(queueData)) {
+        if (queueData.length === 0) {
+          setPatients([])
+          setSelectedPatientId(null)
+          setQueueError(null)
+        } else {
+          const mapped = queueData.map((item, idx) =>
+            mapRawItemToPatient(item, idx, activeConsult, summaryCacheRef.current)
+          )
+          const sorted = sortAndAssignQueueSemantics(mapped, activeConsult)
+          setPatients(sorted)
+          setQueueError(null)
+
+          setSelectedPatientId((currentId) => {
+            if (currentId && sorted.some((p) => p.id === currentId)) return currentId
+            const inConsult = sorted.find((p) => p.status === 'In Consultation')
+            return inConsult ? inConsult.id : sorted[0]?.id || null
+          })
+        }
+      }
+    } catch (err) {
+      console.debug('Targeted queue refresh notice:', err)
+    } finally {
+      isQueueRefreshingRef.current = false
+    }
+  }
+
+  // Load backend data (Full initialization & reconciliation)
   const loadBackendData = async (showLoading = true) => {
     if (!doctorId) {
       setQueueLoading(false)
@@ -393,14 +572,15 @@ export default function Doctors_Dashboard() {
         // quiet fallback
       }
 
-      const queueData = await fetchDoctorQueue(doctorId)
-
       let activeConsult = null
       try {
         activeConsult = await fetchActiveConsultation(doctorId)
+        activeConsultationRef.current = activeConsult
       } catch {
         // quiet fallback
       }
+
+      const queueData = await fetchDoctorQueue(doctorId)
 
       if (Array.isArray(queueData)) {
         if (queueData.length === 0) {
@@ -408,90 +588,17 @@ export default function Doctors_Dashboard() {
           setSelectedPatientId(null)
           setQueueError(null)
         } else {
-          // Zero N+1 requests: synchronous map utilizing memory cache
-          const mapped = queueData.map((item, idx) => {
-            const roll = item.rollNumber || item.roll_number
-            const cachedSummary = roll ? summaryCacheRef.current[roll] : null
-            const summary = cachedSummary || { allergies: 'None recorded', conditions: 'None recorded' }
-
-            const initials = item.name
-              ? item.name
-                  .split(' ')
-                  .map((w) => w[0])
-                  .join('')
-                  .slice(0, 2)
-                  .toUpperCase()
-              : 'ST'
-
-            const rawStatus = (item.statusCode || item.status || '').toUpperCase()
-            const isInConsultation =
-              rawStatus === 'IN_CONSULTATION' ||
-              (activeConsult?.active &&
-                (activeConsult.patient?.visitId === (item.visitId || item.visit_id) ||
-                  activeConsult.patient?.rollNumber === roll))
-
-            const status = isInConsultation
-              ? 'In Consultation'
-              : idx === 0 && !activeConsult?.active
-              ? 'Next in Line'
-              : 'Waiting'
-
-            const statusBadge = isInConsultation
-              ? 'bg-teal-50 text-teal-800 border-teal-200'
-              : status === 'Next in Line'
-              ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-              : 'bg-amber-50 text-amber-800 border-amber-200'
-
-            const allergiesList =
-              summary.allergies && summary.allergies !== 'None recorded'
-                ? summary.allergies.split(',').map((s) => s.trim())
-                : ['None declared']
-
-            return {
-              id: item.queueEntryId || item.visitId || idx + 10,
-              visitId: item.visitId || item.visit_id,
-              queueEntryId: item.queueEntryId || item.queue_entry_id,
-              queueNo: item.queueNo ?? item.queue_number ?? item.sequence ?? idx + 1,
-              name: item.name || item.student_name,
-              initials,
-              rollNo: roll,
-              communityCode: item.communityCode || item.community_code || null,
-              category: item.category || null,
-              patientType: item.patientType || item.patient_type || (item.communityCode ? 'COMMUNITY' : 'STUDENT'),
-              age: item.age || 20,
-              gender: item.gender || (item.communityCode ? (item.category || 'Community') : 'Student'),
-              bloodGroup: item.bloodGroup || item.blood_group || 'B+',
-              waitTime: item.waitingSince ? `${item.waitingSince}` : `${(idx + 1) * 6} min`,
-              status,
-              statusCode: isInConsultation ? 'IN_CONSULTATION' : 'WAITING',
-              statusBadge,
-              avatarBg: isInConsultation
-                ? 'bg-teal-700 text-white'
-                : idx === 1
-                ? 'bg-slate-700 text-white'
-                : idx === 2
-                ? 'bg-amber-700 text-white'
-                : 'bg-indigo-700 text-white',
-              complaint:
-                item.complaint ||
-                (summary.conditions && summary.conditions !== 'None recorded'
-                  ? summary.conditions
-                  : 'OPD Health Evaluation'),
-              history: item.communityCode
-                ? `Campus Community (${item.category || 'Member'}). Code: ${roll}. Blood: ${item.bloodGroup || 'B+'}, Age: ${item.age || 20}.`
-                : `TIET Student. Roll: ${roll}. Blood Group: ${item.bloodGroup || 'B+'}, Age: ${item.age || 20}.`,
-              allergies: allergiesList,
-              prescriptions: [],
-            }
-          })
-
-          setPatients(mapped)
+          const mapped = queueData.map((item, idx) =>
+            mapRawItemToPatient(item, idx, activeConsult, summaryCacheRef.current)
+          )
+          const sorted = sortAndAssignQueueSemantics(mapped, activeConsult)
+          setPatients(sorted)
           setQueueError(null)
 
           setSelectedPatientId((currentId) => {
-            if (currentId && mapped.some((p) => p.id === currentId)) return currentId
-            const inConsult = mapped.find((p) => p.status === 'In Consultation')
-            return inConsult ? inConsult.id : mapped[0]?.id || null
+            if (currentId && sorted.some((p) => p.id === currentId)) return currentId
+            const inConsult = sorted.find((p) => p.status === 'In Consultation')
+            return inConsult ? inConsult.id : sorted[0]?.id || null
           })
         }
       }
@@ -608,20 +715,84 @@ export default function Doctors_Dashboard() {
 
             const evtType = msg.type
             if (evtType === 'QUEUE_PATIENT_CHECKED_IN') {
-              const patientName = msg.data?.name || msg.data?.student_name || 'Patient'
-              const queueNum = msg.data?.queueNo || msg.data?.queue_number || ''
+              const data = msg.data || {}
+              const patientName = data.name || data.student_name || 'Patient'
+              const queueNum = data.queueNo || data.queue_number || ''
               setRealtimeNotification({
                 message: `Patient ${patientName} checked in ${queueNum ? `(#${queueNum})` : ''}`,
                 id: Date.now(),
               })
-              loadBackendData(false)
-            } else if (
-              evtType === 'PATIENT_CALLED' ||
-              evtType === 'PATIENT_NO_SHOW' ||
-              evtType === 'CONSULTATION_COMPLETED' ||
-              evtType === 'QUEUE_PATIENT_REQUEUED'
-            ) {
-              loadBackendData(false)
+
+              const vId = data.visitId || data.visit_id
+              const qId = data.queueEntryId || data.queue_entry_id
+              const roll = data.rollNumber || data.roll_number || data.rollNo
+
+              // Immediate optimistic state merge if authoritative identifiers are present (0ms delay!)
+              if ((vId || qId) && (roll || data.name || data.student_name)) {
+                setPatients((prev) => {
+                  // Deduplication check
+                  const exists = prev.some((p) =>
+                    (qId && p.queueEntryId === qId) ||
+                    (vId && p.visitId === vId) ||
+                    (roll && p.rollNo === roll && p.statusCode === 'WAITING')
+                  )
+                  if (exists) return prev
+
+                  const newPatient = mapRawItemToPatient(
+                    {
+                      ...data,
+                      visitId: vId,
+                      queueEntryId: qId,
+                      rollNumber: roll,
+                      statusCode: 'WAITING',
+                      status: 'Waiting',
+                    },
+                    prev.length,
+                    activeConsultationRef.current,
+                    summaryCacheRef.current
+                  )
+
+                  return sortAndAssignQueueSemantics([...prev, newPatient], activeConsultationRef.current)
+                })
+
+                setSelectedPatientId((curr) => {
+                  if (curr) return curr
+                  return qId || vId || null
+                })
+
+                // Quiet background reconciliation against backend snapshot after 500ms
+                if (reconcileTimerRef.current) clearTimeout(reconcileTimerRef.current)
+                reconcileTimerRef.current = setTimeout(() => {
+                  refreshQueueOnly(false)
+                }, 500)
+              } else {
+                refreshQueueOnly(false)
+              }
+            } else if (evtType === 'PATIENT_CALLED') {
+              refreshQueueOnly(true)
+            } else if (evtType === 'PATIENT_NO_SHOW') {
+              const qId = msg.data?.queue_entry_id || msg.data?.queueEntryId
+              const vId = msg.data?.visit_id || msg.data?.visitId
+              if (qId || vId) {
+                setPatients((prev) => {
+                  const filtered = prev.filter((p) => p.queueEntryId !== qId && p.visitId !== vId)
+                  return sortAndAssignQueueSemantics(filtered, activeConsultationRef.current)
+                })
+              }
+              refreshQueueOnly(false)
+            } else if (evtType === 'CONSULTATION_COMPLETED') {
+              const vId = msg.data?.visit_id || msg.data?.visitId
+              if (vId) {
+                setPatients((prev) => {
+                  const filtered = prev.filter((p) => p.visitId !== vId)
+                  return sortAndAssignQueueSemantics(filtered, null)
+                })
+              }
+              activeConsultationRef.current = null
+              setSeenCount((c) => c + 1)
+              refreshQueueOnly(true)
+            } else if (evtType === 'QUEUE_PATIENT_REQUEUED') {
+              refreshQueueOnly(false)
             }
           } catch (parseErr) {
             console.debug('WebSocket parse error:', parseErr)
@@ -659,6 +830,7 @@ export default function Doctors_Dashboard() {
       isUnmounted = true
       if (pingIntervalRef.current) clearInterval(pingIntervalRef.current)
       if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current)
+      if (reconcileTimerRef.current) clearTimeout(reconcileTimerRef.current)
       if (wsRef.current) {
         try {
           wsRef.current.close()
