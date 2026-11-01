@@ -244,6 +244,10 @@ export default function Doctors_Dashboard() {
 
   // Copy All Past Prescriptions into New Rx & Redirect directly to Formal Review
   const handleCopyAllAndReview = (record) => {
+    if (!isSelectedInConsultation) {
+      triggerToast('Please press Attend to start consultation before prescribing.')
+      return
+    }
     const rawMeds = Array.isArray(record?.medicines) ? record.medicines : []
     if (rawMeds.length === 0) {
       triggerToast('No medications found in this past record.')
@@ -708,6 +712,17 @@ export default function Doctors_Dashboard() {
         (item.prescriptions && item.prescriptions.toLowerCase().includes(q))
     )
   }, [completedHistory, historySearchQuery])
+
+  // Active Consultation State Tracking
+  const activeConsultationPatient = useMemo(
+    () => patients.find((p) => p.status === 'In Consultation' || p.statusCode === 'IN_CONSULTATION'),
+    [patients]
+  )
+  const hasActiveConsultation = Boolean(activeConsultationPatient)
+  const isSelectedInConsultation = Boolean(
+    selectedPatient &&
+    (selectedPatient.status === 'In Consultation' || selectedPatient.statusCode === 'IN_CONSULTATION')
+  )
 
   // Navigation Items
   const navItems = useMemo(
@@ -1599,11 +1614,22 @@ export default function Doctors_Dashboard() {
                               {(patient.status === 'Waiting' || patient.status === 'Next in Line') && (
                                 <button
                                   type="button"
+                                  disabled={hasActiveConsultation}
                                   onClick={(e) => {
                                     e.stopPropagation()
+                                    if (hasActiveConsultation) {
+                                      triggerToast(`Consultation in progress with ${activeConsultationPatient?.name || 'another patient'}. Complete it first.`)
+                                      return
+                                    }
                                     handleStartConsultation(patient.visitId || patient.id)
                                   }}
-                                  className="px-2.5 py-1 rounded-lg bg-teal-700 hover:bg-teal-800 text-white font-semibold text-[10px] cursor-pointer shadow-2xs"
+                                  title={hasActiveConsultation ? `Finish active consultation with ${activeConsultationPatient?.name} first` : 'Start Consultation'}
+                                  className={cn(
+                                    "px-2.5 py-1 rounded-lg font-semibold text-[10px] shadow-2xs transition-all",
+                                    hasActiveConsultation
+                                      ? "bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed opacity-50"
+                                      : "bg-teal-700 hover:bg-teal-800 text-white cursor-pointer"
+                                  )}
                                 >
                                   Attend
                                 </button>
@@ -1751,21 +1777,67 @@ export default function Doctors_Dashboard() {
                       </div>
                     </div>
 
-                    {/* 4. Primary Prescription CTA */}
+                    {/* 4. Primary Prescription CTA / Consultation Gate */}
                     <div className="pt-3 border-t border-slate-100">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setPresetPrescription(null)
-                          setIsPrescriptionModalOpen(true)
-                          setActiveTab('prescription')
-                        }}
-                        className="w-full py-3 px-4 rounded-xl bg-teal-800 hover:bg-teal-900 text-white text-xs sm:text-sm font-bold flex items-center justify-center gap-2 cursor-pointer shadow-xs hover:shadow-md transition-all"
-                      >
-                        <Pill className="w-4 h-4 text-teal-200" />
-                        <span>Write E-Prescription for {selectedPatient.name.split(' ')[0]}</span>
-                        <ArrowRight className="w-4 h-4 text-teal-200" />
-                      </button>
+                      {isSelectedInConsultation ? (
+                        /* Patient is actively in consultation -> Full Write E-Prescription CTA */
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setPresetPrescription(null)
+                            setIsPrescriptionModalOpen(true)
+                            setActiveTab('prescription')
+                          }}
+                          className="w-full py-3 px-4 rounded-xl bg-teal-800 hover:bg-teal-900 text-white text-xs sm:text-sm font-bold flex items-center justify-center gap-2 cursor-pointer shadow-xs hover:shadow-md transition-all"
+                        >
+                          <Pill className="w-4 h-4 text-teal-200" />
+                          <span>Write E-Prescription for {selectedPatient.name.split(' ')[0]}</span>
+                          <ArrowRight className="w-4 h-4 text-teal-200" />
+                        </button>
+                      ) : hasActiveConsultation ? (
+                        /* Another patient is currently in consultation -> No prescription option for this patient */
+                        <div className="p-3.5 rounded-xl bg-amber-50/80 border border-amber-200 text-amber-950 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 shadow-2xs">
+                          <div className="flex items-center gap-2.5 text-xs">
+                            <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                            <span>
+                              Consultation with <strong>{activeConsultationPatient.name}</strong> is in progress. Complete it before attending or prescribing for {selectedPatient.name.split(' ')[0]}.
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setSelectedPatientId(activeConsultationPatient.id)}
+                            className="px-3 py-1.5 rounded-lg bg-teal-800 hover:bg-teal-900 text-white font-bold text-xs shrink-0 cursor-pointer shadow-2xs transition-colors self-end sm:self-auto"
+                          >
+                            Return to {activeConsultationPatient.name.split(' ')[0]}
+                          </button>
+                        </div>
+                      ) : (
+                        /* No one in consultation yet -> Must press Attend first; prescription is disabled */
+                        <div className="space-y-2.5">
+                          <div className="flex items-center justify-between p-2.5 px-3 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-600">
+                            <div className="flex items-center gap-2">
+                              <Info className="w-4 h-4 text-teal-700 shrink-0" />
+                              <span>Click <strong>Attend</strong> to start consultation before writing a prescription.</span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleStartConsultation(selectedPatient.visitId || selectedPatient.id)}
+                              className="px-3 py-1.5 rounded-lg bg-teal-700 hover:bg-teal-800 text-white font-bold text-xs cursor-pointer shadow-2xs transition-colors shrink-0"
+                            >
+                              Attend {selectedPatient.name.split(' ')[0]}
+                            </button>
+                          </div>
+                          <button
+                            type="button"
+                            disabled={true}
+                            title="Click Attend above to start consultation before writing a prescription"
+                            className="w-full py-3 px-4 rounded-xl bg-slate-100 text-slate-400 border border-slate-200 text-xs sm:text-sm font-semibold flex items-center justify-center gap-2 cursor-not-allowed opacity-60"
+                          >
+                            <Pill className="w-4 h-4 text-slate-400" />
+                            <span>Write E-Prescription (Disabled — Attend First)</span>
+                          </button>
+                        </div>
+                      )}
                     </div>
                   </>
                 )}
@@ -1814,23 +1886,67 @@ export default function Doctors_Dashboard() {
                 </p>
               </div>
 
-              <div className="pt-2 flex items-center justify-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => setIsPrescriptionModalOpen(true)}
-                  className="px-6 py-3 rounded-xl bg-teal-800 hover:bg-teal-900 text-white text-xs sm:text-sm font-bold flex items-center gap-2 cursor-pointer shadow-md"
-                >
-                  <Sparkles className="w-4 h-4 text-teal-200" />
-                  <span>Launch Questionnaire Studio</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('queue')}
-                  className="px-4 py-3 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-semibold cursor-pointer"
-                >
-                  Return to Live Queue
-                </button>
-              </div>
+              {!isSelectedInConsultation ? (
+                <div className="max-w-md mx-auto p-4 rounded-2xl bg-amber-50 border border-amber-200 text-amber-950 text-xs space-y-3">
+                  <div className="flex items-center gap-2 justify-center font-bold text-amber-900">
+                    <AlertCircle className="w-4 h-4 text-amber-600" />
+                    <span>
+                      {hasActiveConsultation
+                        ? `Consultation in progress with ${activeConsultationPatient.name}`
+                        : `Consultation not started for ${selectedPatient.name}`}
+                    </span>
+                  </div>
+                  <p className="text-slate-600">
+                    {hasActiveConsultation
+                      ? `Please complete active consultation with ${activeConsultationPatient.name} before prescribing for other students.`
+                      : `Please click Attend on the queue to start consultation before writing prescriptions.`}
+                  </p>
+                  <div className="flex items-center justify-center gap-2 pt-1">
+                    {hasActiveConsultation ? (
+                      <button
+                        type="button"
+                        onClick={() => setSelectedPatientId(activeConsultationPatient.id)}
+                        className="px-4 py-2 rounded-xl bg-teal-800 text-white font-bold text-xs cursor-pointer shadow-xs"
+                      >
+                        Switch to {activeConsultationPatient.name.split(' ')[0]}
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => handleStartConsultation(selectedPatient.visitId || selectedPatient.id)}
+                        className="px-4 py-2 rounded-xl bg-teal-700 text-white font-bold text-xs cursor-pointer shadow-xs"
+                      >
+                        Attend {selectedPatient.name.split(' ')[0]} Now
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('queue')}
+                      className="px-4 py-2 rounded-xl border border-slate-200 bg-white text-slate-700 font-semibold text-xs cursor-pointer"
+                    >
+                      Back to Queue
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="pt-2 flex items-center justify-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setIsPrescriptionModalOpen(true)}
+                    className="px-6 py-3 rounded-xl bg-teal-800 hover:bg-teal-900 text-white text-xs sm:text-sm font-bold flex items-center gap-2 cursor-pointer shadow-md"
+                  >
+                    <Sparkles className="w-4 h-4 text-teal-200" />
+                    <span>Launch Questionnaire Studio</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('queue')}
+                    className="px-4 py-3 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-semibold cursor-pointer"
+                  >
+                    Return to Live Queue
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -2048,12 +2164,19 @@ export default function Doctors_Dashboard() {
                         <div className="pt-2 flex justify-end">
                           <button
                             type="button"
+                            disabled={!isSelectedInConsultation}
                             onClick={() => handleCopyAllAndReview(record)}
-                            className="w-full sm:w-auto px-4 py-2 rounded-xl bg-teal-800 hover:bg-teal-900 text-white text-xs font-bold flex items-center justify-center gap-2 cursor-pointer shadow-xs transition-all"
+                            title={!isSelectedInConsultation ? "Attend student to start consultation before copying prescription" : undefined}
+                            className={cn(
+                              "w-full sm:w-auto px-4 py-2 rounded-xl text-xs font-bold flex items-center justify-center gap-2 shadow-xs transition-all",
+                              isSelectedInConsultation
+                                ? "bg-teal-800 hover:bg-teal-900 text-white cursor-pointer"
+                                : "bg-slate-200 text-slate-400 border border-slate-300 cursor-not-allowed opacity-60"
+                            )}
                           >
-                            <RotateCcw className="w-3.5 h-3.5 text-teal-200" />
+                            <RotateCcw className={cn("w-3.5 h-3.5", isSelectedInConsultation ? "text-teal-200" : "text-slate-400")} />
                             <span>Copy All to New Rx & Review</span>
-                            <ArrowRight className="w-3.5 h-3.5 text-teal-200" />
+                            <ArrowRight className={cn("w-3.5 h-3.5", isSelectedInConsultation ? "text-teal-200" : "text-slate-400")} />
                           </button>
                         </div>
                       </div>

@@ -695,9 +695,6 @@ export default function NfcCheckInDesk({ flash, setPage }) {
           <div className="flex items-center justify-between pb-4 border-b border-slate-100">
             <div>
               <h2 className="text-base sm:text-xl font-bold text-slate-900 tracking-tight">Faculty & Student Check-in Desk</h2>
-              <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5">
-                Scan student ID card or enter student roll number / faculty employee code.
-              </p>
             </div>
 
             {/* Visual Indicator of current state */}
@@ -769,13 +766,10 @@ export default function NfcCheckInDesk({ flash, setPage }) {
               {/* ── STEP 1: CHOICE SCREEN (Two Large Options: RFID vs Manual) ── */}
               {mode === "CHOICE" && (
                 <div className="space-y-4 sm:space-y-6 py-1 sm:py-2">
-                  <div className="text-center space-y-1">
+                  <div className="text-center">
                     <h3 className="text-sm sm:text-lg font-bold text-slate-900">
                       Select Check-in Method
                     </h3>
-                    <p className="text-[11px] sm:text-xs text-slate-500 max-w-sm mx-auto">
-                      Choose card tap or manual roll number entry.
-                    </p>
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-4 pt-1">
@@ -792,20 +786,17 @@ export default function NfcCheckInDesk({ flash, setPage }) {
                         <div className="h-9 w-9 sm:h-12 sm:w-12 rounded-lg sm:rounded-2xl bg-teal-700 text-white flex items-center justify-center mb-2.5 sm:mb-3 shadow-sm group-hover:scale-105 transition-transform">
                           <Radio className="w-4 h-4 sm:w-6 sm:h-6 animate-pulse text-white" />
                         </div>
-                        <span className="text-[9px] sm:text-[10px] font-bold text-teal-800 uppercase tracking-wider block mb-0.5 sm:mb-1">
+                        <span className="text-[9px] sm:text-[10px] font-bold text-teal-800 uppercase tracking-wider block mb-0.5 sm:mb-1 truncate">
                           Smart Card
                         </span>
-                        <h4 className="text-xs sm:text-base font-bold text-slate-900 group-hover:text-teal-950 transition-colors">
+                        <h4 className="text-xs sm:text-base font-bold text-slate-900 group-hover:text-teal-950 transition-colors min-h-[2.5rem] sm:min-h-[3rem]">
                           Smart Card Tap (RFID)
                         </h4>
-                        <p className="text-[10px] sm:text-xs text-slate-500 mt-0.5 sm:mt-1 leading-snug sm:leading-relaxed">
-                          Tap student ID card on the reader for instant check-in.
-                        </p>
                       </div>
 
                       <div className="mt-3 sm:mt-5 pt-2 sm:pt-3 border-t border-teal-100 flex items-center justify-between text-[10px] sm:text-xs font-bold text-teal-800 group-hover:text-teal-900">
-                        <span>Check In with Card</span>
-                        <ArrowRight className="w-3.5 h-3.5 sm:w-4 sm:h-4 group-hover:translate-x-1 transition-transform" />
+                        <span className="truncate">Check In with Card</span>
+                        <ArrowRight className="w-3.5 h-3.5 sm:w-4 sm:h-4 group-hover:translate-x-1 transition-transform shrink-0 ml-1" />
                       </div>
                     </button>
 
@@ -819,20 +810,17 @@ export default function NfcCheckInDesk({ flash, setPage }) {
                         <div className="h-9 w-9 sm:h-12 sm:w-12 rounded-lg sm:rounded-2xl bg-slate-100 text-slate-700 group-hover:bg-slate-200 flex items-center justify-center mb-2.5 sm:mb-3 shadow-xs transition-colors">
                           <UserCheck className="w-4 h-4 sm:w-6 sm:h-6 text-slate-700" />
                         </div>
-                        <span className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5 sm:mb-1">
-                          Roll No. / Employee Code
+                        <span className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5 sm:mb-1 truncate">
+                          Roll No. / Code
                         </span>
-                        <h4 className="text-xs sm:text-base font-bold text-slate-900 group-hover:text-slate-950 transition-colors">
+                        <h4 className="text-xs sm:text-base font-bold text-slate-900 group-hover:text-slate-950 transition-colors min-h-[2.5rem] sm:min-h-[3rem]">
                           Faculty & Student Check-in
                         </h4>
-                        <p className="text-[10px] sm:text-xs text-slate-500 mt-0.5 sm:mt-1 leading-snug sm:leading-relaxed">
-                          Enter student roll number or faculty employee code (e.g. 260111).
-                        </p>
                       </div>
 
                       <div className="mt-3 sm:mt-5 pt-2 sm:pt-3 border-t border-slate-100 flex items-center justify-between text-[10px] sm:text-xs font-bold text-slate-700 group-hover:text-slate-900">
-                        <span>Enter Roll No. or Employee Code</span>
-                        <ArrowRight className="w-3.5 h-3.5 sm:w-4 sm:h-4 group-hover:translate-x-1 transition-transform" />
+                        <span className="truncate">Enter Roll No. or Code</span>
+                        <ArrowRight className="w-3.5 h-3.5 sm:w-4 sm:h-4 group-hover:translate-x-1 transition-transform shrink-0 ml-1" />
                       </div>
                     </button>
 
@@ -854,20 +842,17 @@ export default function NfcCheckInDesk({ flash, setPage }) {
                         <div className="h-9 w-9 sm:h-12 sm:w-12 rounded-lg sm:rounded-2xl bg-indigo-700 text-white flex items-center justify-center mb-2.5 sm:mb-3 shadow-sm group-hover:scale-105 transition-transform">
                           <Users className="w-4 h-4 sm:w-6 sm:h-6 text-white" />
                         </div>
-                        <span className="text-[9px] sm:text-[10px] font-bold text-indigo-800 uppercase tracking-wider block mb-0.5 sm:mb-1">
+                        <span className="text-[9px] sm:text-[10px] font-bold text-indigo-800 uppercase tracking-wider block mb-0.5 sm:mb-1 truncate">
                           Other
                         </span>
-                        <h4 className="text-xs sm:text-base font-bold text-slate-900 group-hover:text-indigo-950 transition-colors">
+                        <h4 className="text-xs sm:text-base font-bold text-slate-900 group-hover:text-indigo-950 transition-colors min-h-[2.5rem] sm:min-h-[3rem]">
                           Other / Community
                         </h4>
-                        <p className="text-[10px] sm:text-xs text-slate-500 mt-0.5 sm:mt-1 leading-snug sm:leading-relaxed">
-                          Fill member details and push directly into live doctor queue.
-                        </p>
                       </div>
 
                       <div className="mt-3 sm:mt-5 pt-2 sm:pt-3 border-t border-indigo-100 flex items-center justify-between text-[10px] sm:text-xs font-bold text-indigo-800 group-hover:text-indigo-900">
-                        <span>Fill Details & Check In</span>
-                        <ArrowRight className="w-3.5 h-3.5 sm:w-4 sm:h-4 group-hover:translate-x-1 transition-transform" />
+                        <span className="truncate">Fill Details & Check In</span>
+                        <ArrowRight className="w-3.5 h-3.5 sm:w-4 sm:h-4 group-hover:translate-x-1 transition-transform shrink-0 ml-1" />
                       </div>
                     </button>
                   </div>
@@ -1013,9 +998,6 @@ export default function NfcCheckInDesk({ flash, setPage }) {
                       <UserCheck className="w-7 h-7" />
                     </div>
                     <h3 className="text-base font-bold text-slate-900">Enter Roll No. or Faculty Employee Code</h3>
-                    <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
-                      Enter student roll number (e.g. 102203001) or faculty employee code (e.g. 260111) to allocate an OPD token.
-                    </p>
                   </div>
 
                   <form onSubmit={handleManualSearch} className="max-w-md mx-auto space-y-3">
@@ -1151,9 +1133,6 @@ export default function NfcCheckInDesk({ flash, setPage }) {
                           <h4 className="text-xs font-bold text-indigo-950">
                             Direct OPD Queue Entry
                           </h4>
-                          <p className="text-[11px] text-indigo-800 mt-0.5">
-                            Fill in member details below and push directly into the live doctor queue.
-                          </p>
                         </div>
                       </div>
 
@@ -1575,8 +1554,8 @@ export default function NfcCheckInDesk({ flash, setPage }) {
               {/* ── FAMILY MEMBER SUB-FORM (When "For Family Member" is active) ── */}
               {facultyTarget === "FAMILY_MEMBER" && (
                 <div className="p-4 rounded-2xl bg-slate-50/80 border border-slate-200 space-y-4">
-                  {/* If faculty has registered family members, show choice to select existing or new */}
-                  {faculty.familyMembers && faculty.familyMembers.length > 0 && (
+                  {/* If faculty has registered family members and not entering new member, show registered list */}
+                  {faculty.familyMembers && faculty.familyMembers.length > 0 && !isNewFamilyMember && (
                     <div className="space-y-2">
                       <div className="flex items-center justify-between">
                         <label className="text-xs font-bold text-slate-700">
@@ -1585,18 +1564,17 @@ export default function NfcCheckInDesk({ flash, setPage }) {
                         <button
                           type="button"
                           onClick={() => {
-                            setIsNewFamilyMember(!isNewFamilyMember);
+                            setIsNewFamilyMember(true);
                             setFamFormError(null);
                           }}
                           className="text-[11px] font-bold text-teal-700 hover:text-teal-800 cursor-pointer flex items-center gap-1"
                         >
                           <Plus className="w-3 h-3" />
-                          <span>{isNewFamilyMember ? "Select Registered Member" : "+ Add New Member"}</span>
+                          <span>Add New Member</span>
                         </button>
                       </div>
 
-                      {!isNewFamilyMember && (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                           {faculty.familyMembers.map((m) => {
                             const isSelected = selectedFamilyPatientId === m.patientId;
                             return (
@@ -1635,7 +1613,6 @@ export default function NfcCheckInDesk({ flash, setPage }) {
                             );
                           })}
                         </div>
-                      )}
                     </div>
                   )}
 
@@ -1649,7 +1626,10 @@ export default function NfcCheckInDesk({ flash, setPage }) {
                         {faculty.familyMembers && faculty.familyMembers.length > 0 && (
                           <button
                             type="button"
-                            onClick={() => setIsNewFamilyMember(false)}
+                            onClick={() => {
+                              setIsNewFamilyMember(false);
+                              setFamFormError(null);
+                            }}
                             className="text-[11px] font-semibold text-slate-600 hover:text-slate-900 cursor-pointer"
                           >
                             ← Back to Registered
