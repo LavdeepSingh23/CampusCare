@@ -423,6 +423,11 @@ export function fetchDoctorProfile(doctorId) {
   return request(`/api/doctor/${doctorId}/profile`)
 }
 
+export function fetchWsTicket() {
+  if (DEMO_MODE) return mockDelay({ ticket: 'demo-ws-ticket-' + Date.now(), expires_in: 60 })
+  return request('/api/ws/ticket', { method: 'POST' })
+}
+
 export function fetchDoctorQueue(doctorId) {
   if (DEMO_MODE) return mockDelay(MOCK_QUEUE)
   return request(`/api/doctor/${doctorId}/queue`)

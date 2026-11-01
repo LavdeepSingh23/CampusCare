@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Pill,
@@ -30,6 +30,8 @@ import {
   fetchReceptionDoctors,
   dispensePrescription,
   fetchDispensingPrescription,
+  fetchWsTicket,
+  getToken,
 } from "../../api";
 import { generatePrescriptionPdf } from "../../utils/prescriptionPdf";
 
@@ -45,6 +47,17 @@ export default function DispensingDesk({ flash, onDispensed }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [lastSyncedAt, setLastSyncedAt] = useState(null);
 
+  // Real-Time WebSocket state
+  const [wsStatus, setWsStatus] = useState("disconnected"); // "connected" | "connecting" | "disconnected"
+  const [realtimeNotice, setRealtimeNotice] = useState(null);
+  const wsRef = useRef(null);
+  const isMountedRef = useRef(true);
+  const isLoadingRef = useRef(false);
+  const pingIntervalRef = useRef(null);
+  const reconnectTimeoutRef = useRef(null);
+  const backoffDelayRef = useRef(1000);
+  const seenEventsRef = useRef(new Set());
+
   // Active dispensing modal state
   const [activeVisit, setActiveVisit] = useState(null);
   const [fulfillmentType, setFulfillmentType] = useState("Dispensed as prescribed"); // "Dispensed as prescribed" | "Partially dispensed"
@@ -59,9 +72,11 @@ export default function DispensingDesk({ flash, onDispensed }) {
   // Completed receipt view state
   const [completedResult, setCompletedResult] = useState(null);
 
-  // Fetch prescriptions awaiting dispensing
+  // Fetch prescriptions awaiting dispensing with overlap guard
   const loadAwaitingList = useCallback(
     async (quiet = false) => {
+      if (isLoadingRef.current) return;
+      isLoadingRef.current = true;
       if (!quiet) setRefreshing(true);
       try {
         const [prescData, docsData] = await Promise.all([
@@ -80,6 +95,7 @@ export default function DispensingDesk({ flash, onDispensed }) {
           setError(err.detail || err.message || "Failed to load prescriptions awaiting dispensing");
         }
       } finally {
+        isLoadingRef.current = false;
         setLoading(false);
         setRefreshing(false);
       }
@@ -87,8 +103,155 @@ export default function DispensingDesk({ flash, onDispensed }) {
     [selectedDoctorFilter]
   );
 
+  // Authenticated WebSocket connection for instantaneous prescription push
   useEffect(() => {
-    loadAwaitingList();
+    isMountedRef.current = true;
+
+    async function connectWs() {
+      if (!isMountedRef.current) return;
+      setWsStatus("connecting");
+
+      try {
+        let authQuery = "";
+        try {
+          const ticketRes = await fetchWsTicket();
+          if (ticketRes?.ticket) {
+            authQuery = `ticket=${encodeURIComponent(ticketRes.ticket)}`;
+          }
+        } catch {
+          // fallback to token if ticket endpoint is unavailable
+        }
+
+        if (!authQuery) {
+          const token = getToken();
+          if (token) {
+            authQuery = `token=${encodeURIComponent(token)}`;
+          }
+        }
+
+        const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+        let wsUrl;
+        const envApiUrl = import.meta.env.VITE_API_URL;
+        if (envApiUrl && envApiUrl.startsWith("http")) {
+          const parsed = new URL(envApiUrl);
+          const wsProto = parsed.protocol === "https:" ? "wss:" : "ws:";
+          wsUrl = `${wsProto}//${parsed.host}/api/ws/reception?${authQuery}`;
+        } else {
+          wsUrl = `${protocol}//${window.location.host}/api/ws/reception?${authQuery}`;
+        }
+
+        const ws = new WebSocket(wsUrl);
+        wsRef.current = ws;
+
+        ws.onopen = () => {
+          if (!isMountedRef.current) {
+            ws.close();
+            return;
+          }
+          setWsStatus("connected");
+          backoffDelayRef.current = 1000;
+
+          try {
+            ws.send(JSON.stringify({ type: "RECONNECT_SYNC", channel: "dispensing" }));
+          } catch {
+            // quiet
+          }
+
+          // Reconcile against authoritative snapshot upon connect / reconnect
+          loadAwaitingList(true);
+
+          if (pingIntervalRef.current) clearInterval(pingIntervalRef.current);
+          pingIntervalRef.current = setInterval(() => {
+            if (ws.readyState === WebSocket.OPEN) {
+              try {
+                ws.send(JSON.stringify({ type: "PING", timestamp: Date.now() }));
+              } catch {
+                // quiet
+              }
+            }
+          }, 30000);
+        };
+
+        ws.onmessage = (event) => {
+          try {
+            const msg = JSON.parse(event.data);
+            const eventId = msg.event_id;
+            if (eventId) {
+              if (seenEventsRef.current.has(eventId)) return;
+              seenEventsRef.current.add(eventId);
+              if (seenEventsRef.current.size > 200) {
+                const [first] = seenEventsRef.current;
+                seenEventsRef.current.delete(first);
+              }
+            }
+
+            const evtType = msg.type || msg.event_type;
+            if (evtType === "PRESCRIPTION_PENDING_DISPENSE") {
+              const vId = msg.visit_id || msg.data?.visit_id;
+              setRealtimeNotice({
+                id: Date.now(),
+                message: `New prescription arrived from doctor (Visit #${vId || "queue"})`,
+              });
+              loadAwaitingList(true);
+            } else if (evtType === "PRESCRIPTION_DISPENSED") {
+              const vId = msg.visit_id || msg.data?.visit_id;
+              if (vId) {
+                setPrescriptions((prev) =>
+                  prev.filter((p) => Number(p.visitId || p.visit_id) !== Number(vId))
+                );
+              }
+              loadAwaitingList(true);
+            }
+          } catch (parseErr) {
+            console.debug("Receptionist WebSocket message error:", parseErr);
+          }
+        };
+
+        ws.onclose = () => {
+          if (pingIntervalRef.current) clearInterval(pingIntervalRef.current);
+          if (!isMountedRef.current) return;
+          setWsStatus("disconnected");
+
+          const delay = backoffDelayRef.current;
+          backoffDelayRef.current = Math.min(backoffDelayRef.current * 2, 30000);
+          reconnectTimeoutRef.current = setTimeout(connectWs, delay);
+        };
+
+        ws.onerror = () => {
+          try {
+            ws.close();
+          } catch {
+            // quiet
+          }
+        };
+      } catch (err) {
+        if (!isMountedRef.current) return;
+        setWsStatus("disconnected");
+        const delay = backoffDelayRef.current;
+        backoffDelayRef.current = Math.min(backoffDelayRef.current * 2, 30000);
+        reconnectTimeoutRef.current = setTimeout(connectWs, delay);
+      }
+    }
+
+    connectWs();
+
+    return () => {
+      isMountedRef.current = false;
+      if (pingIntervalRef.current) clearInterval(pingIntervalRef.current);
+      if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
+      if (wsRef.current) {
+        try {
+          wsRef.current.close();
+        } catch {
+          // quiet
+        }
+      }
+    };
+  }, [loadAwaitingList]);
+
+  // Fallback safety polling (retained as backup sync)
+  useEffect(() => {
+    loadAwaitingList(false);
     const interval = setInterval(() => {
       loadAwaitingList(true);
     }, 4500);
@@ -297,10 +460,31 @@ export default function DispensingDesk({ flash, onDispensed }) {
       {/* ── TOP HEADER / WORKBENCH METRICS ── */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-200/80">
         <div>
-          <div className="flex items-center gap-2 mb-1.5">
+          <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+            {wsStatus === "connected" ? (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse" />
+                Real-Time Push (WS Active)
+              </span>
+            ) : wsStatus === "connecting" ? (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-amber-50 text-amber-800 border border-amber-200">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-spin" />
+                Connecting Real-Time...
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-700 border border-slate-200">
+                <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
+                Polling Fallback (4.5s)
+              </span>
+            )}
             <span className="text-xs text-slate-400 font-mono">
               {lastSyncedAt ? `Synced ${lastSyncedAt.toLocaleTimeString("en-IN")}` : "Connecting…"}
             </span>
+            {realtimeNotice && (
+              <span className="text-[11px] font-semibold text-teal-800 bg-teal-50 px-2.5 py-0.5 rounded-full border border-teal-200 animate-fade-in">
+                {realtimeNotice.message}
+              </span>
+            )}
           </div>
           <h2 className="text-2xl font-bold tracking-tight text-slate-900 flex items-center gap-2.5">
             <span>Pharmacy Dispensing Station</span>
