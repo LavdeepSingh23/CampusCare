@@ -59,7 +59,50 @@ async def lifespan(app: FastAPI):
     except Exception as sched_err:
         logger.error("Failed to initialize daily analytics scheduler: %s", sched_err)
 
+    # Initialize Enterprise Redis Pub/Sub & Local WebSocket Bridge
+    try:
+        from app.core.redis_client import redis_manager
+        from app.services.queue_ws_manager import queue_ws_manager
+        from app.core import config
+
+        async def _dispatch_redis_to_local_websockets(channel: str, message: dict):
+            event_type = message.get("event_type") or message.get("type")
+            if "campuscare:queue:doctor:" in channel:
+                try:
+                    doc_id = int(channel.split(":")[-1])
+                    await queue_ws_manager.broadcast_to_doctor(doc_id, event_type, message)
+                except Exception as e:
+                    logger.debug("Redis doctor dispatch error: %s", e)
+            elif channel == "campuscare:queue:dispensing":
+                try:
+                    await queue_ws_manager.broadcast_to_receptionists(event_type, message)
+                except Exception as e:
+                    logger.debug("Redis dispensing dispatch error: %s", e)
+
+        if config.USE_REDIS_PUBSUB:
+            await redis_manager.initialize()
+            redis_manager.start_subscriber(_dispatch_redis_to_local_websockets)
+    except Exception as redis_init_err:
+        logger.warning("Redis Pub/Sub setup error: %s", redis_init_err)
+
+    # Launch Transactional Outbox Publisher Daemon
+    try:
+        from app.services.outbox import outbox_publisher
+        outbox_publisher.start()
+    except Exception as outbox_init_err:
+        logger.error("Failed to start outbox publisher worker: %s", outbox_init_err)
+
     yield
+    try:
+        from app.services.outbox import outbox_publisher
+        await outbox_publisher.stop()
+    except Exception:
+        pass
+    try:
+        from app.core.redis_client import redis_manager
+        await redis_manager.close()
+    except Exception:
+        pass
     try:
         from app.services.daily_scheduler import stop_scheduler
         stop_scheduler()

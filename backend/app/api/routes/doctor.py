@@ -1,3 +1,4 @@
+from app.services.outbox import outbox_publisher
 from datetime import date, datetime
 from typing import Optional
 
@@ -20,7 +21,8 @@ from app.schemas.doctor import (
     UpdateValueRequest,
 )
 from app.services import queue_lifecycle as ql
-from app.services.queue_ws_manager import safe_broadcast_event
+import time
+from app.services.queue_ws_manager import safe_broadcast_event, safe_broadcast_reception_event
 
 router = APIRouter(tags=["doctor"])
 
@@ -577,6 +579,7 @@ def update_allergy(
                 )
 
             connection.commit()
+            outbox_publisher.notify()
             summary = _fetch_summary(cursor, roll_number)
     except Exception:
         connection.rollback()
@@ -615,6 +618,7 @@ def update_condition(
                 )
 
             connection.commit()
+            outbox_publisher.notify()
             summary = _fetch_summary(cursor, roll_number)
     except Exception:
         connection.rollback()
@@ -652,6 +656,7 @@ def update_medication(
                 )
 
             connection.commit()
+            outbox_publisher.notify()
             summary = _fetch_summary(cursor, roll_number)
     except Exception:
         connection.rollback()
@@ -675,6 +680,7 @@ def call_next_student(
             performed_by_user_id=current.user_id,
         )
         connection.commit()
+        outbox_publisher.notify()
         safe_broadcast_event(doctor_id, "PATIENT_CALLED", res)
         return res
     except ql.ResourceNotFoundError as exc:
@@ -747,7 +753,16 @@ def complete_consultation(
             performed_by_user_id=current.user_id,
         )
         connection.commit()
+        outbox_publisher.notify()
         safe_broadcast_event(doctor_id, "CONSULTATION_COMPLETED", res)
+        safe_broadcast_reception_event(
+            event_type="PRESCRIPTION_PENDING_DISPENSE",
+            data={
+                "visit_id": res["visit_id"],
+                "doctor_id": doctor_id,
+                "queue_version": int(time.time() * 1000),
+            },
+        )
         return res
     except ql.ResourceNotFoundError as exc:
         connection.rollback()
@@ -783,6 +798,7 @@ def mark_doctor_patient_no_show(
             performed_by_user_id=current.user_id,
         )
         connection.commit()
+        outbox_publisher.notify()
         safe_broadcast_event(doctor_id, "PATIENT_NO_SHOW", res)
         return res
     except ql.ResourceNotFoundError as exc:
@@ -831,6 +847,7 @@ def start_doctor_consultation(
                 performed_by_user_id=current.user_id,
             )
         connection.commit()
+        outbox_publisher.notify()
         return res
     except ql.ResourceNotFoundError as exc:
         connection.rollback()
@@ -864,6 +881,7 @@ def start_doctor_consultation_by_id(
             performed_by_user_id=current.user_id,
         )
         connection.commit()
+        outbox_publisher.notify()
         return res
     except ql.ResourceNotFoundError as exc:
         connection.rollback()
@@ -907,6 +925,7 @@ def redirect_doctor_patient(
             reason=payload.reason or "Doctor clinical referral",
         )
         connection.commit()
+        outbox_publisher.notify()
         return res
     except ql.ResourceNotFoundError as exc:
         connection.rollback()

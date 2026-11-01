@@ -61,3 +61,18 @@ ANALYTICS_TIMEZONE = os.getenv("ANALYTICS_TIMEZONE", "Asia/Kolkata")
 
 
 CAMPUSCARE_WEB_URL = os.getenv("CAMPUSCARE_WEB_URL", "https://alarm-diagnoses-lash.ngrok-free.dev")
+
+# ── Redis Pub/Sub & Transactional Outbox Configuration ───────────────────────
+REDIS_URL = os.getenv("REDIS_URL", "redis://127.0.0.1:6379/0")
+USE_REDIS_PUBSUB = os.getenv("USE_REDIS_PUBSUB", "false").lower() in ("true", "1", "yes")
+REDIS_CONNECT_TIMEOUT = float(os.getenv("REDIS_CONNECT_TIMEOUT", "5.0"))
+REDIS_SOCKET_TIMEOUT = float(os.getenv("REDIS_SOCKET_TIMEOUT", "5.0"))
+REDIS_HEALTH_CHECK_INTERVAL = int(os.getenv("REDIS_HEALTH_CHECK_INTERVAL", "30"))
+REDIS_MAX_CONNECTIONS = int(os.getenv("REDIS_MAX_CONNECTIONS", "20"))
+
+# Transactional Outbox Worker Tuning
+OUTBOX_POLL_INTERVAL_SECONDS = float(os.getenv("OUTBOX_POLL_INTERVAL_SECONDS", "0.2"))
+OUTBOX_BATCH_SIZE = int(os.getenv("OUTBOX_BATCH_SIZE", "50"))
+OUTBOX_MAX_RETRIES = int(os.getenv("OUTBOX_MAX_RETRIES", "5"))
+OUTBOX_RETENTION_HOURS = int(os.getenv("OUTBOX_RETENTION_HOURS", "48"))
+

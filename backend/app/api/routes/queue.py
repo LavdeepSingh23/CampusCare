@@ -1,3 +1,4 @@
+from app.services.outbox import outbox_publisher
 import logging
 from typing import Optional
 from pydantic import BaseModel, Field
@@ -13,7 +14,7 @@ from app.core.deps import (
     get_current_staff,
 )
 from app.services import queue_lifecycle as ql
-from app.services.queue_ws_manager import safe_broadcast_event
+from app.services.queue_ws_manager import safe_broadcast_event, safe_broadcast_reception_event
 from app.core.rate_limiter import limit_checkin_requests
 
 logger = logging.getLogger(__name__)
@@ -103,6 +104,7 @@ def check_in_student(
                 card_identifier=card_id,
             )
             connection.commit()
+            outbox_publisher.notify()
             safe_broadcast_event(
                 doctor_id=doctor_id,
                 event_type="QUEUE_PATIENT_CHECKED_IN",
@@ -215,6 +217,14 @@ def dispense_medicine(
             items=items_val,
         )
         connection.commit()
+        outbox_publisher.notify()
+        safe_broadcast_reception_event(
+            event_type="PRESCRIPTION_DISPENSED",
+            data={
+                "visit_id": visit_id,
+                "queue_version": int(time.time() * 1000),
+            },
+        )
         return result
     except ql.ResourceNotFoundError as exc:
         connection.rollback()
@@ -253,6 +263,7 @@ def requeue_visit(
             reason=payload.reason or "Patient arrived after no-show",
         )
         connection.commit()
+        outbox_publisher.notify()
         safe_broadcast_event(payload.target_doctor_id, "QUEUE_PATIENT_REQUEUED", result)
         return result
     except ql.ResourceNotFoundError as exc:
@@ -293,6 +304,7 @@ def redirect_visit(
             reason=payload.reason or "Clinical referral",
         )
         connection.commit()
+        outbox_publisher.notify()
         return result
     except ql.ResourceNotFoundError as exc:
         connection.rollback()
@@ -330,6 +342,7 @@ def mark_no_show_queue(
             reason=reason,
         )
         connection.commit()
+        outbox_publisher.notify()
         target_doc = result.get("doctor_id") or result.get("doctorId")
         if target_doc:
             safe_broadcast_event(target_doc, "PATIENT_NO_SHOW", result)
@@ -365,6 +378,7 @@ def start_consultation_queue(
             performed_by_user_id=current.user_id,
         )
         connection.commit()
+        outbox_publisher.notify()
         return result
     except ql.ResourceNotFoundError as exc:
         connection.rollback()
@@ -399,6 +413,7 @@ def cancel_visit(
             cancel_reason=reason,
         )
         connection.commit()
+        outbox_publisher.notify()
         return result
     except ql.ResourceNotFoundError as exc:
         connection.rollback()
