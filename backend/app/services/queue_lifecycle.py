@@ -8,8 +8,10 @@ Enforces:
 4. Comprehensive immutable audit logging into VISIT_EVENT with server-validated user IDs.
 """
 
-from datetime import date
+from collections import defaultdict
+from datetime import date, datetime, timezone
 import logging
+from app.services.outbox import insert_outbox_event
 from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
@@ -250,6 +252,34 @@ def check_in_student(
         )
         pos_row = cur.fetchone()
         position = pos_row["n"] if pos_row else 1
+
+        # 9. Insert transactional outbox event
+        try:
+            insert_outbox_event(
+                cursor=cur,
+                event_type="QUEUE_PATIENT_CHECKED_IN",
+                channel=f"campuscare:queue:doctor:{doctor_id}",
+                aggregate_id=visit_id,
+                aggregate_type="VISIT",
+                payload={
+                    "visit_id": visit_id,
+                    "visitId": visit_id,
+                    "queue_entry_id": queue_entry_id,
+                    "queueEntryId": queue_entry_id,
+                    "queue_number": seq,
+                    "queueNo": seq,
+                    "doctor_id": doctor_id,
+                    "doctorId": doctor_id,
+                    "roll_number": roll_number,
+                    "rollNumber": roll_number,
+                    "name": student.get("full_name"),
+                    "status": "Waiting",
+                    "status_code": "WAITING",
+                    "patient_type": "STUDENT",
+                },
+            )
+        except Exception as outbox_err:
+            logger.warning("Failed inserting outbox event for student checkin: %s", outbox_err)
 
     return {
         "visitId": visit_id,
@@ -616,6 +646,34 @@ def check_in_community_member(
         )
         pos_row = cur.fetchone()
         position = pos_row["n"] if pos_row else 1
+
+        # 10. Insert transactional outbox event
+        try:
+            insert_outbox_event(
+                cursor=cur,
+                event_type="QUEUE_PATIENT_CHECKED_IN",
+                channel=f"campuscare:queue:doctor:{doctor_id}",
+                aggregate_id=visit_id,
+                aggregate_type="VISIT",
+                payload={
+                    "visit_id": visit_id,
+                    "visitId": visit_id,
+                    "queue_entry_id": queue_entry_id,
+                    "queueEntryId": queue_entry_id,
+                    "queue_number": seq,
+                    "queueNo": seq,
+                    "doctor_id": doctor_id,
+                    "doctorId": doctor_id,
+                    "roll_number": comm_patient.get("community_code"),
+                    "rollNumber": comm_patient.get("community_code"),
+                    "name": comm_patient.get("full_name"),
+                    "status": "Waiting",
+                    "status_code": "WAITING",
+                    "patient_type": "COMMUNITY",
+                },
+            )
+        except Exception as outbox_err:
+            logger.warning("Failed inserting outbox event for community checkin: %s", outbox_err)
 
     return {
         "visitId": visit_id,
@@ -987,6 +1045,25 @@ def mark_no_show(
             (visit_id, performed_by_user_id, reason[:500]),
         )
 
+        # Insert transactional outbox event
+        try:
+            insert_outbox_event(
+                cursor=cur,
+                event_type="QUEUE_ENTRY_NO_SHOW",
+                channel=f"campuscare:queue:doctor:{row['doctor_id']}",
+                aggregate_id=row.get("queue_entry_id") or visit_id,
+                aggregate_type="QUEUE_ENTRY",
+                payload={
+                    "visit_id": visit_id,
+                    "doctor_id": row["doctor_id"],
+                    "queue_entry_id": row.get("queue_entry_id"),
+                    "status": "NO_SHOW",
+                    "reason": reason[:200],
+                },
+            )
+        except Exception as outbox_err:
+            logger.warning("Failed inserting outbox event for no-show: %s", outbox_err)
+
     return {
         "status": "no_show",
         "visitId": visit_id,
@@ -1090,6 +1167,26 @@ def requeue_patient(
             """,
             (visit_id, performed_by_user_id, reason[:500]),
         )
+
+        # Insert transactional outbox event
+        try:
+            insert_outbox_event(
+                cursor=cur,
+                event_type="QUEUE_ENTRY_REQUEUED",
+                channel=f"campuscare:queue:doctor:{target_doctor_id}",
+                aggregate_id=new_queue_entry_id,
+                aggregate_type="QUEUE_ENTRY",
+                payload={
+                    "visit_id": visit_id,
+                    "doctor_id": target_doctor_id,
+                    "queue_entry_id": new_queue_entry_id,
+                    "queue_number": seq,
+                    "status": "WAITING",
+                    "reason": reason[:200],
+                },
+            )
+        except Exception as outbox_err:
+            logger.warning("Failed inserting outbox event for requeue: %s", outbox_err)
 
     return {
         "status": "requeued",
@@ -1211,6 +1308,43 @@ def redirect_patient(
             """,
             (visit_id, performed_by_user_id, audit_note[:500]),
         )
+
+        # Insert transactional outbox event
+        try:
+            insert_outbox_event(
+                cursor=cur,
+                event_type="QUEUE_ENTRY_REDIRECTED",
+                channel=f"campuscare:queue:doctor:{target_doctor_id}",
+                aggregate_id=new_queue_entry_id,
+                aggregate_type="QUEUE_ENTRY",
+                payload={
+                    "visit_id": visit_id,
+                    "old_doctor_id": row["doctor_id"],
+                    "new_doctor_id": target_doctor_id,
+                    "queue_entry_id": new_queue_entry_id,
+                    "queue_number": seq,
+                    "status": "WAITING",
+                    "reason": reason[:200],
+                },
+            )
+            if row.get("doctor_id") and row["doctor_id"] != target_doctor_id:
+                insert_outbox_event(
+                    cursor=cur,
+                    event_type="QUEUE_ENTRY_REDIRECTED",
+                    channel=f"campuscare:queue:doctor:{row['doctor_id']}",
+                    aggregate_id=row.get("queue_entry_id") or visit_id,
+                    aggregate_type="QUEUE_ENTRY",
+                    payload={
+                        "visit_id": visit_id,
+                        "old_doctor_id": row["doctor_id"],
+                        "new_doctor_id": target_doctor_id,
+                        "queue_entry_id": row.get("queue_entry_id"),
+                        "status": "REDIRECTED",
+                        "reason": reason[:200],
+                    },
+                )
+        except Exception as outbox_err:
+            logger.warning("Failed inserting outbox event for redirect: %s", outbox_err)
 
     return {
         "status": "redirected",
@@ -1622,6 +1756,23 @@ def complete_consultation(
         cur.execute("SELECT finalized_at FROM PRESCRIPTION WHERE prescription_id = %s", (prescription_id,))
         presc_row = cur.fetchone()
         finalized_str = presc_row["finalized_at"].isoformat() if presc_row and presc_row["finalized_at"] else ""
+
+        # 11. Insert transactional outbox event for pharmacy dispensing desk
+        try:
+            insert_outbox_event(
+                cursor=cur,
+                event_type="PRESCRIPTION_PENDING_DISPENSE",
+                channel="campuscare:queue:dispensing",
+                aggregate_id=actual_visit_id,
+                aggregate_type="VISIT",
+                payload={
+                    "visit_id": actual_visit_id,
+                    "doctor_id": doctor_id,
+                    "queue_version": int(datetime.now(timezone.utc).timestamp() * 1000),
+                },
+            )
+        except Exception as outbox_err:
+            logger.warning("Failed inserting outbox event for prescription dispense: %s", outbox_err)
 
     return {
         "status": "ok",
@@ -2036,6 +2187,22 @@ def dispense_medication(
             (visit_id, performed_by_user_id, audit_note[:500]),
         )
 
+        # Insert transactional outbox event for pharmacy dispensing desk
+        try:
+            insert_outbox_event(
+                cursor=cur,
+                event_type="VISIT_DISPENSED",
+                channel="campuscare:queue:dispensing",
+                aggregate_id=visit_id,
+                aggregate_type="VISIT",
+                payload={
+                    "visit_id": visit_id,
+                    "queue_version": int(datetime.now(timezone.utc).timestamp() * 1000),
+                },
+            )
+        except Exception as outbox_err:
+            logger.warning("Failed inserting outbox event for visit dispensed: %s", outbox_err)
+
         cur.execute(
             """
             INSERT INTO VISIT_EVENT (visit_id, event_type, performed_by_user_id, notes)
@@ -2075,6 +2242,12 @@ def get_prescriptions_awaiting_dispense(conn, doctor_id: Optional[int] = None) -
     Returns all visits currently in WAITING_FOR_MEDICINE status, along with
     patient details, allergies, doctor information, consultation notes, and
     all prescribed medicines with dosages, timing schedules, and calculated quantities.
+
+    Optimized via 3 batched parameterized SQL queries:
+    1. Base visits in WAITING_FOR_MEDICINE with patient, doctor, and consultation info.
+    2. Batched ALLERGY lookup for all distinct student roll numbers.
+    3. Batched PRESCRIPTION_ITEM + PRESCRIPTION_DOSE LEFT JOIN for all prescription IDs.
+    Eliminates N+1+M queries, reducing round trips from 1 + 2N + NM down to <= 3 constant queries.
     """
     with conn.cursor() as cur:
         sql = """
@@ -2107,14 +2280,138 @@ def get_prescriptions_awaiting_dispense(conn, doctor_id: Optional[int] = None) -
         cur.execute(sql, tuple(params))
         visits = cur.fetchall()
 
+        if not visits:
+            return []
+
+        # Collect distinct roll numbers and prescription IDs
+        roll_numbers = list({v["roll_number"] for v in visits if v.get("roll_number")})
+        presc_ids = list({v["prescription_id"] for v in visits if v.get("prescription_id")})
+
+        # Query 2: Batched allergies lookup
+        allergies_by_roll = defaultdict(list)
+        if roll_numbers:
+            placeholders = ",".join(["%s"] * len(roll_numbers))
+            allergy_sql = f"""
+                SELECT roll_number, allergen
+                FROM ALLERGY
+                WHERE roll_number IN ({placeholders}) AND ended_at IS NULL
+                ORDER BY allergy_id ASC
+            """
+            cur.execute(allergy_sql, tuple(roll_numbers))
+            for row in cur.fetchall():
+                allergies_by_roll[row["roll_number"]].append(row["allergen"])
+
+        # Query 3: Batched items and doses in a single structured LEFT JOIN
+        items_by_presc = defaultdict(list)
+        if presc_ids:
+            p_placeholders = ",".join(["%s"] * len(presc_ids))
+            item_sql = f"""
+                SELECT
+                    pi.prescription_id, pi.prescription_item_id, pi.medicine_name, pi.strength,
+                    pi.dosage_form, pi.route, pi.duration_value, pi.duration_unit,
+                    pi.meal_relation, pi.special_instructions,
+                    pd.time_of_day, pd.dose_quantity, pd.dose_unit
+                FROM PRESCRIPTION_ITEM pi
+                LEFT JOIN PRESCRIPTION_DOSE pd ON pd.prescription_item_id = pi.prescription_item_id
+                WHERE pi.prescription_id IN ({p_placeholders})
+                ORDER BY pi.prescription_id ASC, pi.prescription_item_id ASC, pd.dose_id ASC
+            """
+            cur.execute(item_sql, tuple(presc_ids))
+            raw_joined_rows = cur.fetchall()
+
+            item_order_map = defaultdict(list)
+            item_dict_map = {}
+
+            for row in raw_joined_rows:
+                pr_id = row["prescription_id"]
+                pi_id = row["prescription_item_id"]
+
+                if pi_id not in item_dict_map:
+                    item_order_map[pr_id].append(pi_id)
+                    item_dict_map[pi_id] = {
+                        "prescription_item_id": pi_id,
+                        "prescriptionItemId": pi_id,
+                        "id": pi_id,
+                        "medicine_name": row["medicine_name"],
+                        "medicineName": row["medicine_name"],
+                        "name": row["medicine_name"],
+                        "med": row["medicine_name"],
+                        "strength": row["strength"],
+                        "dosage_form": row["dosage_form"],
+                        "dosageForm": row["dosage_form"],
+                        "route": row["route"],
+                        "duration_value": row["duration_value"],
+                        "durationValue": row["duration_value"],
+                        "duration_unit": row["duration_unit"],
+                        "durationUnit": row["duration_unit"],
+                        "meal_relation": row["meal_relation"],
+                        "mealRelation": row["meal_relation"],
+                        "special_instructions": row["special_instructions"],
+                        "specialInstructions": row["special_instructions"],
+                        "note": row["special_instructions"],
+                        "raw_doses": [],
+                        "dose_dicts": [],
+                    }
+
+                if row["time_of_day"] is not None:
+                    d_qty = float(row["dose_quantity"])
+                    t_day = row["time_of_day"]
+                    d_unit = row["dose_unit"]
+                    item_dict_map[pi_id]["raw_doses"].append(row)
+                    item_dict_map[pi_id]["dose_dicts"].append({
+                        "time_of_day": t_day,
+                        "timeOfDay": t_day,
+                        "dose_quantity": d_qty,
+                        "doseQuantity": d_qty,
+                        "dose_unit": d_unit,
+                        "doseUnit": d_unit,
+                    })
+
+            for pr_id, pi_ids in item_order_map.items():
+                for pi_id in pi_ids:
+                    item_data = item_dict_map[pi_id]
+                    meta = _calculate_prescription_item_qty(
+                        item_data.get("dosage_form"),
+                        item_data.get("duration_value"),
+                        item_data.get("duration_unit"),
+                        item_data["raw_doses"],
+                    )
+                    items_by_presc[pr_id].append({
+                        "prescription_item_id": pi_id,
+                        "prescriptionItemId": pi_id,
+                        "id": pi_id,
+                        "medicine_name": item_data["medicine_name"],
+                        "medicineName": item_data["medicineName"],
+                        "name": item_data["name"],
+                        "med": item_data["med"],
+                        "strength": item_data["strength"],
+                        "dosage_form": item_data["dosage_form"],
+                        "dosageForm": item_data["dosageForm"],
+                        "route": item_data["route"],
+                        "duration_value": item_data["duration_value"],
+                        "durationValue": item_data["durationValue"],
+                        "duration_unit": item_data["duration_unit"],
+                        "durationUnit": item_data["durationUnit"],
+                        "duration_text": meta["duration_text"],
+                        "days": meta["days"],
+                        "meal_relation": item_data["meal_relation"],
+                        "mealRelation": item_data["mealRelation"],
+                        "special_instructions": item_data["special_instructions"],
+                        "specialInstructions": item_data["specialInstructions"],
+                        "note": item_data["note"],
+                        "calculated_total_quantity": meta["calc_qty"],
+                        "calculatedTotalQuantity": meta["calc_qty"],
+                        "quantity": meta["calc_qty"],
+                        "qty": meta["calc_qty"],
+                        "frequency": meta["frequency"],
+                        "freq": meta["frequency"],
+                        "doses": item_data["dose_dicts"],
+                    })
+
         results = []
         for v in visits:
             roll = v["roll_number"]
-            cur.execute(
-                "SELECT allergen, severity FROM ALLERGY WHERE roll_number = %s AND ended_at IS NULL",
-                (roll,),
-            )
-            allergies_list = [a["allergen"] for a in cur.fetchall()]
+            allergies_list = allergies_by_roll.get(roll, [])
             allergies_str = ", ".join(allergies_list) if allergies_list else "None recorded"
 
             raw_email = v["doctor_email"]
@@ -2122,78 +2419,7 @@ def get_prescriptions_awaiting_dispense(conn, doctor_id: Optional[int] = None) -
             doc_display = doc_name_part if doc_name_part.startswith("Dr ") else f"Dr {doc_name_part}"
 
             presc_id = v.get("prescription_id")
-            items = []
-            if presc_id:
-                cur.execute(
-                    """
-                    SELECT prescription_item_id, medicine_name, strength, dosage_form, route,
-                           duration_value, duration_unit, meal_relation, special_instructions
-                    FROM PRESCRIPTION_ITEM
-                    WHERE prescription_id = %s
-                    ORDER BY prescription_item_id ASC
-                    """,
-                    (presc_id,),
-                )
-                raw_items = cur.fetchall()
-                for item in raw_items:
-                    pi_id = item["prescription_item_id"]
-                    cur.execute(
-                        """
-                        SELECT time_of_day, dose_quantity, dose_unit
-                        FROM PRESCRIPTION_DOSE
-                        WHERE prescription_item_id = %s
-                        """,
-                        (pi_id,),
-                    )
-                    doses = cur.fetchall()
-                    dose_dicts = [
-                        {
-                            "time_of_day": d["time_of_day"],
-                            "timeOfDay": d["time_of_day"],
-                            "dose_quantity": float(d["dose_quantity"]),
-                            "doseQuantity": float(d["dose_quantity"]),
-                            "dose_unit": d["dose_unit"],
-                            "doseUnit": d["dose_unit"],
-                        }
-                        for d in doses
-                    ]
-                    meta = _calculate_prescription_item_qty(
-                        item.get("dosage_form"),
-                        item.get("duration_value"),
-                        item.get("duration_unit"),
-                        doses,
-                    )
-                    items.append({
-                        "prescription_item_id": pi_id,
-                        "prescriptionItemId": pi_id,
-                        "id": pi_id,
-                        "medicine_name": item["medicine_name"],
-                        "medicineName": item["medicine_name"],
-                        "name": item["medicine_name"],
-                        "med": item["medicine_name"],
-                        "strength": item["strength"],
-                        "dosage_form": item["dosage_form"],
-                        "dosageForm": item["dosage_form"],
-                        "route": item["route"],
-                        "duration_value": item["duration_value"],
-                        "durationValue": item["duration_value"],
-                        "duration_unit": item["duration_unit"],
-                        "durationUnit": item["duration_unit"],
-                        "duration_text": meta["duration_text"],
-                        "days": meta["days"],
-                        "meal_relation": item["meal_relation"],
-                        "mealRelation": item["meal_relation"],
-                        "special_instructions": item["special_instructions"],
-                        "specialInstructions": item["special_instructions"],
-                        "note": item["special_instructions"],
-                        "calculated_total_quantity": meta["calc_qty"],
-                        "calculatedTotalQuantity": meta["calc_qty"],
-                        "quantity": meta["calc_qty"],
-                        "qty": meta["calc_qty"],
-                        "frequency": meta["frequency"],
-                        "freq": meta["frequency"],
-                        "doses": dose_dicts,
-                    })
+            items = items_by_presc.get(presc_id, [])
 
             chk_iso = v["checked_in_at"].isoformat() if v.get("checked_in_at") else None
             comp_iso = v["consultation_completed_at"].isoformat() if v.get("consultation_completed_at") else None
@@ -2489,6 +2715,29 @@ def cancel_visit(
             """,
             (visit_id, performed_by_user_id, f"Cancelled: {cancel_reason}"[:500]),
         )
+
+        # Insert transactional outbox event
+        try:
+            doc_id = visit.get("doctor_id")
+            if not doc_id:
+                cur.execute("SELECT doctor_id FROM VISIT WHERE visit_id = %s", (visit_id,))
+                v_row = cur.fetchone()
+                doc_id = v_row.get("doctor_id") if v_row else None
+            insert_outbox_event(
+                cursor=cur,
+                event_type="VISIT_CANCELLED",
+                channel=f"campuscare:queue:doctor:{doc_id}" if doc_id else "campuscare:queue:dispensing",
+                aggregate_id=visit_id,
+                aggregate_type="VISIT",
+                payload={
+                    "visit_id": visit_id,
+                    "doctor_id": doc_id,
+                    "status": "CANCELLED",
+                    "reason": cancel_reason[:200],
+                },
+            )
+        except Exception as outbox_err:
+            logger.warning("Failed inserting outbox event for visit cancelled: %s", outbox_err)
 
     return {
         "status": "cancelled",
