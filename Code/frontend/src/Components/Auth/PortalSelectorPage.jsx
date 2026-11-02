@@ -83,16 +83,8 @@ export default function PortalSelectorPage() {
         </div>
       </div>
 
-      <div className="text-center text-xs text-slate-400 py-2 flex items-center justify-center gap-3">
+      <div className="text-center text-xs text-slate-400 py-2">
         <span>CampusCare • Thapar Institute</span>
-        <span>•</span>
-        <button
-          type="button"
-          onClick={() => navigate('/admin/login')}
-          className="text-teal-800 hover:text-teal-950 font-semibold underline cursor-pointer"
-        >
-          Administrator Portal
-        </button>
       </div>
     </div>
   )
