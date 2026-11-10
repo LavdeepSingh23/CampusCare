@@ -99,7 +99,7 @@ export default function Doctors_Dashboard() {
     shift: '09:00 AM - 05:00 PM',
     email: doctor?.email ?? 'dr.kapoor@thapar.edu',
     room: '104',
-    regNo: 'TIET-DOC-0104',
+    regNo: 'DOC-0104',
   })
 
   // Patient Queue
@@ -436,7 +436,7 @@ export default function Doctors_Dashboard() {
           : 'OPD Health Evaluation'),
       history: item.communityCode
         ? `Campus Community (${item.category || 'Member'}). Code: ${roll}. Blood: ${item.bloodGroup || 'B+'}, Age: ${item.age || 20}.`
-        : `TIET Student. Roll: ${roll}. Blood Group: ${item.bloodGroup || 'B+'}, Age: ${item.age || 20}.`,
+        : `Campus Student. Roll: ${roll}. Blood Group: ${item.bloodGroup || 'B+'}, Age: ${item.age || 20}.`,
       allergies: allergiesList,
       prescriptions: item.prescriptions || [],
     }
@@ -1373,7 +1373,7 @@ export default function Doctors_Dashboard() {
                 </span>
               </div>
               <p className="text-[11px] text-slate-500 font-medium hidden md:block">
-                TIET Health Centre • Room {doctorProfile.room} • OPD Live
+                Campus Health Centre • Room {doctorProfile.room} • OPD Live
               </p>
             </div>
           </div>
@@ -1881,7 +1881,7 @@ export default function Doctors_Dashboard() {
 
                         <span className="text-[11px] px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-800 font-semibold border border-emerald-200 shrink-0 hidden sm:inline-flex items-center gap-1.5">
                           <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-                          <span>{selectedPatient.communityCode ? `Community (${selectedPatient.category || 'Member'})` : 'TIET Verified Student'}</span>
+                          <span>{selectedPatient.communityCode ? `Community (${selectedPatient.category || 'Member'})` : 'Verified Student'}</span>
                         </span>
                       </div>
 

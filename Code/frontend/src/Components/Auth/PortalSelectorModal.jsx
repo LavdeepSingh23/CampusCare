@@ -6,7 +6,7 @@ import {
   X,
   ArrowRight,
 } from 'lucide-react'
-import tiMark from '../../assets/ti-mark.png'
+import campusCareLogo from '../../assets/campuscare-logo.png'
 
 export default function PortalSelectorModal({ isOpen, onClose }) {
   const navigate = useNavigate()
@@ -53,13 +53,13 @@ export default function PortalSelectorModal({ isOpen, onClose }) {
         {/* Header */}
         <div className="px-5 py-4 sm:px-6 sm:py-5 border-b border-slate-100 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <img src={tiMark} alt="TI Logo" className="h-7 w-auto object-contain" />
+            <img src={campusCareLogo} alt="CampusCare" className="h-7 w-auto object-contain" />
             <div>
               <h2 className="text-base font-bold text-slate-900 tracking-tight leading-none">
                 Select Portal
               </h2>
               <p className="text-[11px] text-slate-500 mt-1">
-                TIET CampusCare Health Centre
+                CampusCare Health Centre
               </p>
             </div>
           </div>

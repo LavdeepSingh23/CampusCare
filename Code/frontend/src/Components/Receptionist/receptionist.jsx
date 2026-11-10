@@ -169,7 +169,7 @@ export default function ReceptionDashboard({ onLogout, initialPage = "reception"
                 className="overflow-hidden whitespace-nowrap"
               >
                 <span className="font-bold text-slate-900 tracking-tight text-sm leading-tight block">CampusCare</span>
-                <span className="text-[10px] text-teal-700 font-semibold leading-tight block">TIET Health Centre</span>
+                <span className="text-[10px] text-teal-700 font-semibold leading-tight block">Campus Health Centre</span>
               </motion.div>
             </div>
  
@@ -213,7 +213,7 @@ export default function ReceptionDashboard({ onLogout, initialPage = "reception"
               >
                 <p className="text-xs font-bold text-slate-900 truncate">{receptionist?.name || "Reception Desk"}</p>
                 <p className="text-[10px] text-slate-500 font-medium truncate">
-                  {receptionist?.email ? `${receptionist.email} • Counter 1` : "Counter 1 • TIET OPD"}
+                  {receptionist?.email ? `${receptionist.email} • Counter 1` : "Counter 1 • Campus OPD"}
                 </p>
               </motion.div>
             </div>
@@ -228,7 +228,7 @@ export default function ReceptionDashboard({ onLogout, initialPage = "reception"
             <h1 className="text-base sm:text-xl font-bold text-slate-900 tracking-tight">
               {page === "reception" ? "Receptionist Desk" : NAV.find((n) => n.id === page)?.label || "Dashboard"}
             </h1>
-            <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5">TIET Health Centre</p>
+            <p className="text-[11px] sm:text-xs text-slate-500 mt-0.5">Campus Health Centre</p>
           </div>
  
           <div className="flex items-center gap-3">
@@ -944,7 +944,7 @@ function CheckIn({ flash, setPage }) {
           {notFound && (
             <div className="p-3.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-center gap-2">
               <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
-              <span>Record not found. Please verify the roll number is registered in TIET records.</span>
+              <span>Record not found. Please verify the roll number is registered in campus records.</span>
             </div>
           )}
 

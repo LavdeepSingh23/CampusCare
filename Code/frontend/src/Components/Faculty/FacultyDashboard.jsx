@@ -27,7 +27,7 @@ import {
   CheckCircle2,
   Stethoscope,
 } from 'lucide-react'
-import tiMark from '../../assets/ti-mark.png'
+import campusCareLogo from '../../assets/campuscare-logo.png'
 
 export default function FacultyDashboard() {
   const { faculty, logout } = useAuth()
@@ -125,7 +125,7 @@ export default function FacultyDashboard() {
       <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-slate-200 shadow-2xs">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <img src={tiMark} alt="TIET" className="w-9 h-9 object-contain" />
+            <img src={campusCareLogo} alt="CampusCare" className="w-9 h-9 object-contain" />
             <div>
               <div className="flex items-center gap-2">
                 <span className="font-bold text-slate-900 text-sm sm:text-base tracking-tight">CampusCare</span>
@@ -133,14 +133,14 @@ export default function FacultyDashboard() {
                   Faculty Portal
                 </span>
               </div>
-              <p className="text-[10px] text-slate-500 hidden sm:block">Thapar Institute Health Centre System</p>
+              <p className="text-[10px] text-slate-500 hidden sm:block">CampusCare Health Centre System</p>
             </div>
           </div>
 
           <div className="flex items-center gap-3">
             <div className="text-right hidden sm:block">
               <p className="text-xs font-bold text-slate-800">{profile?.name || 'Faculty Member'}</p>
-              <p className="text-[11px] text-slate-500">{profile?.department || 'TIET Academic Staff'}</p>
+              <p className="text-[11px] text-slate-500">{profile?.department || 'Academic Staff'}</p>
             </div>
             <button
               onClick={handleLogout}
@@ -169,7 +169,7 @@ export default function FacultyDashboard() {
                 {profile?.name || 'Faculty Health Dashboard'}
               </h1>
               <p className="text-xs sm:text-sm text-teal-100/80 max-w-2xl leading-relaxed">
-                Access your consultation records, prescriptions, and manage medical profiles for your verified family dependents at the TIET Health Centre.
+                Access your consultation records, prescriptions, and manage medical profiles for your verified family dependents at the CampusCare Health Centre.
               </p>
             </div>
 
@@ -221,7 +221,7 @@ export default function FacultyDashboard() {
                   <Clock className="w-8 h-8 text-slate-300 mx-auto" />
                   <p className="text-sm font-semibold text-slate-700">No OPD Consultations Recorded</p>
                   <p className="text-xs text-slate-400">
-                    When you check in at the TIET Health Centre, your consultations and prescriptions will appear here.
+                    When you check in at the CampusCare Health Centre, your consultations and prescriptions will appear here.
                   </p>
                 </div>
               ) : (
@@ -356,7 +356,7 @@ export default function FacultyDashboard() {
             <div className="p-4 rounded-2xl bg-teal-50 border border-teal-200 text-xs text-teal-900 space-y-1.5">
               <span className="font-bold flex items-center gap-1.5 text-teal-950">
                 <ShieldCheck className="w-4 h-4 text-teal-700" />
-                TIET Healthcare Policy Note
+                Campus Healthcare Policy Note
               </span>
               <p className="text-teal-800 leading-relaxed text-[11px]">
                 Dependents registered here are assigned permanent Patient IDs in the campus health system. They can be checked in at the reception desk for consultations and emergency care.

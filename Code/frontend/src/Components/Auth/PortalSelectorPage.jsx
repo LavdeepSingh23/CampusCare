@@ -6,7 +6,7 @@ import {
   ArrowRight,
   ArrowLeft,
 } from 'lucide-react'
-import tiMark from '../../assets/ti-mark.png'
+import campusCareLogo from '../../assets/campuscare-logo.png'
 
 export default function PortalSelectorPage() {
   const navigate = useNavigate()
@@ -40,14 +40,14 @@ export default function PortalSelectorPage() {
         </button>
 
         <span className="text-[11px] font-semibold text-teal-900 bg-teal-50 px-2.5 py-1 rounded-full border border-teal-200 shrink-0">
-          TIET Health Centre
+          Campus Health Centre
         </span>
       </header>
 
       {/* Main Container */}
       <div className="max-w-md mx-auto w-full my-auto py-6">
         <div className="text-center mb-6 sm:mb-8">
-          <img src={tiMark} alt="TIET Mark" className="w-11 h-11 object-contain mx-auto mb-3" />
+          <img src={campusCareLogo} alt="CampusCare" className="w-11 h-11 object-contain mx-auto mb-3" />
           <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight">
             Select Portal
           </h1>
@@ -84,7 +84,7 @@ export default function PortalSelectorPage() {
       </div>
 
       <div className="text-center text-xs text-slate-400 py-2">
-        <span>CampusCare • Thapar Institute</span>
+        <span>CampusCare • Health System</span>
       </div>
     </div>
   )

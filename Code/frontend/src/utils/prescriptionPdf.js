@@ -46,9 +46,9 @@ export function generatePrescriptionPdf({
   doc.setFontSize(8.5)
   doc.setTextColor(50, 50, 50)
   y += 4.5
-  doc.text('Thapar Institute of Engineering & Technology, Patiala - 147004', margin, y)
+  doc.text('Campus Health & Wellness Services', margin, y)
   y += 4
-  doc.text('Ph: +91 175-2393000 | Email: healthcentre@thapar.edu | Closed: Sunday', margin, y)
+  doc.text('Ph: +1 (555) 019-2834 | Email: healthcentre@campuscare.io | Closed: Sunday', margin, y)
 
   // Doctor Name & Qualifications
   y += 5.5
@@ -62,7 +62,7 @@ export function generatePrescriptionPdf({
   doc.setFontSize(8.5)
   doc.setTextColor(40, 40, 40)
   y += 4.2
-  const regNo = doctor?.regNo || doctor?.licenseNumber || doctor?.license_number || 'TIET-DOC-0104'
+  const regNo = doctor?.regNo || doctor?.licenseNumber || doctor?.license_number || 'DOC-0104'
   const spec = doctor?.specialization || doctor?.specialty || 'General Physician'
   const room = doctor?.room ? ` | Room: ${doctor.room}` : ' | Room: 104'
   doc.text(`M.B.B.S, MD (${spec}) | Reg. No: ${regNo}${room}`, margin, y)
@@ -105,7 +105,7 @@ export function generatePrescriptionPdf({
   doc.text(`Roll No: ${rollNo}  |  Age: ${age} Y  |  Blood: ${blood}`, margin, y)
 
   y += 4.5
-  doc.text(`Address: TIET Campus Hostels, Patiala - 147004`, margin, y)
+  doc.text(`Address: University Campus Hostels & Residence`, margin, y)
 
   // Subtle separator line
   y += 4
@@ -290,7 +290,7 @@ export function generatePrescriptionPdf({
   doc.setFontSize(8)
   doc.setTextColor(40, 40, 40)
   doc.text(`M.B.B.S, MD, Reg. No: ${regNo}`, pageWidth - margin, signY + 4, { align: 'right' })
-  doc.text('Medical Officer, TIET Health Centre', pageWidth - margin, signY + 8, { align: 'right' })
+  doc.text('Medical Officer, CampusCare Health Centre', pageWidth - margin, signY + 8, { align: 'right' })
 
   // Page Footer (Bottom Left)
   doc.setLineWidth(0.2)

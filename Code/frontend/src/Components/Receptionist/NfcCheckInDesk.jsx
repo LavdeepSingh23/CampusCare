@@ -582,7 +582,7 @@ export default function NfcCheckInDesk({ flash, setPage }) {
         };
 
         let displayName = faculty.name;
-        let displaySubtitle = `Faculty • ${faculty.department || "Thapar Institute"}`;
+        let displaySubtitle = `Faculty • ${faculty.department || "University Faculty"}`;
         let relDisplay = null;
 
         if (facultyTarget === "FAMILY_MEMBER") {
@@ -923,7 +923,7 @@ export default function NfcCheckInDesk({ flash, setPage }) {
                     <div>
                       <h3 className="text-base font-bold text-slate-900">Desktop USB RFID Scanner</h3>
                       <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto leading-relaxed">
-                        Tap the student's physical Thapar ID card on your USB RFID scanner, or type the card UID below.
+                        Tap the student's physical campus ID card on your USB RFID scanner, or type the card UID below.
                       </p>
                     </div>
                   )}
@@ -1468,7 +1468,7 @@ export default function NfcCheckInDesk({ flash, setPage }) {
                   <div>
                     <h3 className="text-lg font-bold text-slate-900">{faculty.name}</h3>
                     <p className="text-xs text-slate-600 mt-0.5">
-                      {faculty.designation || "Faculty Member"} • {faculty.department || "Thapar Institute"}
+                      {faculty.designation || "Faculty Member"} • {faculty.department || "University Faculty"}
                     </p>
                   </div>
                   <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-teal-50 text-teal-700 border border-teal-200">

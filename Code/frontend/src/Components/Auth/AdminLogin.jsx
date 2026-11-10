@@ -2,7 +2,7 @@ import React, { useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { ShieldCheck, Eye, EyeOff, Loader2, AlertCircle, ArrowLeft } from 'lucide-react'
-import tiMark from '../../assets/ti-mark.png'
+import campusCareLogo from '../../assets/campuscare-logo.png'
 
 export default function AdminLogin() {
   const { loginAdmin, error, setError, loading } = useAuth()
@@ -51,7 +51,7 @@ export default function AdminLogin() {
         <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl backdrop-blur-md space-y-6">
           <div className="text-center space-y-2">
             <div className="w-14 h-14 rounded-2xl bg-teal-950 border border-teal-500/40 text-teal-400 flex items-center justify-center mx-auto shadow-inner">
-              <img src={tiMark} alt="TIET" className="w-8 h-8 object-contain" />
+              <img src={campusCareLogo} alt="CampusCare" className="w-8 h-8 object-contain" />
             </div>
             <h1 className="text-xl font-bold tracking-tight text-white">CampusCare Administration</h1>
             <p className="text-xs text-slate-400">Institutional directory and faculty access management</p>
@@ -73,7 +73,7 @@ export default function AdminLogin() {
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="admin@campuscare.thapar.edu"
+                placeholder="admin@campuscare.edu"
                 required
                 className="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white placeholder-slate-500 text-xs sm:text-sm focus:outline-none focus:border-teal-500 transition-colors"
               />
@@ -120,7 +120,7 @@ export default function AdminLogin() {
 
           <div className="pt-2 border-t border-slate-800/80 text-center">
             <span className="text-[11px] text-slate-500">
-              Secured endpoint • TIET Central Health Registry • Unauthorized access is logged
+              Secured endpoint • Campus Central Health Registry • Unauthorized access is logged
             </span>
           </div>
         </div>
@@ -128,7 +128,7 @@ export default function AdminLogin() {
 
       {/* Footer */}
       <footer className="relative z-10 text-center text-xs text-slate-600 py-2">
-        Thapar Institute of Engineering & Technology • CampusCare Infrastructure
+        CampusCare Health Infrastructure • Enterprise University Edition
       </footer>
     </div>
   )

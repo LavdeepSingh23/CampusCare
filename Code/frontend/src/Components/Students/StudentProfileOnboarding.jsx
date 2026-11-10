@@ -476,7 +476,7 @@ export default function StudentProfileOnboarding({ isOnboarding = false }) {
                 {isForceOnboarding ? 'Student Profile Onboarding' : 'Edit Health Profile'}
               </h1>
               <p className="text-[11px] text-slate-500 font-medium">
-                TIET Health Centre • Verified Medical Records
+                CampusCare Health Centre • Verified Medical Records
               </p>
             </div>
           </div>
@@ -663,7 +663,7 @@ export default function StudentProfileOnboarding({ isOnboarding = false }) {
                   Institutional Academic Records
                 </h3>
                 <p className="text-xs text-slate-500">
-                  Official data pulled from Thapar University student records. These fields are immutable.
+                  Official data pulled from institutional student records. These fields are immutable.
                 </p>
               </div>
               <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-100 text-slate-600 text-xs font-semibold shrink-0">
@@ -694,7 +694,7 @@ export default function StudentProfileOnboarding({ isOnboarding = false }) {
 
               <div>
                 <label className="text-xs font-semibold text-slate-500 block mb-1">
-                  Official Thapar Email
+                  Official Institutional Email
                 </label>
                 <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200 text-sm text-slate-700">
                   {formData.email}

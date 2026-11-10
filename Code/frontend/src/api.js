@@ -283,7 +283,7 @@ export async function loginFacultyInstitutional(credential, simulatedUser = null
   if (simulatedUser) {
     const email = (simulatedUser.email || '').toLowerCase().trim()
     if (!email.endsWith('@thapar.edu')) {
-      throw new Error('Access restricted to @thapar.edu institutional accounts only. Please use your official Thapar University email.')
+      throw new Error('Access restricted to institutional accounts only. Please use your official university email.')
     }
     const facultyData = {
       access_token: 'demo-faculty-token-' + Date.now(),
@@ -336,7 +336,7 @@ export async function loginStudent(email, password) {
       const cleanEmail = (email || '').toLowerCase().trim()
       const derivedRoll = (cleanEmail.match(/\d{6,10}/) || [])[0] || '102403499'
       const namePart = cleanEmail.split('@')[0].replace(/[._]/g, ' ')
-      const formattedName = namePart ? namePart.replace(/\b\w/g, (c) => c.toUpperCase()) : 'Thapar Student'
+      const formattedName = namePart ? namePart.replace(/\b\w/g, (c) => c.toUpperCase()) : 'Campus Student'
       return mockDelay({
         access_token: 'demo-student-token-' + Date.now(),
         roll_number: derivedRoll,
@@ -354,13 +354,13 @@ export async function loginStudentGoogle(credential, simulatedUser = null) {
   if (simulatedUser) {
     const email = (simulatedUser.email || '').toLowerCase().trim()
     if (!email.endsWith(STUDENT_DOMAIN)) {
-      throw new Error(`Access restricted to ${STUDENT_DOMAIN} Google Workspace accounts only. Please use your official Thapar University email.`)
+      throw new Error(`Access restricted to verified institutional accounts only. Please use your official university email.`)
     }
     const derivedRoll = simulatedUser.rollNumber || (email.match(/\d{6,10}/) || [])[0] || '102403499'
     const studentData = {
       access_token: 'demo-student-token-' + Date.now(),
       roll_number: derivedRoll,
-      name: simulatedUser.name || 'Thapar Student',
+      name: simulatedUser.name || 'Campus Student',
       email: email,
       user_id: 1000,
     }
@@ -392,13 +392,13 @@ export async function loginStudentGoogle(credential, simulatedUser = null) {
         const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')))
         const email = (payload.email || '').toLowerCase().trim()
         if (!email.endsWith(STUDENT_DOMAIN)) {
-          throw new Error(`Access restricted to ${STUDENT_DOMAIN} Google Workspace accounts only. Please use your official Thapar University email.`)
+          throw new Error(`Access restricted to verified institutional accounts only. Please use your official university email.`)
         }
         const derivedRoll = (email.match(/\d{6,10}/) || [])[0] || '102403499'
         return {
           access_token: 'demo-google-token',
           roll_number: derivedRoll,
-          name: payload.name || 'Thapar Student',
+          name: payload.name || 'Campus Student',
           email: email,
           user_id: 1000,
         }

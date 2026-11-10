@@ -17,7 +17,7 @@ import {
   RotateCcw,
   BookOpen,
 } from 'lucide-react'
-import tiMark from '../../assets/ti-mark.png'
+import campusCareLogo from '../../assets/campuscare-logo.png'
 
 // --- HELPER COMPONENTS (ICONS) ---
 
@@ -320,8 +320,8 @@ export default function Login({ defaultMode }) {
             className="flex items-center gap-2.5 cursor-pointer group"
           >
             <img
-              src={tiMark}
-              alt="TI Logo"
+              src={campusCareLogo}
+              alt="CampusCare"
               className="h-7 sm:h-8 w-auto object-contain transition-transform group-hover:scale-105"
             />
             <span className="text-base sm:text-lg font-bold tracking-tight text-slate-900">
@@ -486,7 +486,7 @@ export default function Login({ defaultMode }) {
                 <div className="p-4 rounded-2xl bg-gradient-to-r from-amber-500/10 via-teal-500/10 to-transparent border border-amber-500/30 text-xs text-slate-700 space-y-2">
                   <div className="flex items-center gap-2 text-slate-900 font-bold">
                     <BookOpen className="w-4 h-4 text-amber-600" />
-                    <span>Official TIET Faculty & Staff Access</span>
+                    <span>Official Faculty & Staff Access</span>
                   </div>
                   <p className="text-slate-600 leading-relaxed">
                     Faculty access is authenticated via institutional Google Workspace (<strong className="text-slate-800 font-mono">@thapar.edu</strong>) and verified against the University Faculty Directory.
@@ -675,7 +675,7 @@ export default function Login({ defaultMode }) {
                   <div className="rounded-2xl border border-teal-300 bg-teal-50/90 p-4 flex items-center gap-3 animate-pulse shadow-xs">
                     <Loader2 className="w-5 h-5 text-teal-700 animate-spin shrink-0" />
                     <div className="text-xs">
-                      <p className="font-bold text-teal-950">Verifying Thapar Credentials…</p>
+                      <p className="font-bold text-teal-950">Verifying Institutional Credentials…</p>
                       <p className="text-teal-800 mt-0.5">Authorizing Google Workspace session & fetching student telemetry.</p>
                     </div>
                   </div>
@@ -870,7 +870,7 @@ export default function Login({ defaultMode }) {
                 </div>
                 <div>
                   <h3 className="text-sm font-bold text-slate-900">
-                    Thapar Google Workspace SSO
+                    Institutional Google Workspace SSO
                   </h3>
                   <p className="text-xs text-slate-500">
                     Select an account to verify domain authorization

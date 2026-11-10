@@ -36,7 +36,6 @@ import {
   GraduationCap,
   ChevronRight,
 } from 'lucide-react'
-import tiMark from '../../assets/ti-mark.png'
 import PortalSelectorModal from '../Auth/PortalSelectorModal'
 import campusCareLogo from '../../assets/campuscare-logo.png'
 import { LiquidGlassCard, LiquidGlassFilter } from '../ui/liquid-glass'
@@ -101,7 +100,7 @@ const collapsedIconVariants = {
   },
 }
 
-// Exact Coordinates of TIET Health Centre verified by user
+// Exact Coordinates of Campus Health Centre
 const HEALTH_CENTRE_COORDS = {
   lat: 30.356008,
   lng: 76.368689,
@@ -116,7 +115,7 @@ const CAMPUS_LANDMARKS = [
     category: 'Residence',
     walkingTime: '3 min walk',
     distance: '250 meters',
-    query: 'Hostel J Thapar Institute Patiala',
+    query: 'Hostel J Campus Patiala',
     instruction: 'Head South along the paved walkway past cafeteria pavilion -> Health Centre is directly ahead on your left.',
   },
   {
@@ -125,7 +124,7 @@ const CAMPUS_LANDMARKS = [
     category: 'Residence',
     walkingTime: '5 min walk',
     distance: '400 meters',
-    query: 'Hostel H Thapar Institute Patiala',
+    query: 'Hostel H Campus Patiala',
     instruction: 'Walk East past Central Lawn -> Follow avenue toward Academic Quad -> Health Centre entrance is next to block B.',
   },
   {
@@ -134,7 +133,7 @@ const CAMPUS_LANDMARKS = [
     category: 'Residence',
     walkingTime: '4 min walk',
     distance: '320 meters',
-    query: 'Hostel K Thapar Institute Patiala',
+    query: 'Hostel K Campus Patiala',
     instruction: 'Walk past Student Activity Centre -> Follow North avenue -> Arrive at Health Centre primary front desk.',
   },
   {
@@ -143,7 +142,7 @@ const CAMPUS_LANDMARKS = [
     category: 'Academic',
     walkingTime: '4 min walk',
     distance: '350 meters',
-    query: 'Central Library Thapar Institute Patiala',
+    query: 'Central Library University Campus',
     instruction: 'Exit Main Library portal -> Walk North along University Boulevard -> Health Centre is situated opposite Student Plaza.',
   },
   {
@@ -152,7 +151,7 @@ const CAMPUS_LANDMARKS = [
     category: 'Campus Entry',
     walkingTime: '7 min walk',
     distance: '600 meters',
-    query: 'Main Gate 1 Thapar Institute Patiala',
+    query: 'Main Gate 1 University Campus',
     instruction: 'Enter via Bhadson Road Gate -> Proceed along Palm Avenue -> Turn right at the Institute Fountain toward Medical Wing.',
   },
   {
@@ -161,7 +160,7 @@ const CAMPUS_LANDMARKS = [
     category: 'Sports & Rec',
     walkingTime: '4 min walk',
     distance: '300 meters',
-    query: 'Sports Complex Thapar Institute Patiala',
+    query: 'Sports Complex University Campus',
     instruction: 'Exit athletic pavilion -> Head North-East past Tennis Courts -> Arrive at Health Centre primary emergency drop-off.',
   },
 ]
@@ -233,7 +232,7 @@ const FACILITIES_DATA = [
     icon: Stethoscope,
     badgeColor: 'bg-white/10 text-white border-white/20',
     shortDesc: 'Comprehensive medical evaluations with registered campus physicians for fever, acute infections, respiratory conditions, and routine examinations.',
-    details: 'Free consultations for all enrolled TIET students and university staff. Equipped with digital diagnostic sets, pulse oximetry, automated blood pressure telemetry, and ECG machines for cardiac evaluation.',
+    details: 'Free consultations for all enrolled campus students and university staff. Equipped with digital diagnostic sets, pulse oximetry, automated blood pressure telemetry, and ECG machines for cardiac evaluation.',
     stat: '4 Doctor Cabins',
   },
   {
@@ -255,7 +254,7 @@ const FACILITIES_DATA = [
     icon: Pill,
     badgeColor: 'bg-white/10 text-white border-white/20',
     shortDesc: 'Fully stocked campus pharmacy dispensing verified institutional formulary medications without charge to enrolled students.',
-    details: 'Supplies antibiotics, analgesics, antipyretics, antiallergics, oral rehydration salts, multivitamin supplements, and asthma inhalers prescribed by TIET medical officers.',
+    details: 'Supplies antibiotics, analgesics, antipyretics, antiallergics, oral rehydration salts, multivitamin supplements, and asthma inhalers prescribed by campus medical officers.',
     stat: 'Free of Charge',
   },
   {
@@ -287,13 +286,13 @@ const FACILITIES_DATA = [
     tag: 'Confidential Support',
     icon: HeartPulse,
     badgeColor: 'bg-white/10 text-white border-white/20',
-    shortDesc: 'Direct partnership with Thapar Institute Counselling Cell (TICC) providing confidential psychiatric & psychological counseling.',
+    shortDesc: 'Direct partnership with University Student Counselling Cell providing confidential psychiatric & psychological counseling.',
     details: 'Licensed psychologists support students through academic stress, exam anxiety, loneliness, insomnia, and emotional distress in a strictly confidential clinical environment.',
     stat: '100% Confidential',
   },
 ]
 
-// Real Medical Faculty from thapar.edu
+// Clinical Medical Team
 const MEDICAL_TEAM = [
   {
     id: 'vs',
@@ -341,9 +340,9 @@ const ACADEMIC_STEPS = [
   },
   {
     step: '02',
-    title: 'TIET Health Centre Vetting',
+    title: 'Campus Health Centre Vetting',
     subtitle: 'Physical Endorsement at Room 102',
-    desc: 'Present all external documentation to the TIET Senior Medical Officer upon returning to campus. The Medical Officer reviews and provides an official verified endorsement seal.',
+    desc: 'Present all external documentation to the Senior Medical Officer upon returning to campus. The Medical Officer reviews and provides an official verified endorsement seal.',
     icon: FileCheck,
   },
   {
@@ -494,7 +493,7 @@ export default function LandingPage() {
   const handleCopyCoords = () => {
     navigator.clipboard?.writeText(HEALTH_CENTRE_COORDS.string)
     setCopiedCoords(true)
-    showToast(`Coordinates copied: ${HEALTH_CENTRE_COORDS.string} (TIET Health Centre)`)
+    showToast(`Coordinates copied: ${HEALTH_CENTRE_COORDS.string} (Campus Health Centre)`)
     setTimeout(() => setCopiedCoords(false), 2500)
   }
 
@@ -559,11 +558,11 @@ export default function LandingPage() {
         }}
       />
 
-      {/* ── Fixed Top-Left: TI Logo (Non-Clickable) ── */}
+      {/* ── Fixed Top-Left: CampusCare Logo ── */}
       <div className="fixed top-3.5 sm:top-6 left-3.5 sm:left-8 z-40 select-none flex items-center pointer-events-none">
         <img
-          src={tiMark}
-          alt="TI Logo"
+          src={campusCareLogo}
+          alt="CampusCare"
           className="h-7 sm:h-10 w-auto object-contain drop-shadow-md"
         />
       </div>
@@ -940,9 +939,9 @@ export default function LandingPage() {
                 <MapPin className="w-5 h-5 text-white" />
               </div>
               <div>
-                <h3 className="text-base sm:text-lg font-bold text-white">TIET Health Centre Station</h3>
+                <h3 className="text-base sm:text-lg font-bold text-white">Campus Health Centre Station</h3>
                 <p className="text-xs text-white/70 mt-0.5">
-                  Ground Floor Suites, Thapar University
+                  Ground Floor Suites, Campus Health Complex
                 </p>
               </div>
             </div>
@@ -1001,7 +1000,7 @@ export default function LandingPage() {
           {/* Real Google Maps Canvas */}
           <div className="relative w-full h-[400px] sm:h-[480px]">
             <iframe
-              title="TIET Health Centre Live Google Map"
+              title="Campus Health Centre Live Google Map"
               src={`https://maps.google.com/maps?q=30.356008,76.368689&hl=en&z=17&t=${mapMode === 'satellite' ? 'k' : 'm'}&output=embed`}
               className="w-full h-full border-0"
               style={{ border: 0 }}
@@ -1371,7 +1370,7 @@ export default function LandingPage() {
               </p>
             </div>
             <button
-              onClick={() => showToast('Visit Health Centre Room 102 or email healthcentre@thapar.edu for vetting.')}
+              onClick={() => showToast('Visit Health Centre Room 102 or email health@campuscare.io for vetting.')}
               className="px-5 py-2.5 rounded-full bg-white hover:bg-slate-100 text-slate-950 font-bold text-xs transition-all cursor-pointer shadow-md shrink-0 flex items-center gap-1.5 self-start sm:self-auto"
             >
               <span>Vetting Guidelines</span>
@@ -1418,11 +1417,11 @@ export default function LandingPage() {
           <div className="mt-8 pt-6 border-t border-white/10 flex flex-wrap items-center justify-center gap-6 text-xs text-white/70">
             <span className="flex items-center gap-1.5">
               <Mail className="w-3.5 h-3.5 text-white/80" />
-              <span>healthcentre@thapar.edu</span>
+              <span>health@campuscare.io</span>
             </span>
             <span className="flex items-center gap-1.5">
               <Building2 className="w-3.5 h-3.5 text-white/80" />
-              <span>TIET Patiala Campus - 147004</span>
+              <span>University Campus Health Complex</span>
             </span>
             <span className="flex items-center gap-1.5">
               <Phone className="w-3.5 h-3.5 text-white/80" />
@@ -1441,17 +1440,17 @@ export default function LandingPage() {
               alt="CampusCare"
               className="h-5 w-5 rounded-md object-contain shadow-sm"
             />
-            <span>Official TIET Campus Health Centre Portal • CampusCare</span>
+            <span>Official Campus Health Centre Portal • CampusCare</span>
           </div>
 
           <div className="flex flex-wrap items-center justify-center gap-6">
             <span>24/7 Ambulance: +91 8288008122</span>
-            <span>Email: healthcentre@thapar.edu</span>
-            <span>Patiala, Punjab</span>
+            <span>Email: health@campuscare.io</span>
+            <span>Global Campus</span>
           </div>
 
           <div className="text-white/80">
-            <span>Thapar Institute of Engineering & Technology</span>
+            <span>CampusCare Health Network</span>
           </div>
         </div>
       </footer>
@@ -1552,7 +1551,7 @@ export default function LandingPage() {
                   </div>
                   <div>
                     <h3 className="text-lg font-bold text-white">Emergency SOS Dispatch</h3>
-                    <p className="text-xs text-rose-200">TIET Health Centre & Campus Security</p>
+                    <p className="text-xs text-rose-200">Campus Health Centre & Security</p>
                   </div>
                 </div>
 
@@ -1585,7 +1584,7 @@ export default function LandingPage() {
 
                   <div className="p-3 rounded-2xl bg-white/5 border border-white/10 text-xs text-white/70">
                     <span className="font-semibold text-white block mb-0.5">Location</span>
-                    <span>TIET Health Centre Ground Floor, Rooms 101–105</span>
+                    <span>Campus Health Centre Ground Floor, Rooms 101–105</span>
                   </div>
                 </div>
 

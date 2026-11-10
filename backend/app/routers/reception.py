@@ -1450,8 +1450,8 @@ def get_terminal_settings(
         "rfidScannerConnected": True,
         "emergencyHotline": "108 / +91-175-2393108",
         "activeDoctorsCount": active_docs,
-        "facility": "Thapar Institute Health Centre",
-        "campus": "Patiala Main Campus",
+        "facility": "CampusCare Health Centre",
+        "campus": "University Main Campus",
     }
 
 

@@ -152,7 +152,7 @@ export function AuthProvider({ children }) {
       setUserRole('STUDENT')
       return nextStudent
     } catch (err) {
-      const msg = err.message || 'Google Workspace sign-in failed. Please use your @thapar.edu account.'
+      const msg = err.message || 'Google Workspace sign-in failed. Please use your official institutional account.'
       setError(msg)
       throw err
     } finally {

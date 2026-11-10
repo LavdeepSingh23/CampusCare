@@ -9,7 +9,7 @@ import {
   AlertCircle,
   Loader2,
 } from 'lucide-react'
-import tiMark from '../../assets/ti-mark.png'
+import campusCareLogo from '../../assets/campuscare-logo.png'
 import PortalSelectorModal from './PortalSelectorModal'
 
 const GoogleIcon = () => (
@@ -181,8 +181,8 @@ export default function FacultyLogin() {
             className="flex items-center gap-2.5 cursor-pointer group"
           >
             <img
-              src={tiMark}
-              alt="TI Logo"
+              src={campusCareLogo}
+              alt="CampusCare"
               className="h-8 w-auto object-contain transition-transform group-hover:scale-105"
             />
             <span className="text-lg font-bold tracking-tight text-slate-900">
@@ -331,7 +331,7 @@ export default function FacultyLogin() {
 
         {/* Empty bottom spacer to balance layout */}
         <div className="text-center text-xs text-slate-400">
-          TIET Faculty & Staff Health Services
+          Campus Faculty & Staff Health Services
         </div>
       </section>
 
@@ -380,8 +380,8 @@ export default function FacultyLogin() {
 
           {/* Bottom Info */}
           <div className="relative z-10 text-xs text-teal-200/70 flex items-center justify-between">
-            <span>Thapar Institute of Engineering & Technology</span>
-            <span>Patiala, Punjab</span>
+            <span>CampusCare Health Network</span>
+            <span>Global Campus Edition</span>
           </div>
         </div>
       </section>

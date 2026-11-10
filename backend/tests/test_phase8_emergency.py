@@ -153,7 +153,7 @@ def test_emergency_creation_with_ambulance_dispatch():
         "action_taken": "Administered 0.5mg IM Epinephrine, high-flow oxygen 10L/min, continuous vitals monitor",
         "ambulance_required": True,
         "ambulance_details": {
-            "ambulance_provider": "TIET Fast-Response Unit",
+            "ambulance_provider": "Campus Fast-Response Unit",
             "contact_number": "+91-9876543210",
             "vehicle_number": "PB 11 CD 5678",
             "destination": "Rajindra Hospital Emergency, Patiala",

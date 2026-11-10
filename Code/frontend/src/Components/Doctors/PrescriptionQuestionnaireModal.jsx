@@ -1499,17 +1499,17 @@ export default function PrescriptionQuestionnaireModal({
                           CAMPUSCARE HEALTH CENTRE
                         </h2>
                         <p className="text-xs text-slate-700">
-                          Thapar Institute of Engineering & Technology, Patiala - 147004
+                          Campus Health & Wellness Services
                         </p>
                         <p className="text-xs text-slate-700">
-                          Ph: +91 175-2393000 | Email: healthcentre@thapar.edu | Closed: Sunday
+                          Ph: +1 (555) 019-2834 | Email: healthcentre@campuscare.io | Closed: Sunday
                         </p>
                         <div className="pt-1">
                           <p className="text-sm font-bold text-black">
                             {doctor?.name ? (doctor.name.startsWith('Dr') ? doctor.name : `Dr. ${doctor.name}`) : 'Dr. Neha Kapoor'}
                           </p>
                           <p className="text-xs text-slate-700">
-                            M.B.B.S, MD ({doctor?.specialization || 'General Physician'}) | Reg. No: {doctor?.regNo || 'TIET-DOC-0104'} | Room: {doctor?.room || '104'}
+                            M.B.B.S, MD ({doctor?.specialization || 'General Physician'}) | Reg. No: {doctor?.regNo || 'DOC-0104'} | Room: {doctor?.room || '104'}
                           </p>
                         </div>
                       </div>
@@ -1531,7 +1531,7 @@ export default function PrescriptionQuestionnaireModal({
                           OPD ID: <strong className="text-black font-mono">{patient.rollNo}</strong>, Age: <strong className="text-black">{patient.age} Y</strong> | Blood: <strong className="text-black">{patient.bloodGroup}</strong>
                         </p>
                         <p className="text-slate-700">
-                          Address: TIET Campus Hostels, Patiala - 147004
+                          Address: University Campus Hostels & Residence
                         </p>
                       </div>
 
@@ -1632,7 +1632,7 @@ export default function PrescriptionQuestionnaireModal({
                             </span>
                           </div>
                           <p className="text-black leading-relaxed">
-                            This is to certify that <strong>{patient.name}</strong> (Roll No: <strong className="font-mono">{patient.rollNo}</strong>) has been clinically evaluated at the TIET Health Centre and diagnosed with <strong>{effectiveDiagnosis}</strong>. The patient is advised strict bed rest and medical quarantine for <strong>{effectiveBedRestString}</strong> with effect from <strong>{currentDateStr}</strong>. The student is medically unfit to attend academic lectures, laboratory sessions, or examinations during this period.
+                            This is to certify that <strong>{patient.name}</strong> (Roll No: <strong className="font-mono">{patient.rollNo}</strong>) has been clinically evaluated at the CampusCare Health Centre and diagnosed with <strong>{effectiveDiagnosis}</strong>. The patient is advised strict bed rest and medical quarantine for <strong>{effectiveBedRestString}</strong> with effect from <strong>{currentDateStr}</strong>. The student is medically unfit to attend academic lectures, laboratory sessions, or examinations during this period.
                           </p>
                         </div>
                       )}
@@ -1643,10 +1643,10 @@ export default function PrescriptionQuestionnaireModal({
                           {doctor?.name ? (doctor.name.startsWith('Dr') ? doctor.name : `Dr. ${doctor.name}`) : 'Dr. Neha Kapoor'}
                         </p>
                         <p className="text-slate-700">
-                          M.B.B.S, MD, Reg. No: {doctor?.regNo || 'TIET-DOC-0104'}
+                          M.B.B.S, MD, Reg. No: {doctor?.regNo || 'DOC-0104'}
                         </p>
                         <p className="text-slate-600 text-[11px]">
-                          Medical Officer, TIET Health Centre
+                          Medical Officer, CampusCare Health Centre
                         </p>
                       </div>
 

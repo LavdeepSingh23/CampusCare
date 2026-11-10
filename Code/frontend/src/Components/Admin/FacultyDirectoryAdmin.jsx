@@ -24,7 +24,7 @@ import {
   RefreshCw,
   BarChart3,
 } from 'lucide-react'
-import tiMark from '../../assets/ti-mark.png'
+import campusCareLogo from '../../assets/campuscare-logo.png'
 
 export default function FacultyDirectoryAdmin() {
   const { admin, logout } = useAuth()
@@ -134,7 +134,7 @@ export default function FacultyDirectoryAdmin() {
       <header className="sticky top-0 z-40 bg-slate-900/95 backdrop-blur-md border-b border-slate-800 shadow-md">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <img src={tiMark} alt="TIET" className="w-8 h-8 object-contain" />
+            <img src={campusCareLogo} alt="CampusCare" className="w-8 h-8 object-contain" />
             <div>
               <div className="flex items-center gap-2">
                 <span className="font-bold text-white text-sm sm:text-base tracking-tight">CampusCare Admin</span>
@@ -406,7 +406,7 @@ export default function FacultyDirectoryAdmin() {
                 </label>
                 <input
                   type="text"
-                  placeholder="e.g. TIET-FAC-104"
+                  placeholder="e.g. FAC-104"
                   value={newFaculty.employee_code}
                   onChange={(e) => setNewFaculty({ ...newFaculty, employee_code: e.target.value })}
                   className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-white text-xs focus:outline-none focus:border-teal-500 font-mono"
