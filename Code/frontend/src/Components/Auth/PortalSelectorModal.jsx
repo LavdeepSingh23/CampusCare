@@ -100,6 +100,28 @@ export default function PortalSelectorModal({ isOpen, onClose }) {
             )
           })}
         </div>
+
+        {/* Clinical OPD & Reception Staff Access */}
+        <div className="px-5 py-3 bg-slate-50 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+          <span>Clinical & Staff:</span>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => handleSelect('/signin/doctor')}
+              className="text-teal-700 hover:text-teal-900 font-semibold cursor-pointer"
+            >
+              Doctor &rarr;
+            </button>
+            <span className="text-slate-300">•</span>
+            <button
+              type="button"
+              onClick={() => handleSelect('/signin/receptionist')}
+              className="text-teal-700 hover:text-teal-900 font-semibold cursor-pointer"
+            >
+              Receptionist &rarr;
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   )

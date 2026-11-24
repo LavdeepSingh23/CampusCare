@@ -22,6 +22,18 @@ function ProtectedRoute({ children, allowedRoles }) {
     if (allowedRoles && allowedRoles.includes('ADMIN')) {
       return <Navigate to={`/admin/login?redirect=${encodeURIComponent(location.pathname + location.search)}`} replace />;
     }
+    if (allowedRoles && allowedRoles.includes('DOCTOR')) {
+      return <Navigate to={`/signin/doctor?redirect=${encodeURIComponent(location.pathname + location.search)}`} replace />;
+    }
+    if (allowedRoles && allowedRoles.includes('RECEPTIONIST')) {
+      return <Navigate to={`/signin/receptionist?redirect=${encodeURIComponent(location.pathname + location.search)}`} replace />;
+    }
+    if (allowedRoles && allowedRoles.includes('FACULTY')) {
+      return <Navigate to={`/signin/faculty?redirect=${encodeURIComponent(location.pathname + location.search)}`} replace />;
+    }
+    if (allowedRoles && allowedRoles.includes('STUDENT')) {
+      return <Navigate to={`/signin/student?redirect=${encodeURIComponent(location.pathname + location.search)}`} replace />;
+    }
     return <Navigate to="/user_login" replace />;
   }
   if (allowedRoles && !allowedRoles.includes(userRole)) {

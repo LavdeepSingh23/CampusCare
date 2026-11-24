@@ -83,8 +83,24 @@ export default function PortalSelectorPage() {
         </div>
       </div>
 
-      <div className="text-center text-xs text-slate-400 py-2">
+      <div className="text-center text-xs text-slate-400 py-2 flex items-center justify-center gap-3">
         <span>CampusCare • Health System</span>
+        <span>•</span>
+        <button
+          type="button"
+          onClick={() => navigate('/signin/doctor')}
+          className="text-teal-800 hover:text-teal-950 font-medium hover:underline cursor-pointer"
+        >
+          Doctor OPD
+        </button>
+        <span>•</span>
+        <button
+          type="button"
+          onClick={() => navigate('/signin/receptionist')}
+          className="text-teal-800 hover:text-teal-950 font-medium hover:underline cursor-pointer"
+        >
+          Receptionist Desk
+        </button>
       </div>
     </div>
   )
