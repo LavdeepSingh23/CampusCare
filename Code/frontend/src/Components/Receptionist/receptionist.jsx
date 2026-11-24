@@ -106,7 +106,7 @@ export default function ReceptionDashboard({ onLogout, initialPage = "reception"
       onLogout();
     } else {
       logout();
-      navigate("/user_login");
+      navigate("/signin/receptionist");
     }
   };
  
