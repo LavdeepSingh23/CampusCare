@@ -9,5 +9,6 @@ node_modules/
 backend/reports/
 backend/reports_out/
 scratch/
-
+.agents/skills/
+.taste-skill/
 
