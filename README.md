@@ -1,16 +1,70 @@
 <div align="center">
 
-# CampusCare
+<!-- Animated Wave Header Banner (Clinical Teal / Emerald) -->
+<img src="https://capsule-render.vercel.app/api?type=waving&color=0:0c2e2b,50:0f766e,100:14b8a6&height=210&section=header&text=CampusCare&fontSize=52&fontColor=ffffff&fontAlignY=36&desc=Tap-and-Go%20Digital%20Campus%20Health%20Centre%20%E2%80%A2%20NFC%20%E2%80%A2%20Real-Time%20OPD%20%E2%80%A2%20E-Prescriptions&descSize=16&descAlignY=58&descColor=ccfbf1&animation=fadeIn" width="100%" alt="CampusCare Hero Banner" />
 
-**A tap-and-go digital health-center workflow, built around the NFC chip already inside your college ID card.**
+<br />
 
-[![Status](https://img.shields.io/badge/status-in%20development-yellow)](#project-status)
-[![License](https://img.shields.io/badge/license-TBD-lightgrey)](#license)
-[![Frontend](https://img.shields.io/badge/Frontend-React%20%2B%20Vite-149ECA?logo=react&logoColor=white)](#technology-stack)
-[![Backend](https://img.shields.io/badge/Backend-FastAPI-009688?logo=fastapi&logoColor=white)](#technology-stack)
-[![Database](https://img.shields.io/badge/Database-PostgreSQL-4169E1?logo=postgresql&logoColor=white)](#technology-stack)
-[![PWA](https://img.shields.io/badge/App%20Model-PWA-5A0FC8?logo=pwa&logoColor=white)](#technology-stack)
-[![NFC](https://img.shields.io/badge/Identity-Web%20NFC-black?logo=nfc&logoColor=white)](#nfc-architecture)
+<img src="./Code/frontend/src/assets/campuscare-logo.png" width="76" alt="CampusCare Logo" />
+
+<br />
+
+<!-- Animated Typing Tagline -->
+<a href="https://campuscare-zpl9.onrender.com">
+  <img src="https://readme-typing-svg.demolab.com?font=Plus+Jakarta+Sans&weight=700&size=21&duration=2800&pause=900&color=0F766E&center=true&vCenter=true&width=760&lines=Tap+Your+College+ID+Card+%E2%86%92+Join+the+Live+OPD+Queue;Real-Time+WebSockets+%2B+Transactional+Outbox+%2B+Redis+Pub%2FSub;Structured+E-Prescriptions%2C+Dispensing+%26+Emergency+Dispatch;React+19+PWA+%2B+FastAPI+%2B+Aiven+Cloud+MySQL+8.4" alt="CampusCare Capabilities" />
+</a>
+
+<p>
+  <a href="https://campuscare-zpl9.onrender.com"><strong>Live Web App</strong></a> ·
+  <a href="https://campuscarebackend-j203.onrender.com/docs"><strong>Swagger API Docs</strong></a> ·
+  <a href="https://campuscarebackend-j203.onrender.com/ready"><strong>Live DB Readiness</strong></a> ·
+  <a href="#-live-portals--demo-access"><strong>Portals &amp; Demo</strong></a> ·
+  <a href="#-interactive-screen-gallery"><strong>Screen Gallery</strong></a> ·
+  <a href="#-system-architecture"><strong>Architecture</strong></a> ·
+  <a href="./Est_Report/Est_Report.pdf"><strong>Final EST Report</strong></a>
+</p>
+
+<!-- Live Status & Core Stack Badges -->
+<p>
+  <a href="https://campuscare-zpl9.onrender.com">
+    <img src="https://img.shields.io/website?url=https%3A%2F%2Fcampuscare-zpl9.onrender.com&style=for-the-badge&up_message=ONLINE&up_color=10b981&down_color=ef4444&label=FRONTEND" alt="Frontend Status" />
+  </a>
+  <a href="https://campuscarebackend-j203.onrender.com/health">
+    <img src="https://img.shields.io/website?url=https%3A%2F%2Fcampuscarebackend-j203.onrender.com%2Fhealth&style=for-the-badge&up_message=HEALTHY&up_color=0f766e&down_color=ef4444&label=BACKEND%20API" alt="Backend API Status" />
+  </a>
+  <img src="https://img.shields.io/badge/React%2019-Vite%208-0f766e?style=for-the-badge&logo=react&logoColor=white" alt="React 19" />
+  <img src="https://img.shields.io/badge/FastAPI-Python%203-0c2e2b?style=for-the-badge&logo=fastapi&logoColor=14b8a6" alt="FastAPI" />
+  <img src="https://img.shields.io/badge/MySQL%208.4-Aiven%20TLS-14b8a6?style=for-the-badge&logo=mysql&logoColor=white" alt="MySQL 8.4" />
+  <img src="https://img.shields.io/badge/Redis-Pub%2FSub-0f766e?style=for-the-badge&logo=redis&logoColor=white" alt="Redis Pub/Sub" />
+  <img src="https://img.shields.io/badge/Web%20NFC-ISO%2014443--3A-0c2e2b?style=for-the-badge&logo=nfc&logoColor=5eead4" alt="Web NFC" />
+  <a href="./LICENSE.md">
+    <img src="https://img.shields.io/badge/License-Prosperity%203.0.0-10b981?style=for-the-badge" alt="Prosperity Public License 3.0.0" />
+  </a>
+</p>
+
+<!-- Live GitHub Repository Telemetry Badges -->
+<p>
+  <img src="https://img.shields.io/github/last-commit/LavdeepSingh23/CampusCare?style=flat-square&color=0f766e&logo=git&logoColor=white" alt="Last Commit" />
+  <img src="https://img.shields.io/github/commit-activity/m/LavdeepSingh23/CampusCare?style=flat-square&color=14b8a6" alt="Commit Activity" />
+  <img src="https://img.shields.io/github/languages/top/LavdeepSingh23/CampusCare?style=flat-square&color=0c2e2b" alt="Top Language" />
+  <img src="https://img.shields.io/github/code-size/LavdeepSingh23/CampusCare?style=flat-square&color=0f766e" alt="Code Size" />
+  <img src="https://img.shields.io/github/contributors/LavdeepSingh23/CampusCare?style=flat-square&color=10b981" alt="Contributors" />
+  <img src="https://img.shields.io/github/stars/LavdeepSingh23/CampusCare?style=flat-square&color=14b8a6" alt="GitHub Stars" />
+</p>
+
+<br />
+
+<!-- Tech Stack Icon Row -->
+<a href="#-technology-stack">
+  <img src="https://skillicons.dev/icons?i=react,vite,tailwind,py,fastapi,mysql,redis,git&theme=dark" alt="Tech Stack Icons" />
+</a>
+
+<br /><br />
+
+<!-- Pinned Repo Card (Teal Theme) -->
+<a href="https://github.com/LavdeepSingh23/CampusCare">
+  <img src="https://github-readme-stats.vercel.app/api/pin/?username=LavdeepSingh23&repo=CampusCare&bg_color=0c2e2b&title_color=5eead4&icon_color=14b8a6&text_color=ecfdf5&border_color=0f766e&show_owner=true" alt="CampusCare Repo Card" />
+</a>
 
 </div>
 
@@ -18,653 +72,360 @@
 
 ## Overview
 
-CampusCare replaces the campus health center's paper-and-token workflow with one connected, role-based system — from NFC check-in through doctor-specific queues, structured consultation, prescriptions, and dispensing, to a permanent visit history.
+**CampusCare** replaces paper registers, handwritten prescriptions, and chaotic clinic waiting lines with one synchronized, multi-portal digital health-centre platform built for campus dispensaries (developed for **UCS503P — Software Engineering**, 5th Semester at Thapar Institute).
 
-It's a Software Engineering course project (UCS503P, 5th semester), built by a four-person team. Most of the system is a conventional health-center management application. The part worth pointing at is the entry point:
+Instead of issuing separate health cards or buying dedicated RFID hardware, CampusCare uses the **NFC chip already embedded inside existing college ID cards** (`ISO/IEC 14443-3A` tested on Android Chrome via Web NFC over HTTPS), connecting check-in, doctor queues, structured prescriptions, pharmacy dispensing, emergency dispatch, and morning analytics end-to-end.
 
 ```mermaid
 flowchart LR
-    A[College ID Card] -->|Web NFC| B[Card UID]
-    B -->|hashed, mapped| C[Student Identity]
-    C --> D[CampusCare]
-    D --> E[Doctor Selection]
-    D --> F[Live Queue]
-    D --> G[Consultation]
-    D --> H[Prescription]
-    D --> I[Visit History]
-```
+    A[College ID Card] -->|Web NFC Tap| B[Hashed Card UID]
+    B --> C[Verified Identity]
+    C --> D[Doctor Queue]
+    D -->|Real-Time WS| E[Consultation]
+    E --> F[Structured E-Rx]
+    F -->|Outbox + Redis| G[Pharmacy Dispense]
+    G --> H[Longitudinal Visit History]
 
-No new card is issued. No dedicated reader is bought. The existing college ID — already used for gate and library access — becomes the physical key into the digital workflow. The team's own ID card has already been tested against Android Chrome via Web NFC over HTTPS, and its UID reads successfully — a confirmed capability, not an assumption.
+    style A fill:#0c2e2b,color:#ffffff,stroke:#14b8a6
+    style D fill:#0f766e,color:#ffffff,stroke:#5eead4
+    style F fill:#0f766e,color:#ffffff,stroke:#5eead4
+    style H fill:#10b981,color:#0c2e2b,stroke:#0c2e2b
+```
 
 ---
 
-## Table of Contents
+## Live Portals & Demo Access
 
-- [Project Status](#project-status)
-- [Problem](#problem)
-- [Solution](#solution)
-- [Core Workflow](#core-workflow)
-- [User Roles](#user-roles)
-- [Architecture](#architecture)
-- [NFC Architecture](#nfc-architecture)
-- [Authentication & Authorization](#authentication--authorization)
-- [Medical Record Model](#medical-record-model)
-- [Prescription Model](#prescription-model)
-- [Queue Model](#queue-model)
-- [Emergency Workflow](#emergency-workflow)
-- [Database](#database)
-- [Testing Philosophy](#testing-philosophy)
-- [Security Principles](#security-principles)
-- [Project Scope](#project-scope)
-- [Repository Structure](#repository-structure)
-- [Development Workflow](#development-workflow)
-- [Technology Stack](#technology-stack)
-- [Getting Started](#getting-started)
-- [Environment Variables](#environment-variables)
-- [Deployment](#deployment)
-- [Development Roadmap](#development-roadmap)
-- [Definition of Done](#definition-of-done)
-- [Engineering Principles](#engineering-principles)
-- [Team](#team)
-- [License](#license)
+Both the frontend static app and FastAPI backend are live on **Render** backed by **Aiven Cloud MySQL 8.4** (`TLSv1.3`).
+
+> [!TIP]
+> Every login portal includes a built-in **"Use demo credentials"** one-click button directly under the Sign-In form so reviewers and testers can explore each workflow immediately without manual setup.
+
+| Portal | Live Entry Route | Who Uses It | Quick Demo Button in UI |
+|---|---|---|---|
+| **Landing & Portal Picker** | [campuscare-zpl9.onrender.com](https://campuscare-zpl9.onrender.com/) | Everyone | Opens Student & Faculty modal + Clinical Staff links |
+| **Student Portal** | [`/signin/student`](https://campuscare-zpl9.onrender.com/signin/student) | Students (`@thapar.edu`) | `Use demo credentials (Roll #1024030107)` or Google SSO |
+| **Faculty & Dependents** | [`/signin/faculty`](https://campuscare-zpl9.onrender.com/signin/faculty) | Faculty & Family | `Use demo credentials (Dr. Rajesh Sharma)` or Google SSO |
+| **Doctor OPD Console** | [`/signin/doctor`](https://campuscare-zpl9.onrender.com/signin/doctor) | Duty Doctors | `Use demo credentials (dr.kapoor@thapar.edu)` |
+| **Reception & Pharmacy** | [`/signin/receptionist`](https://campuscare-zpl9.onrender.com/signin/receptionist) | Front Desk & Pharmacists | `Use demo credentials (Counter 1 / reception@thapar.edu)` |
+| **Admin Analytics** | [`/admin/login`](https://campuscare-zpl9.onrender.com/admin/login) | Health Centre Admin | Analytics dashboard, PDF export & faculty directory |
+| **Swagger / OpenAPI** | [`/docs`](https://campuscarebackend-j203.onrender.com/docs) | Developers | Interactive FastAPI endpoint explorer |
+
+---
+
+## Interactive Screen Gallery
+
+Click any portal below to expand live screenshots from the deployed application.
+
+<details open>
+<summary><b>Landing Page, Role Selector &amp; Authentication</b> — Clean entry for Student, Faculty, Doctor &amp; Receptionist</summary>
+<br />
+
+| Landing &amp; Clinic Showcase | Role Sign-In Portal |
+|:---:|:---:|
+| <img src="./Est_Report/Landing_page.jpeg" width="420" alt="Landing Page" /> | <img src="./Est_Report/Login_page.jpeg" width="420" alt="Login Page" /> |
+
+</details>
+
+<details>
+<summary><b>Student Portal &amp; Contactless NFC Check-In</b> — Live tokens, prescriptions, history &amp; Web NFC reads</summary>
+<br />
+
+| Student Dashboard | NFC Check-In Desk |
+|:---:|:---:|
+| <img src="./Est_Report/Student_dashboard.jpeg" width="420" alt="Student Dashboard" /> | <img src="./Est_Report/NFC.jpeg" width="420" alt="NFC Card Identification" /> |
+
+| Direct Medical Overview | Prescription &amp; History View |
+|:---:|:---:|
+| <img src="./Est_Report/Student_direct.jpeg" width="420" alt="Student Direct View" /> | <img src="./Est_Report/Presecption_and_mdeical_history.jpeg" width="420" alt="Prescription and Medical History" /> |
+
+</details>
+
+<details>
+<summary><b>Doctor OPD Console &amp; E-Prescription Studio</b> — Allergy conflict alerts, formulary &amp; PDF Rx export</summary>
+<br />
+
+| Doctor OPD Live Workspace | Structured E-Prescription Studio |
+|:---:|:---:|
+| <img src="./Est_Report/Doctor_dashboard.jpeg" width="420" alt="Doctor Dashboard" /> | <img src="./Est_Report/E_prescription.jpeg" width="420" alt="Structured E-Prescription" /> |
+
+</details>
+
+<details>
+<summary><b>Receptionist Desk, Live Queue, Pharmacy Dispensing &amp; Emergency Dispatch</b></summary>
+<br />
+
+| Reception Check-In Desk | Live OPD Queue Monitor |
+|:---:|:---:|
+| <img src="./Est_Report/Reception_dashboard.jpeg" width="420" alt="Reception Dashboard" /> | <img src="./Est_Report/Live_opd_queue.jpeg" width="420" alt="Live OPD Queue" /> |
+
+| Pharmacy Dispensing Station | Completed Visits Log |
+|:---:|:---:|
+| <img src="./Est_Report/Phramacy_dispensing_station.jpeg" width="420" alt="Pharmacy Dispensing Station" /> | <img src="./Est_Report/Completed_visits.jpeg" width="420" alt="Completed Visits" /> |
+
+<div align="center">
+  <img src="./Est_Report/Emergency_ambulance_dispatch.jpeg" width="520" alt="Emergency Ambulance Dispatch" />
+</div>
+
+</details>
+
+---
+
+## Core Problems Solved
+
+<details>
+<summary><b>1. Real-Time OPD &amp; Dispensing Synchronization (No Polling Lag)</b></summary>
+<br />
+
+Previously, reception check-ins and completed consultations took several seconds to appear because clients polled repeatedly and triggered N+1 SQL waterfalls. CampusCare now pushes state changes in real time via **authenticated WebSockets** (`POST /api/ws/ticket` single-use handshake tickets), backed by a **MySQL Transactional Outbox** (`OUTBOX_EVENT` with `FOR UPDATE SKIP LOCKED`) and **Redis Pub/Sub**.
+</details>
+
+<details>
+<summary><b>2. Structured Clinical Data &amp; Allergy Safety</b></summary>
+<br />
+
+Prescriptions avoid free-text boxes — every drug item stores strength, form, route, M-A-E-N schedule, duration, meal instruction, and allergy class (`medicineFormulary.js` + `prescriptionCalculations.js`), flagging patient allergy conflicts before finalization and rendering formal A4 PDF prescriptions (`jspdf`).
+</details>
+
+<details>
+<summary><b>3. Faculty Dependents, Community Walk-Ins &amp; Isolated Emergency Triage</b></summary>
+<br />
+
+Staff can check in **Students** (NFC or roll lookup), **Faculty &amp; Registered Dependents** (institutional employee code lookup with auto-deduced dependent profiles), and **Community Walk-Ins**, while trauma/ambulance dispatches bypass the routine OPD queue in an isolated emergency pipeline.
+</details>
+
+<details>
+<summary><b>4. Automated Morning Administrative Analytics &amp; Daily Email Digests</b></summary>
+<br />
+
+Built-in disease distribution analytics, shift-wise demographics (Student / Faculty / Community), PDF dashboard export, and an automated **09:00 AM IST** daily report pipeline delivered via **Resend**.
+</details>
+
+---
+
+## System Architecture
+
+CampusCare runs a three-tier architecture designed around **MySQL as the single source of truth**, **thread-safe connection pooling**, and **real-time cross-process event delivery**.
+
+```mermaid
+flowchart TB
+    subgraph Client["Client Layer — React 19 + Vite 8 + Tailwind CSS (Render Static Site)"]
+        C1["Student &amp; Faculty Portals"]
+        C2["Doctor OPD Console"]
+        C3["Reception &amp; Dispensing Desk"]
+        C4["Admin Analytics"]
+    end
+
+    subgraph Backend["Application Layer — FastAPI + PyMySQL Pool (Render Virginia US East)"]
+        A1["JWT &amp; Google SSO Guards"]
+        A2["Atomic Queue Lifecycle"]
+        A3["Outbox Worker (SKIP LOCKED)"]
+        A4["WebSocket Manager + 30s Keepalive"]
+        A5["Daily Scheduler &amp; Resend PDF"]
+    end
+
+    subgraph Infra["Persistence &amp; Messaging"]
+        DB[("Aiven Cloud MySQL 8.4\n35 Tables • TLSv1.3 • ~36ms")]
+        RD[["Redis Pub/Sub\ndoctor:{id} &amp; dispensing"]]
+    end
+
+    Client -->|"HTTPS REST + WSS"| Backend
+    A2 -->|"ACID Tx + OUTBOX_EVENT"| DB
+    A3 -->|"Claim &amp; Publish"| RD
+    RD -->|"Fan-out to Workers"| A4
+    A4 -->|"Live Push Frames"| Client
+```
+
+### Authoritative Visit State Machine
+
+```mermaid
+stateDiagram-v2
+    [*] --> WAITING_FOR_DOCTOR : NFC / Manual Check-in
+    WAITING_FOR_DOCTOR --> IN_CONSULTATION : Doctor Calls Next / Attends
+    WAITING_FOR_DOCTOR --> NO_SHOW : Buffer Expired
+    NO_SHOW --> WAITING_FOR_DOCTOR : Reception Requeue
+    WAITING_FOR_DOCTOR --> WAITING_FOR_DOCTOR : Redirect Doctor
+    IN_CONSULTATION --> WAITING_FOR_MEDICINE : Consultation Completed + E-Rx
+    WAITING_FOR_MEDICINE --> COMPLETED : Pharmacist Dispensed
+    WAITING_FOR_DOCTOR --> CANCELLED : Visit Cancelled
+```
+
+<details>
+<summary><b>View Architecture, Use Case &amp; State Machine Diagrams from EST Report</b></summary>
+<br />
+
+| High-Level Architecture | Actor Use Case Diagram |
+|:---:|:---:|
+| <img src="./Est_Report/High_Level_Architecture.jpeg" width="420" alt="High Level Architecture" /> | <img src="./Est_Report/User_case_dig.png" width="420" alt="Use Case Diagram" /> |
+
+<div align="center">
+  <img src="./Est_Report/Visit_State_Machine.png" width="680" alt="Visit State Machine Diagram" />
+</div>
+
+</details>
+
+---
+
+## Performance & Security Engineering
+
+> [!IMPORTANT]
+> **Security Invariants:**
+> * Raw RFID/NFC card UIDs are **hashed before storage** — cards never store medical data.
+> * Every protected route validates JWT role claims and doctor ownership on the **server**.
+> * WebSockets authenticate with **single-use 60s handshake tickets** (`POST /api/ws/ticket`) and validate `Origin` headers — long-lived JWTs stay out of dispensing query strings, and WebSocket push frames carry zero clinical notes or medicine lists.
+
+| Optimization / Hardening | Measured Result | Reference |
+|---|---|---|
+| **Render VA ↔ Aiven NY TLSv1.3 Pool** | **35.84 ms** live DB ping (down from ~533 ms cold WAN TLS) | [`production-hardening-report.md`](./docs/production-hardening-report.md) |
+| **Dispensing Queue SQL Batching** | Replaced ~26 sequential N+1 queries with **3 batched `IN` queries** | [`queue_lifecycle.py`](./backend/app/services/queue_lifecycle.py) |
+| **Doctor OPD Queue Render** | Eliminated 4-request waterfall with `event_id`-deduped instant push | [`Doctors_Dashboard.jsx`](./Code/frontend/src/Components/Doctors/Doctors_Dashboard.jsx) |
+| **Cross-Process Distribution** | **0.15 ms** median Redis Pub/Sub dispatch, **0 lost events** on Redis outage | [`outbox.py`](./backend/app/services/outbox.py) |
 
 ---
 
 ## Project Status
 
-| Component | Progress | Notes |
+| Module | Status | Implementation Highlights |
 |---|:---:|---|
-| Requirements | ![0%](https://img.shields.io/badge/-0%25-lightgrey) | |
-| Architecture & ERD | ![0%](https://img.shields.io/badge/-0%25-lightgrey) | |
-| Database | ![0%](https://img.shields.io/badge/-0%25-lightgrey) | |
-| Backend | ![0%](https://img.shields.io/badge/-0%25-lightgrey) | |
-| Frontend | ![0%](https://img.shields.io/badge/-0%25-lightgrey) | |
-| Authentication | ![0%](https://img.shields.io/badge/-0%25-lightgrey) | |
-| Queue System | ![0%](https://img.shields.io/badge/-0%25-lightgrey) | |
-| Prescription | ![0%](https://img.shields.io/badge/-0%25-lightgrey) | |
-| RFID / NFC | ![40%](https://img.shields.io/badge/-40%25-yellow) | Feasibility test complete — real card, real UID read |
-| Testing | ![0%](https://img.shields.io/badge/-0%25-lightgrey) | |
-| Deployment | ![0%](https://img.shields.io/badge/-0%25-lightgrey) | |
-
-Percentages are approximate and updated as implementation progresses.
-
----
-
-## Problem
-
-A workflow built on paper records and physical queues breaks down at real scale. CampusCare targets four concrete failure points:
-
-<details>
-<summary><b>Unclear queues</b></summary>
-<br>
-
-Students have no reliable way to know who's ahead of them, when they'll be called, whether the doctor is available, or which doctor they're even waiting for.
-</details>
-
-<details>
-<summary><b>No accessible longitudinal record</b></summary>
-<br>
-
-A consultation begins with no convenient access to a student's previous visits, conditions, allergies, or prescriptions.
-</details>
-
-<details>
-<summary><b>Handwritten prescriptions</b></summary>
-<br>
-
-Hard to read, easy to lose, and impossible to structure for reminders or future analytics.
-</details>
-
-<details>
-<summary><b>No separation between routine care and emergencies</b></summary>
-<br>
-
-Routine consultations and trauma cases have fundamentally different operational needs — CampusCare keeps the emergency log entirely separate from the normal doctor queue.
-</details>
-
----
-
-## Solution
-
-```mermaid
-flowchart TD
-    A[College ID / NFC] --> B[Student Identity]
-    B --> C[Check-in]
-    C --> D[Doctor Selection]
-    D --> E["Doctor's Queue"]
-    E --> F[Consultation]
-    F --> G[Prescription]
-    G --> H[Medicine Given]
-    H --> I[Visit History]
-```
-
----
-
-## Core Workflow
-
-```mermaid
-flowchart TD
-    A[Sign in with college Google account] --> B[Complete / maintain health profile]
-    B --> C[Tap college ID card]
-    C --> D[CampusCare identifies student]
-    D --> E[Select available doctor]
-    E --> F["Join doctor's queue"]
-    F --> G[Track queue status]
-    G --> H[Doctor calls student]
-    H --> I[Consultation]
-    I --> J[Prescription created]
-    J --> K[Visit moves to medicine collection]
-    K --> L[Pharmacist confirms dispensing]
-    L --> M[Visit becomes COMPLETED]
-    M --> N[Visit appears in medical history]
-```
-
----
-
-## User Roles
-
-<table>
-<tr><th>Role</th><th>Can</th><th>Cannot</th></tr>
-<tr>
-<td><b>Student</b></td>
-<td>Authenticate via college Google account · maintain health profile · NFC or staff-assisted check-in · select an available doctor · view own queue status, history, and prescriptions</td>
-<td>Change their own role · access other students' records · create prescriptions · modify completed clinical records</td>
-</tr>
-<tr>
-<td><b>Doctor</b></td>
-<td>View own queue · call next student · view patient history and health profile · record consultations · create structured prescriptions · redirect to the other doctor · mark consultation complete</td>
-<td>—</td>
-</tr>
-<tr>
-<td><b>Pharmacist / Receptionist</b></td>
-<td>Staff-assisted manual check-in · confirm medicine dispensing · log substitutions/deviations · log emergency/trauma cases · view records per access policy</td>
-<td>—</td>
-</tr>
-<tr>
-<td><b>Administrator</b></td>
-<td>Manage doctor and pharmacist/receptionist accounts · mark doctor availability · enroll and revoke RFID credentials · view system-level logs</td>
-<td>—</td>
-</tr>
-</table>
-
----
-
-## Architecture
-
-CampusCare follows a conventional three-tier architecture, kept deliberately boring on purpose — the interesting engineering is in the workflow, not the topology.
-
-```mermaid
-flowchart TB
-    subgraph Client["Client Layer — React + Vite + Tailwind + PWA"]
-        C1[Student] 
-        C2[Doctor]
-        C3[Pharmacist]
-        C4[Admin]
-    end
-    subgraph App["Application Layer — Python + FastAPI"]
-        A1[Authentication & Authorization]
-        A2[Queue Logic]
-        A3[Consultation Logic]
-        A4[Prescription Logic]
-        A5[RFID Identity Mapping]
-        A6[Emergency Logging]
-    end
-    subgraph Data["Data Layer — PostgreSQL"]
-        D1[(Raw SQL + versioned migrations)]
-    end
-    Client -->|HTTPS / REST| App
-    App -->|SQL| Data
-```
-
----
-
-## NFC Architecture
-
-```mermaid
-flowchart LR
-    A[Android device] --> B[Chrome + Web NFC]
-    B --> C[College ID card]
-    C --> D[Unique UID / serial]
-    D --> E[Client-side processing]
-    E --> F[Secure server request]
-    F --> G[Stored credential mapping]
-    G --> H[Student]
-    H --> I[Check-in]
-```
-
-> **Important:** CampusCare never treats the raw UID as identity. The system maintains a controlled mapping — `RFID credential → student → CampusCare account` — and the UID is **hashed before storage**, not kept in the clear.
-
----
-
-## Authentication & Authorization
-
-Students authenticate via the college Google identity flow. Staff accounts are role-controlled. The backend is the single source of truth for permissions — the frontend hiding a button is never treated as authorization.
-
-```mermaid
-flowchart LR
-    A[Frontend request] --> B[FastAPI]
-    B --> C[Authenticate]
-    C --> D[Identify user]
-    D --> E[Verify role]
-    E --> F[Verify resource access]
-    F --> G[(PostgreSQL)]
-```
-
-Every protected endpoint performs server-side authorization, independent of anything the client claims.
-
----
-
-## Medical Record Model
-
-**Health Profile** — longer-lived: allergies, known conditions, blood group, current medications, emergency contact.
-
-**Visit History** — per completed visit: doctor, consultation notes, prescription, dispensing record, timestamps, redirection info where applicable.
-
-Splitting these lets a doctor see longitudinal context instead of treating every consultation as an isolated event.
-
----
-
-## Prescription Model
-
-No free-text prescription box. Every item is structured:
-
-| Field | Example |
-|---|---|
-| Medicine | Example Medicine |
-| Strength | 500 mg |
-| Form | Tablet |
-| Route | Oral |
-| Morning / Afternoon / Night | 1 / 0 / 1 |
-| Duration | 5 days |
-| Food instruction | After food |
-| PRN | — |
-| Additional instructions | — |
-
-Exact fields will be locked down with the finalized requirements before implementation.
-
----
-
-## Queue Model
-
-Each doctor holds an independent queue:
-
-```
-Doctor A                  Doctor B
-─────────                 ─────────
-Student 01                Student 02
-Student 04                Student 05
-Student 09                Student 07
-```
-
-Queue position is *derived* from ordering/state, never stored as a fixed number.
-
-**No-show handling**
-
-```mermaid
-stateDiagram-v2
-    [*] --> WAITING
-    WAITING --> CALLED
-    CALLED --> IN_CONSULTATION : student appears
-    CALLED --> NO_SHOW : buffer expires
-    NO_SHOW --> WAITING : re-enters at end of queue
-    IN_CONSULTATION --> COMPLETED
-```
-
-**Doctor redirection** — if a student joined the wrong queue, the doctor moves them to the correct one. It stays the same clinical encounter; the system changes routing rather than silently spawning a second, unrelated visit.
-
----
-
-## Emergency Workflow
-
-```mermaid
-flowchart LR
-    A[Emergency] --> B[Authorized staff member]
-    B --> C[Emergency log]
-```
-
-No normal doctor queue. No student queue position. No doctor-selection screen. This mirrors how the dispensary actually operates — trauma cases aren't routed through routine consultation infrastructure.
-
----
-
-## Database
-
-PostgreSQL, deliberately without an ORM:
-
-- Raw SQL
-- Foreign keys, constraints, indexes
-- Transactions
-- Version-controlled migrations
-
-**Conceptual entities:** Users · Students · Staff · Doctors · RFID Credentials · Health Profiles · Visits · Queue Entries · Consultations · Prescriptions · Prescription Items · Dispensing Records · Emergency Cases · Audit Logs
-
----
-
-## Testing Philosophy
-
-A feature isn't done because it works — it's done because its **failure paths** are handled too:
-
-- Unknown or revoked card?
-- Student already checked in?
-- Doctor unavailable?
-- Student doesn't show?
-- Two requests arrive simultaneously?
-- Session expires mid-flow?
-- Network fails?
-
----
-
-## Security Principles
-
-`Server-side authorization` · `Least-privilege role access` · `Secure authentication` · `Hashed RFID identifiers` · `HTTPS everywhere in deployment` · `Secrets outside source control` · `Database constraints` · `Transaction-safe queue operations` · `Audit logging` · `Synthetic data in dev/demo — no real medical records outside authorized environments`
-
----
-
-## Project Scope
-
-<table>
-<tr><td valign="top" width="34%">
-
-**Core — Semester Deliverable**
-
-- Google-based student auth
-- Health profile
-- NFC / RFID check-in
-- Staff-assisted manual check-in
-- Doctor selection & availability
-- Doctor-specific queues
-- No-show handling
-- Doctor redirection
-- Consultation records
-- Structured prescriptions
-- Pharmacist dispensing
-- Emergency log
-- Role-based access
-- Admin panel
-- Audit logging
-- Deployment & testing
-
-</td><td valign="top" width="33%">
-
-**Stretch Goals**
-
-*Only after core is stable*
-
-- Medication reminders
-- Seasonal disease-surge analytics
-
-</td><td valign="top" width="33%">
-
-**Explicitly Out of Scope**
-
-*This semester*
-
-- Medicine inventory management
-- AI diagnosis
-- Symptom-based auto-triage
-- Automated medical decisions
-- Payment processing
-- Insurance integration
-- Native Android app
-- Hospital/ambulance integration
-
-</td></tr>
-</table>
-
-Scope discipline is intentional — a smaller system that works beats a larger one that doesn't.
-
----
-
-## Repository Structure
-
-```
-campuscare/
-├── frontend/
-│   ├── src/
-│   ├── public/
-│   └── package.json
-│
-├── backend/
-│   ├── app/
-│   │   ├── routes/
-│   │   ├── services/
-│   │   ├── repositories/
-│   │   ├── schemas/
-│   │   └── auth/
-│   ├── tests/
-│   └── requirements.txt
-│
-├── database/
-│   ├── migrations/
-│   └── seed/
-│
-├── docs/
-│   ├── requirements.md
-│   ├── use-cases.md
-│   ├── permissions.md
-│   ├── architecture.md
-│   └── decisions.md
-│
-├── .gitignore
-└── README.md
-```
-
----
-
-## Development Workflow
-
-```
-main
- └── develop
-      ├── feature/student-auth
-      ├── feature/queue-system
-      ├── feature/rfid-checkin
-      └── feature/prescription
-```
-
-- No direct pushes to `main`
-- One feature → one branch → one pull request
-- At least one teammate reviews every change
-- Tests pass before merge
-- Keep commits focused
-- Never commit secrets or real medical records
+| Requirements &amp; Diagrams | ![100%](https://img.shields.io/badge/-100%25-10b981?style=flat-square) | Proposal, SRS, Mid-Sem Prototype, DFD L0–L2, UML &amp; EST Report |
+| Database Schema (`01`–`33`) | ![100%](https://img.shields.io/badge/-100%25-10b981?style=flat-square) | Aiven Cloud MySQL 8.4 (`35` tables), raw PyMySQL pool + Outbox table |
+| Auth &amp; 4-Portal RBAC | ![100%](https://img.shields.io/badge/-100%25-10b981?style=flat-square) | Google `@thapar.edu` SSO, JWT guards, Student/Faculty/Doctor/Reception/Admin |
+| Queue, Consultation &amp; Dispense | ![100%](https://img.shields.io/badge/-100%25-10b981?style=flat-square) | Row-locked state machine, allergy checks, e-Rx PDF, partial dispensing |
+| Web NFC &amp; Emergency Triage | ![100%](https://img.shields.io/badge/-100%25-10b981?style=flat-square) | Real college ID card tap-in over HTTPS + isolated ambulance dispatch |
+| Real-Time WS + Outbox + Redis | ![100%](https://img.shields.io/badge/-100%25-10b981?style=flat-square) | Doctor &amp; Receptionist WebSockets, `SKIP LOCKED` outbox worker, Redis Pub/Sub |
+| Admin Analytics &amp; Emails | ![100%](https://img.shields.io/badge/-100%25-10b981?style=flat-square) | Disease charts, demographic breakdown, PDF export, 9 AM IST Resend digests |
+| Cloud Deployment &amp; QA | ![100%](https://img.shields.io/badge/-100%25-10b981?style=flat-square) | Live on Render + Aiven MySQL; end-to-end verified in Chrome |
 
 ---
 
 ## Technology Stack
 
-| Layer | Technology |
+| Layer | Technologies |
 |---|---|
-| Frontend | React |
-| Build Tool | Vite |
-| Styling | Tailwind CSS |
-| App Model | Progressive Web App |
-| Backend | Python |
-| API Framework | FastAPI |
-| Database | PostgreSQL (raw SQL) |
-| Authentication | Google Identity + application session |
-| RFID / NFC | Web NFC |
-| Real-time (v1) | Polling |
-| Real-time (v2) | WebSockets |
-| Frontend Hosting | Vercel / Netlify |
-| Backend Hosting | Render (or similar) |
-| Database Hosting | Managed PostgreSQL |
-| Version Control | Git + GitHub |
+| **Frontend** | React 19 · Vite 8 · Tailwind CSS v4 · Framer Motion · Lucide Icons · Recharts · `jspdf` · `html2canvas` · Web NFC API |
+| **Backend** | Python 3 · FastAPI · Uvicorn · `PyMySQL` (custom TLS connection pool) · `python-jose` · `bcrypt` · `google-auth` · `redis.asyncio` · Resend |
+| **Database &amp; Bus** | Aiven Cloud MySQL 8.4 (`01`–`33` ordered SQL migrations) · Transactional Outbox (`FOR UPDATE SKIP LOCKED`) · Redis Pub/Sub |
+| **Hosting &amp; Docs** | Render Static Site + Render Web Service (`Virginia US East`) · LaTeX (`tietreport.cls`) · Mermaid |
 
 ---
 
-## Getting Started
+## Repository Structure
 
-### Prerequisites
-
-`Git` · `Node.js LTS` · `Python 3.11+` · `PostgreSQL` · an IDE
-
-Recommended: Postman/Bruno/Insomnia, pgAdmin/DBeaver, an Android device with NFC for Web NFC testing.
-
-### Clone
-
-```bash
-git clone <repository-url>
-cd campuscare
+```text
+CampusCare/
+├── Code/frontend/                  # React 19 + Vite 8 + Tailwind CSS frontend
+│   ├── src/Components/             # Auth, Student, Faculty, Doctor, Receptionist, Admin & Landing UI
+│   ├── src/context/AuthContext.jsx # Multi-role session management
+│   ├── src/utils/                  # E-prescription PDF & dosage calculators
+│   └── src/api.js                  # Centralized REST client
+│
+├── backend/                        # FastAPI application (Render root directory)
+│   ├── app/
+│   │   ├── api/routes/             # auth, student, faculty, doctor, reception, queue, queue_ws, rfid, emergency, admin, health
+│   │   ├── core/                   # config, database (PyMySQL pool), redis_client, security, rate_limiter, deps
+│   │   ├── services/               # queue_lifecycle, outbox, queue_ws_manager, analytics_aggregator, pdf_report_generator, daily_scheduler
+│   │   └── schemas/                # Pydantic request/response contracts
+│   ├── sql/                        # 33 ordered MySQL migrations (01_User_Account.sql -> 33_outbox_event.sql)
+│   ├── tests/                      # Concurrency, queue lifecycle, emergency & DB flow test suites
+│   └── requirements.txt            # Production dependencies (fastapi, pymysql, redis, google-auth[requests], ...)
+│
+├── docs/                           # API contract, queue lifecycle & performance/hardening audit reports
+├── Est_Report/                     # Final EST LaTeX report (main.tex, tietreport.cls, Est_Report.pdf & 16 figures)
+├── Journal/                        # Per-member weekly engineering journals (Weeks 1–8)
+├── Project_Report_Prototype/       # Mid-semester prototype report
+├── Software Requirement Specification/
+└── project proposal/
 ```
 
-### Frontend
+---
 
+## Getting Started (Local Development)
+
+<details>
+<summary><b>Click to expand local setup commands &amp; environment variables</b></summary>
+
+### Prerequisites
+* `Git` · `Node.js 18+` · `Python 3.11+` · MySQL 8.x (or Aiven MySQL credentials) · *(Optional)* Redis server if testing `USE_REDIS_PUBSUB=true`
+
+### 1. Clone &amp; Start Backend
 ```bash
-cd frontend
+git clone https://github.com/LavdeepSingh23/CampusCare.git
+cd CampusCare/backend
+
+python -m venv .venv
+# Windows: .venv\Scripts\activate
+# macOS/Linux: source .venv/bin/activate
+
+pip install -r requirements.txt
+uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
+```
+
+### 2. Start Frontend
+```bash
+cd ../Code/frontend
 npm install
 npm run dev
 ```
 
-### Backend
+### 3. Apply SQL Migrations (if provisioning a fresh MySQL schema)
+Run scripts in [`backend/sql/`](./backend/sql) sequentially from `01_User_Account.sql` through `33_outbox_event.sql`.
 
-```bash
-cd backend
-python -m venv .venv
-
-# Windows
-.venv\Scripts\activate
-# macOS / Linux
-source .venv/bin/activate
-
-pip install -r requirements.txt
-uvicorn app.main:app --reload
+### 4. Backend Environment Variables (`backend/.env`)
+```ini
+ENVIRONMENT=development
+DB_MODE=mysql
+DB_HOST=<mysql-host>
+DB_PORT=<mysql-port>
+DB_NAME=campuscare_dev
+DB_USER=<mysql-user>
+DB_PASSWORD=<mysql-password>
+DB_SSL_MODE=REQUIRED
+JWT_SECRET_KEY=<random-secret>
+CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
+GOOGLE_CLIENT_ID=<google-oauth-client-id>
+RESEND_API_KEY=<resend-api-key>
+USE_REDIS_PUBSUB=false
 ```
 
-### Database
-
-```bash
-# apply migrations in order
-psql -d campuscare -f database/migrations/001_initial.sql
-# ...continue through subsequent migrations
-
-# seed synthetic development data
-psql -d campuscare -f database/seed/seed.sql
-```
+</details>
 
 ---
 
-## Environment Variables
+## Team &amp; Weekly Journals
 
-Never commit real secrets — use `.env` locally and keep `.env.example` (names only) in source control.
+Built for **UCS503P — Software Engineering** at Thapar Institute of Engineering and Technology:
 
-```env
-DATABASE_URL=
-GOOGLE_CLIENT_ID=
-JWT_SECRET=
-CORS_ORIGINS=
-```
-
----
-
-## Deployment
-
-```mermaid
-flowchart TB
-    A[Users] -->|HTTPS| B[Frontend — Vercel / Netlify]
-    B -->|HTTPS| C[FastAPI Backend — Render]
-    C --> D[(Managed PostgreSQL)]
-```
-
-Public deployments run on synthetic data only.
+| Member | Roll No | Core Responsibilities | Weekly Journal |
+|---|---|---|---|
+| **Lavdeep Singh** | `1024030107` | Backend FastAPI architecture, auth/RBAC, queue lifecycle, WebSockets, PyMySQL pooling, Outbox + Redis Pub/Sub, Render cloud deployment | [Lavdeep Journal (W1–W8)](./Journal/1024030107-Lavdeep%20Singh/index.md) |
+| **Harshveer Singh** | `1024030109` | Frontend dashboards, prescription UI/UX formulary, e-Rx PDF generation, Admin disease charts, branding &amp; repo styling | [Harshveer Journal (W1–W6)](./Journal/1024030109-Harshveer%20Singh/index_w6.md) |
+| **Kriti** | `1024030111` | MySQL schema (`01`–`25`), SQL mitigation scripts (`26`–`32`), SRS, Project Proposal, UML/State/Architecture diagrams &amp; live Render QA | [Kriti Journal (W1–W8)](./Journal/1024030111-Kriti/index.md) |
+| **Damanbir Singh** | `1024030110` | Project proposal contributions and Level 2 DFD workflow documentation | [Daman Journal](./Journal/1024030110-Daman/w2-dfd-documentation.md) |
 
 ---
 
-## Development Roadmap
+## Repository Activity &amp; Contributors
 
-```mermaid
-flowchart LR
-    A[1. Requirements] --> B[2. Architecture + ERD]
-    B --> C[3. DB + migrations]
-    C --> D[4. Auth]
-    D --> E[5. Walking skeleton]
-    E --> F[6. Student portal]
-    F --> G[7. Doctor workflow]
-    G --> H[8. Prescription + dispensing]
-    H --> I[9. 2nd doctor + redirect + no-show]
-    I --> J[10. Queue polling]
-    J --> K[11. RFID/NFC]
-    K --> L[12. Admin + emergency]
-    L --> M[13. Security + audit]
-    M --> N[14. Testing]
-    N --> O[15. Deployment]
-    O --> P[16. Pilot + hardening]
-    P --> Q[17. Stretch goals]
-```
+<div align="center">
 
-| Phase | Target |
-|---|---|
-| Requirements & architecture | Week 1 |
-| Database & backend foundation | Week 2 |
-| Walking skeleton | Week 3 |
-| Student + doctor workflows | Weeks 4–5 |
-| Queue + redirect + no-show | Week 6 |
-| RFID + admin + emergency | Week 7 |
-| Security + testing | Week 8 |
-| Deployment + integration testing | Week 9 |
-| Pilot + documentation + demo | Week 10 |
-| Buffer / stretch goals | Remaining time |
+<img src="https://github-readme-activity-graph.ashutosh00710.workers.dev/graph?username=LavdeepSingh23&bg_color=0c2e2b&color=d1fae5&line=14b8a6&point=5eead4&area=true&area_color=0f766e&hide_border=true" width="95%" alt="Contribution Activity Graph" />
 
----
+<br /><br />
 
-## Definition of Done
+<a href="https://github.com/LavdeepSingh23/CampusCare/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=LavdeepSingh23/CampusCare" alt="CampusCare Contributors" />
+</a>
 
-A feature isn't done because its UI exists. It's done when every layer is addressed:
-
-```mermaid
-flowchart LR
-    A[Requirement] --> B[Database]
-    B --> C[Backend]
-    C --> D[Authorization]
-    D --> E[Frontend]
-    E --> F[Error handling]
-    F --> G[Testing]
-    G --> H[Documentation]
-```
-
-**Worked example — RFID check-in isn't "done" because a phone can read a UID.** It's done when:
-
-`NFC card → UID read → credential verified → student identified → duplicate check → visit created → queue entry created → student sees queue → invalid/revoked card rejected`
-
----
-
-## Engineering Principles
-
-1. **Correctness over feature count** — a small system that works beats a large one that half-works.
-2. **Backend is authoritative** — the client never decides role, permissions, queue state, identity, or prescription ownership.
-3. **Explicit state transitions** — visits move through known states, never arbitrary status changes.
-4. **Structured clinical data** — anything queried later isn't stored as unstructured text.
-5. **Privacy by design** — development environments run on synthetic data.
-6. **Scope discipline** — a feature earns a place only if it has a clear slot in the semester deliverable.
-
----
-
-## Team
-
-CampusCare — 4-person team, Thapar Institute of Engineering and Technology, UCS503P (5th Semester Software Engineering)
-
-| Responsibility | Owner |
-|---|---|
-| Backend / API | TBD |
-| Frontend / PWA | TBD |
-| Database / Clinical Workflow | TBD |
-| Infrastructure / Integration / RFID | TBD |
-
----
-
-## Why This Belongs on a CV
-
-Not the technology count — the fact that one workflow connects physical identity, software identity, queue management, clinical records, prescriptions, and dispensing, end to end, with the backend authoritative at every step.
-
-`React` · `FastAPI` · `PostgreSQL` · `Raw SQL` · `Auth + RBAC` · `Web NFC` · `REST APIs` · `PWA` · `Real-time queueing` · `Transactions` · `Testing` · `Cloud deployment`
+</div>
 
 ---
 
 ## License
 
-To be decided by the team.
+Licensed under **The Prosperity Public License 3.0.0** — see [`LICENSE.md`](./LICENSE.md) for terms.
 
 <div align="center">
 
-**CampusCare** — from ID card tap to completed care.
+<img src="https://capsule-render.vercel.app/api?type=waving&color=0:0c2e2b,50:0f766e,100:14b8a6&height=110&section=footer&text=CampusCare%20%E2%80%A2%20From%20ID%20Card%20Tap%20to%20Completed%20Care&fontSize=17&fontColor=ccfbf1&fontAlignY=65" width="100%" alt="CampusCare Footer Wave" />
 
 </div>
